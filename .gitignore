@@ -5,3 +5,4 @@
 build
 cmake-build*
 .claude/
+vcpkg_installed
