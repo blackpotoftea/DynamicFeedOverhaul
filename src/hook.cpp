@@ -48,20 +48,28 @@ namespace Hooks {
         auto sink = VampireFeedSink::GetSingleton();
         auto ref = event->crosshairRef.get();
 
-        // Check if looking at an actor and player is vampire
+        // Check if looking at a valid feed target
+        bool isValidTarget = false;
+        RE::Actor* actor = nullptr;
+
         if (ref && ref->Is(RE::FormType::ActorCharacter) && IsPlayerVampire()) {
-            auto actor = ref->As<RE::Actor>();
-            if (actor && actor != RE::PlayerCharacter::GetSingleton()) {
-                // New valid target
-                if (sink->GetTarget() != actor) {
-                    sink->SetTarget(actor);
-                    bool sent = SkyPromptAPI::SendPrompt(sink, g_clientID);
-                    SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) - SendPrompt returned: {}",
-                        actor->GetName(), actor->GetFormID(), sent);
-                }
+            actor = ref->As<RE::Actor>();
+            if (actor && actor != RE::PlayerCharacter::GetSingleton() &&
+                !VampireFeedSink::IsExcluded(actor)) {
+                isValidTarget = true;
+            }
+        }
+
+        if (isValidTarget && actor) {
+            // New valid target
+            if (sink->GetTarget() != actor) {
+                sink->SetTarget(actor);
+                bool sent = SkyPromptAPI::SendPrompt(sink, g_clientID);
+                SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) - SendPrompt returned: {}",
+                    actor->GetName(), actor->GetFormID(), sent);
             }
         } else {
-            // No valid target - remove prompt if we had one
+            // No valid target or excluded - remove prompt if we had one
             if (sink->GetTarget()) {
                 SkyPromptAPI::RemovePrompt(sink, g_clientID);
                 sink->SetTarget(nullptr);
