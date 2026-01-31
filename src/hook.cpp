@@ -26,6 +26,8 @@ namespace Hooks {
         if (crosshairSource) {
             crosshairSource->AddEventSink(CrosshairRefHandler::GetSingleton());
             SKSE::log::info("Crosshair ref event handler registered");
+        } else {
+            SKSE::log::error("Failed to get crosshair event source!");
         }
     }
 
@@ -33,7 +35,13 @@ namespace Hooks {
         const SKSE::CrosshairRefEvent* event,
         [[maybe_unused]] RE::BSTEventSource<SKSE::CrosshairRefEvent>* source)
     {
-        if (!event || g_clientID == 0) {
+        if (!event) {
+            SKSE::log::warn("CrosshairRefEvent is null");
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        if (g_clientID == 0) {
+            SKSE::log::warn("ClientID is 0, SkyPrompt not initialized");
             return RE::BSEventNotifyControl::kContinue;
         }
 
@@ -47,8 +55,9 @@ namespace Hooks {
                 // New valid target
                 if (sink->GetTarget() != actor) {
                     sink->SetTarget(actor);
-                    SkyPromptAPI::SendPrompt(sink, g_clientID);
-                    SKSE::log::debug("Showing feed prompt for: {}", actor->GetName());
+                    bool sent = SkyPromptAPI::SendPrompt(sink, g_clientID);
+                    SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) - SendPrompt returned: {}",
+                        actor->GetName(), actor->GetFormID(), sent);
                 }
             }
         } else {
