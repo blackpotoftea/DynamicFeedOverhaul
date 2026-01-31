@@ -25,30 +25,16 @@ public:
                 auto player = RE::PlayerCharacter::GetSingleton();
                 if (!player) break;
 
-                // Try common vampire feed idle EditorIDs
-                RE::TESIdleForm* feedIdle = nullptr;
-                const char* idleNames[] = {
-                    "FeedFromFront",
-                    "VampireFeedStanding",
-                    "FeedVampire",
-                    "VampireFeed"
-                };
+                // Try native InitiateVampireFeedPackage first (may handle front/back automatically)
+                SKSE::log::info("Calling InitiateVampireFeedPackage...");
+                player->InitiateVampireFeedPackage(currentTarget_, nullptr);
 
-                for (const auto& name : idleNames) {
-                    feedIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(name);
-                    if (feedIdle) {
-                        SKSE::log::info("Found vampire feed idle: {}", name);
-                        break;
-                    }
-                }
-
-                if (feedIdle) {
-                    bool success = AnimUtil::Idle::Play(feedIdle, player,
-                        RE::DEFAULT_OBJECT::kActionIdle, currentTarget_);
-                    SKSE::log::info("Feed animation triggered: {}", success);
-                } else {
-                    SKSE::log::error("Failed to find any vampire feed idle animation");
-                }
+                // Fallback: if native doesn't work, manually play idle
+                // RE::TESIdleForm* feedIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("IdleVampireStandingFront");
+                // if (feedIdle) {
+                //     bool success = AnimUtil::Idle::Play(feedIdle, player, RE::DEFAULT_OBJECT::kActionIdle, currentTarget_);
+                //     SKSE::log::info("Feed animation triggered: {}", success);
+                // }
             }
             break;
         case SkyPromptAPI::PromptEventType::kDeclined:
