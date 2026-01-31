@@ -2,6 +2,16 @@
 
 namespace TargetState {
 
+    // Get raw SIT_SLEEP_STATE - must be first as other functions depend on it
+    inline RE::SIT_SLEEP_STATE GetSitSleepState(RE::Actor* actor) {
+        if (!actor) return RE::SIT_SLEEP_STATE::kNormal;
+
+        auto actorState = actor->AsActorState();
+        if (!actorState) return RE::SIT_SLEEP_STATE::kNormal;
+
+        return actorState->GetSitSleepState();
+    }
+
     // Matches Papyrus GetSleepState return values:
     // 0 - Not sleeping
     // 2 - Not sleeping but wants to (going to sleep)
@@ -10,10 +20,7 @@ namespace TargetState {
     inline int GetSleepState(RE::Actor* actor) {
         if (!actor) return 0;
 
-        auto actorState = actor->AsActorState();
-        if (!actorState) return 0;
-
-        auto state = actorState->GetSitSleepState();
+        auto state = GetSitSleepState(actor);
         switch (state) {
             case RE::SIT_SLEEP_STATE::kWantToSleep:
             case RE::SIT_SLEEP_STATE::kWaitingForSleepAnim:
@@ -28,16 +35,30 @@ namespace TargetState {
     }
 
     // Matches Papyrus IsInFurnitureState - checks if actor is using any furniture
+    // Note: GetOccupiedFurniture() can return stale data, so also check SitSleepState
     inline bool IsInFurnitureState(RE::Actor* actor) {
         if (!actor) return false;
+
+        // First check if actor is actually in a sitting/sleeping state
+        auto sitSleepState = GetSitSleepState(actor);
+        if (sitSleepState == RE::SIT_SLEEP_STATE::kNormal) {
+            return false;  // Actor is standing, not using furniture
+        }
 
         auto furnHandle = actor->GetOccupiedFurniture();
         return furnHandle.get() != nullptr;
     }
 
     // Get the furniture reference the actor is using (nullptr if not using furniture)
+    // Note: GetOccupiedFurniture() can return stale data, so also check SitSleepState
     inline RE::TESObjectREFR* GetFurnitureReference(RE::Actor* actor) {
         if (!actor) return nullptr;
+
+        // First check if actor is actually in a sitting/sleeping state
+        auto sitSleepState = GetSitSleepState(actor);
+        if (sitSleepState == RE::SIT_SLEEP_STATE::kNormal) {
+            return nullptr;  // Actor is standing, not using furniture
+        }
 
         auto furnHandle = actor->GetOccupiedFurniture();
         if (auto furnRef = furnHandle.get()) {
@@ -65,21 +86,8 @@ namespace TargetState {
     inline bool IsStanding(RE::Actor* actor) {
         if (!actor) return false;
 
-        auto actorState = actor->AsActorState();
-        if (!actorState) return false;
-
-        auto state = actorState->GetSitSleepState();
+        auto state = GetSitSleepState(actor);
         return state == RE::SIT_SLEEP_STATE::kNormal;
-    }
-
-    // Get raw SIT_SLEEP_STATE
-    inline RE::SIT_SLEEP_STATE GetSitSleepState(RE::Actor* actor) {
-        if (!actor) return RE::SIT_SLEEP_STATE::kNormal;
-
-        auto actorState = actor->AsActorState();
-        if (!actorState) return RE::SIT_SLEEP_STATE::kNormal;
-
-        return actorState->GetSitSleepState();
     }
 
     // Get detailed furniture type from furniture flags

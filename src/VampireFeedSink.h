@@ -86,10 +86,15 @@ public:
     static bool IsExcluded(RE::Actor* actor) {
         if (!actor) return true;
 
+        // Check actor's actual sitting state
+        bool isSitting = TargetState::IsSitting(actor);
         auto furnitureType = TargetState::GetActorFurnitureType(actor);
 
+        SKSE::log::debug("IsExcluded: {} | IsSitting: {} | FurnitureType: {}",
+            actor->GetName(), isSitting, TargetState::FurnitureTypeToString(furnitureType));
+
         // Exclude: sitting in chair (no vanilla feed animation for chairs)
-        if (furnitureType == TargetState::FurnitureType::kChair) {
+        if (isSitting && furnitureType == TargetState::FurnitureType::kChair) {
             SKSE::log::debug("Excluded: {} is sitting in chair", actor->GetName());
             return true;
         }
