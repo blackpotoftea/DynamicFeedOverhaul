@@ -34,16 +34,16 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 	}
 }
 
-SKSEPluginLoad(const SKSE::LoadInterface *skse) {
+SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
 	SetupLog();
 
+    SKSE::log::info("SkyPromptVampireFeed loaded");
 
     auto messaging = SKSE::GetMessagingInterface();
 	if (!messaging->RegisterListener("SKSE", MessageHandler)) {
 		return false;
 	}
 
-	
     return true;
 }

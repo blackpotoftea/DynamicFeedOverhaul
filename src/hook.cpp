@@ -6,6 +6,7 @@ extern SkyPromptAPI::ClientID g_clientID;
 
 namespace {
     bool IsPlayerVampire() {
+        return true; // for test purpose
         auto player = RE::PlayerCharacter::GetSingleton();
         if (!player) return false;
 
