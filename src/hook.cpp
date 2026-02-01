@@ -95,12 +95,20 @@ namespace Hooks {
             }
         }
 
+        // Check animation event timeout (15s safety net)
+        AnimEventSink::CheckTimeout();
+
+        // Check if feed animation just ended - force resend prompt
+        bool feedJustEnded = FeedAnimState::CheckAndClearFeedEnded();
+
         if (isValidTarget && actor) {
-            if (sink->GetTarget() != actor) {
+            // Send prompt if target changed OR feed animation just ended
+            if (sink->GetTarget() != actor || feedJustEnded) {
                 sink->SetTarget(actor);
                 bool sent = SkyPromptAPI::SendPrompt(sink, g_clientID);
-                SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) - SendPrompt returned: {}",
-                    actor->GetName(), actor->GetFormID(), sent);
+                SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) - SendPrompt returned: {} {}",
+                    actor->GetName(), actor->GetFormID(), sent,
+                    feedJustEnded ? "(after feed ended)" : "");
             }
         } else {
             // No valid target or excluded - remove prompt if we had one

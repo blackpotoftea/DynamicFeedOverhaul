@@ -27,6 +27,8 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 	case SKSE::MessagingInterface::kPostLoad:
 		break;
 	case SKSE::MessagingInterface::kPreLoadGame:
+		// Unregister animation sink before loading (safety - prevents crash if mod removed)
+		AnimEventSink::Unregister();
 		break;
 	case SKSE::MessagingInterface::kPostLoadGame:
         break;
