@@ -2,6 +2,7 @@
 #include "SkyPrompt/API.hpp"
 #include "Settings.h"
 #include "TargetState.h"
+#include "PapyrusCall.h"
 #include "util.h"
 
 class VampireFeedSink : public SkyPromptAPI::PromptSink {
@@ -46,9 +47,18 @@ public:
                     SKSE::log::info("Target is STANDING - using standing feed");
                 }
 
-                // InitiateVampireFeedPackage takes furniture ref as second param for bed feeding
+                // InitiateVampireFeedPackage handles the animation
                 SKSE::log::info("Calling InitiateVampireFeedPackage...");
                 player->InitiateVampireFeedPackage(currentTarget_, furnitureRef);
+
+                // Call the Papyrus VampireFeed() function to update vampire status
+                // This detects if mod uses VampireFeed() or VampireFeed(Actor)
+                auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
+                if (vampireQuest) {
+                    PapyrusCall::CallVampireFeed(vampireQuest, currentTarget_);
+                } else {
+                    SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
+                }
             }
             break;
         case SkyPromptAPI::PromptEventType::kDeclined:

@@ -6,4 +6,5 @@ set(headers ${headers}
     src/Settings.h
     src/TargetState.h
     src/VampireFeedSink.h
+    src/PapyrusCall.h
 )
