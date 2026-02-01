@@ -1,5 +1,6 @@
 #include "log.h"
 #include "hook.h"
+#include "Settings.h"
 #include "VampireFeedSink.h"
 #include "SkyPrompt/API.hpp"
 
@@ -39,6 +40,9 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
 	SetupLog();
 
     SKSE::log::info("SkyPromptVampireFeed loaded");
+
+    // Load settings from INI
+    Settings::GetSingleton()->LoadINI();
 
     auto messaging = SKSE::GetMessagingInterface();
 	if (!messaging->RegisterListener("SKSE", MessageHandler)) {

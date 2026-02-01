@@ -3,6 +3,7 @@ set(headers ${headers}
     src/log.h
     src/util.h
     src/hook.h
-    src/settings.h
+    src/Settings.h
+    src/TargetState.h
     src/VampireFeedSink.h
 )
