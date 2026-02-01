@@ -45,6 +45,35 @@ public:
                     SKSE::log::info("Target is SITTING - using seated feed");
                 } else if (TargetState::IsStanding(currentTarget_)) {
                     SKSE::log::info("Target is STANDING - using standing feed");
+
+                    // Pre-position to fix stairs animation issue
+                    // Move the lower actor up to the higher one's Z position
+                    auto* settings = Settings::GetSingleton();
+                    if (settings->NonCombat.EnableHeightAdjust) {
+                        auto playerPos = player->GetPosition();
+                        auto targetPos = currentTarget_->GetPosition();
+                        float heightDiff = std::fabs(targetPos.z - playerPos.z);
+
+                        if (heightDiff > settings->NonCombat.MinHeightDiff &&
+                            heightDiff <= settings->NonCombat.MaxHeightDiff) {
+                            float higherZ = std::max(playerPos.z, targetPos.z);
+
+                            if (playerPos.z < targetPos.z) {
+                                // Player is lower - move player up to target
+                                SKSE::log::info("Height diff: {:.1f} - moving player up from {:.1f} to {:.1f}",
+                                    heightDiff, playerPos.z, higherZ);
+                                player->SetPosition(RE::NiPoint3(playerPos.x, playerPos.y, higherZ), true);
+                            } else {
+                                // Target is lower - move target up to player
+                                SKSE::log::info("Height diff: {:.1f} - moving target up from {:.1f} to {:.1f}",
+                                    heightDiff, targetPos.z, higherZ);
+                                currentTarget_->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, higherZ), true);
+                            }
+                        } else if (heightDiff > settings->NonCombat.MaxHeightDiff) {
+                            SKSE::log::warn("Height diff {:.1f} exceeds max {:.1f} - skipping repositioning",
+                                heightDiff, settings->NonCombat.MaxHeightDiff);
+                        }
+                    }
                 }
 
                 // InitiateVampireFeedPackage handles the animation

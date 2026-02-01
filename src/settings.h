@@ -22,6 +22,9 @@ public:
         bool AllowStanding{ true };
         bool AllowSleeping{ true };
         bool AllowSittingChair{ false };  // Excluded by default (no animation)
+        bool EnableHeightAdjust{ true };  // Adjust actor positions on stairs
+        float MinHeightDiff{ 10.0f };     // Minimum height diff to trigger adjustment
+        float MaxHeightDiff{ 150.0f };    // Max height diff (~3-4 stair steps)
     } NonCombat;
 
     // Combat feeding settings

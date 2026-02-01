@@ -52,6 +52,9 @@ void Settings::LoadINI() {
     NonCombat.AllowStanding = ini.GetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding);
     NonCombat.AllowSleeping = ini.GetBoolValue("NonCombat", "AllowSleeping", NonCombat.AllowSleeping);
     NonCombat.AllowSittingChair = ini.GetBoolValue("NonCombat", "AllowSittingChair", NonCombat.AllowSittingChair);
+    NonCombat.EnableHeightAdjust = ini.GetBoolValue("NonCombat", "EnableHeightAdjust", NonCombat.EnableHeightAdjust);
+    NonCombat.MinHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MinHeightDiff", NonCombat.MinHeightDiff));
+    NonCombat.MaxHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MaxHeightDiff", NonCombat.MaxHeightDiff));
 
     // Combat
     Combat.Enabled = ini.GetBoolValue("Combat", "Enabled", Combat.Enabled);
@@ -67,8 +70,9 @@ void Settings::LoadINI() {
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}", General.EnableMod, General.DebugLogging);
-    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}",
-        NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair);
+    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={})",
+        NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
+        NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff);
     SKSE::log::info("  [Combat] Enabled={}, RequireLowHealth={}, LowHealthThreshold={}",
         Combat.Enabled, Combat.RequireLowHealth, Combat.LowHealthThreshold);
     SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, IncludeKW=[{}], ExcludeKW=[{}]",
@@ -93,6 +97,12 @@ void Settings::SaveINI() {
         "; Allow feeding on sleeping NPCs");
     ini.SetBoolValue("NonCombat", "AllowSittingChair", NonCombat.AllowSittingChair,
         "; Allow feeding on NPCs sitting in chairs (no vanilla animation)");
+    ini.SetBoolValue("NonCombat", "EnableHeightAdjust", NonCombat.EnableHeightAdjust,
+        "; Adjust actor positions when on stairs to fix animation issues");
+    ini.SetDoubleValue("NonCombat", "MinHeightDiff", NonCombat.MinHeightDiff,
+        "; Minimum height difference to trigger adjustment (units)");
+    ini.SetDoubleValue("NonCombat", "MaxHeightDiff", NonCombat.MaxHeightDiff,
+        "; Maximum height difference for adjustment (~3-4 stair steps)");
 
     // Combat
     ini.SetBoolValue("Combat", "Enabled", Combat.Enabled,
