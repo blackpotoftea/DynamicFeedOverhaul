@@ -10,29 +10,6 @@ namespace PapyrusCall {
         void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
     };
 
-    // Custom FunctionArguments for passing Actor as a Papyrus object
-    class ActorFunctionArguments : public RE::BSScript::IFunctionArguments {
-    public:
-        ActorFunctionArguments(RE::Actor* actor) : _actor(actor) {}
-
-        bool operator()(RE::BSScrapArray<RE::BSScript::Variable>& a_dst) const override {
-            a_dst.resize(1);
-            if (_actor) {
-                auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-                if (vm) {
-                    auto actorHandle = vm->GetObjectHandlePolicy()->GetHandleForObject(
-                        RE::Actor::FORMTYPE, _actor);
-                    RE::BSTSmartPointer<RE::BSScript::Object> object;
-                    vm->FindBoundObject(actorHandle, "Actor", object);
-                    a_dst[0].SetObject(std::move(object));
-                }
-            }
-            return true;
-        }
-    private:
-        RE::Actor* _actor;
-    };
-
     // Check if a script has a function with specific signature
     // Returns: 0 = not found, 1 = no args, 2 = has Actor arg
     inline int GetVampireFeedSignature(RE::TESQuest* quest) {
@@ -103,6 +80,7 @@ namespace PapyrusCall {
     }
 
     // Call VampireFeed(Actor target) - modded version with actor argument
+    // MakeFunctionArguments handles Actor* conversion via Variable::Pack() internally
     inline bool CallVampireFeedWithActor(RE::TESQuest* quest, RE::Actor* target) {
         if (!quest || !target) return false;
 
@@ -113,7 +91,7 @@ namespace PapyrusCall {
             RE::TESQuest::FORMTYPE, quest);
         if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
 
-        auto* args = new ActorFunctionArguments(target);
+        auto* args = RE::MakeFunctionArguments(std::move(target));
         RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
 
         bool result = vm->DispatchMethodCall(
