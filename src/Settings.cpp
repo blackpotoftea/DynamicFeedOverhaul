@@ -47,6 +47,10 @@ void Settings::LoadINI() {
     // General
     General.EnableMod = ini.GetBoolValue("General", "EnableMod", General.EnableMod);
     General.DebugLogging = ini.GetBoolValue("General", "DebugLogging", General.DebugLogging);
+    General.ForceVampire = ini.GetBoolValue("General", "ForceVampire", General.ForceVampire);
+    General.CheckHungerStage = ini.GetBoolValue("General", "CheckHungerStage", General.CheckHungerStage);
+    General.MinHungerStage = static_cast<int>(ini.GetLongValue("General", "MinHungerStage", General.MinHungerStage));
+    General.ForceFeedType = static_cast<int>(ini.GetLongValue("General", "ForceFeedType", General.ForceFeedType));
 
     // NonCombat
     NonCombat.AllowStanding = ini.GetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding);
@@ -65,18 +69,21 @@ void Settings::LoadINI() {
     Filtering.EnableLevelCheck = ini.GetBoolValue("Filtering", "EnableLevelCheck", Filtering.EnableLevelCheck);
     Filtering.MaxLevelDifference = static_cast<int>(ini.GetLongValue("Filtering", "MaxLevelDifference", Filtering.MaxLevelDifference));
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
+    Filtering.ExcludeDead = ini.GetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead);
     Filtering.IncludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "IncludeKeywords", ""));
     Filtering.ExcludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "ExcludeKeywords", ""));
 
     SKSE::log::info("Settings loaded:");
-    SKSE::log::info("  [General] EnableMod={}, DebugLogging={}", General.EnableMod, General.DebugLogging);
+    SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}",
+        General.EnableMod, General.DebugLogging, General.ForceVampire,
+        General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType);
     SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={})",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff);
     SKSE::log::info("  [Combat] Enabled={}, RequireLowHealth={}, LowHealthThreshold={}",
         Combat.Enabled, Combat.RequireLowHealth, Combat.LowHealthThreshold);
-    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, IncludeKW=[{}], ExcludeKW=[{}]",
-        Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene,
+    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeDead={}, IncludeKW=[{}], ExcludeKW=[{}]",
+        Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeDead,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords));
 }
 
@@ -89,6 +96,14 @@ void Settings::SaveINI() {
         "; Enable or disable the entire mod");
     ini.SetBoolValue("General", "DebugLogging", General.DebugLogging,
         "; Enable detailed debug logging");
+    ini.SetBoolValue("General", "ForceVampire", General.ForceVampire,
+        "; Debug: skip vampire check, always allow feeding");
+    ini.SetBoolValue("General", "CheckHungerStage", General.CheckHungerStage,
+        "; Only allow feeding if vampire hunger stage >= MinHungerStage");
+    ini.SetLongValue("General", "MinHungerStage", General.MinHungerStage,
+        "; Minimum hunger stage required to feed (1-4, where 4 is most hungry)");
+    ini.SetLongValue("General", "ForceFeedType", General.ForceFeedType,
+        "; Debug: force specific FeedType (0=auto, 11-14=standing, 21-24=sleeping, 31-34=sitting, 41-44=combat)");
 
     // NonCombat
     ini.SetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding,
@@ -119,6 +134,8 @@ void Settings::SaveINI() {
         "; Max levels target can be above player (ignored if EnableLevelCheck=false)");
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,
         "; Exclude targets currently in a scene (dialogues, scripted events)");
+    ini.SetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead,
+        "; Exclude dead actors from feeding");
     ini.SetValue("Filtering", "IncludeKeywords", JoinKeywordList(Filtering.IncludeKeywords).c_str(),
         "; Only allow feeding if target has ANY of these keywords (comma-separated, empty=allow all)");
     ini.SetValue("Filtering", "ExcludeKeywords", JoinKeywordList(Filtering.ExcludeKeywords).c_str(),

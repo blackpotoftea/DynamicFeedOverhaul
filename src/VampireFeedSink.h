@@ -5,6 +5,56 @@
 #include "PapyrusCall.h"
 #include "util.h"
 
+// Feed type calculation for OAR graph variable conditions
+// Composite value: (TargetState * 10) + VampireHungerStage
+// This allows OAR to match on both target state and hunger level
+//
+// Target State (tens digit):
+//   1x = Standing
+//   2x = Sleeping
+//   3x = Sitting
+//   4x = Combat
+//
+// Vampire Hunger Stage (ones digit):
+//   x1 = Stage 1 (sated)
+//   x2 = Stage 2
+//   x3 = Stage 3
+//   x4 = Stage 4 (blood starved)
+//
+// Examples:
+//   11 = Standing, Stage 1 (sated)
+//   14 = Standing, Stage 4 (blood starved)
+//   21 = Sleeping, Stage 1
+//   44 = Combat, Stage 4 (most aggressive)
+//
+// OAR conditions can match:
+//   == 14 : exactly standing + stage 4
+//   >= 40 : any combat feed
+//   >= 13 AND < 20 : standing + stage 3 or 4
+
+namespace FeedState {
+    // Target state base values (multiply by 10)
+    constexpr int kStanding = 10;
+    constexpr int kSleeping = 20;
+    constexpr int kSitting = 30;
+    constexpr int kCombat = 40;
+
+    // Calculate feed type from target state and vampire hunger stage
+    inline int Calculate(int targetState, int vampireStage) {
+        // Clamp vampire stage to 1-4
+        int stage = std::clamp(vampireStage, 1, 4);
+        return targetState + stage;
+    }
+}
+
+// Graph variable names for OAR conditions (injected by Behavior Data Injector)
+namespace GraphVars {
+    // Bool: true when vampire feed is active
+    inline constexpr auto IsSkyPromptFeeding = "IsSkyPromptFeeding";
+    // Int: composite feed type (TargetState * 10 + HungerStage)
+    inline constexpr auto SkyPromptFeedType = "SkyPromptFeedType";
+}
+
 class VampireFeedSink : public SkyPromptAPI::PromptSink {
 public:
     static VampireFeedSink* GetSingleton() {
@@ -39,12 +89,22 @@ public:
                     isInFurniture,
                     TargetState::FurnitureTypeToString(furnitureType));
 
-                if (TargetState::IsSleeping(currentTarget_)) {
+                // Determine target state for feed type calculation
+                int targetState = FeedState::kStanding;
+                bool isInCombat = currentTarget_->IsInCombat();
+
+                if (isInCombat) {
+                    SKSE::log::info("Target is in COMBAT - using combat feed");
+                    targetState = FeedState::kCombat;
+                } else if (TargetState::IsSleeping(currentTarget_)) {
                     SKSE::log::info("Target is SLEEPING - using bed feed");
+                    targetState = FeedState::kSleeping;
                 } else if (TargetState::IsSitting(currentTarget_)) {
                     SKSE::log::info("Target is SITTING - using seated feed");
+                    targetState = FeedState::kSitting;
                 } else if (TargetState::IsStanding(currentTarget_)) {
                     SKSE::log::info("Target is STANDING - using standing feed");
+                    targetState = FeedState::kStanding;
 
                     // Pre-position to fix stairs animation issue
                     // Move the lower actor up to the higher one's Z position
@@ -75,6 +135,25 @@ public:
                         }
                     }
                 }
+
+                // Get vampire hunger stage and calculate composite feed type
+                auto* settings = Settings::GetSingleton();
+                int feedType;
+                if (settings->General.ForceFeedType > 0) {
+                    feedType = settings->General.ForceFeedType;
+                    SKSE::log::info("Using FORCED FeedType: {}", feedType);
+                } else {
+                    int vampireStage = PapyrusCall::GetVampireStage();
+                    feedType = FeedState::Calculate(targetState, vampireStage);
+                    SKSE::log::info("Vampire stage: {} | FeedType: {} (state={} + stage={})",
+                        vampireStage, feedType, targetState, vampireStage);
+                }
+
+                // Set graph variables on both player and target for OAR conditions
+                // These are read by OAR's HasGraphVariable condition
+                // Only works if user has Behavior Data Injector installed
+                SetFeedGraphVars(player, feedType);
+                SetFeedGraphVars(currentTarget_, feedType);
 
                 // InitiateVampireFeedPackage handles the animation
                 SKSE::log::info("Calling InitiateVampireFeedPackage...");
@@ -120,6 +199,35 @@ public:
 
     RE::Actor* GetTarget() const {
         return currentTarget_;
+    }
+
+    // Set graph variables for OAR animation conditions
+    // These only work if user has Behavior Data Injector installed
+    // If not installed, SetGraphVariable silently fails - safe to call always
+    static void SetFeedGraphVars(RE::Actor* actor, int feedType) {
+        if (!actor) return;
+
+        // Set bool flag
+        bool success = actor->SetGraphVariableBool(GraphVars::IsSkyPromptFeeding, true);
+        if (success) {
+            SKSE::log::debug("Set graph var {} = true on {}",
+                GraphVars::IsSkyPromptFeeding, actor->GetName());
+        }
+
+        // Set composite feed type (TargetState * 10 + HungerStage)
+        success = actor->SetGraphVariableInt(GraphVars::SkyPromptFeedType, feedType);
+        if (success) {
+            SKSE::log::debug("Set graph var {} = {} on {}",
+                GraphVars::SkyPromptFeedType, feedType, actor->GetName());
+        }
+    }
+
+    static void ClearFeedGraphVars(RE::Actor* actor) {
+        if (!actor) return;
+
+        actor->SetGraphVariableBool(GraphVars::IsSkyPromptFeeding, false);
+        actor->SetGraphVariableInt(GraphVars::SkyPromptFeedType, 0);
+        SKSE::log::debug("Cleared feed graph vars on {}", actor->GetName());
     }
 
     // Returns true if target should be excluded from feeding (no prompt shown)
@@ -172,6 +280,14 @@ private:
 
         auto* settings = Settings::GetSingleton();
         auto* player = RE::PlayerCharacter::GetSingleton();
+
+        // Dead check - skip dead actors
+        if (settings->Filtering.ExcludeDead) {
+            if (actor->IsDead()) {
+                SKSE::log::debug("Excluded: {} - actor is dead", actor->GetName());
+                return true;
+            }
+        }
 
         // Scene check - skip actors in dialogues/scripted events
         if (settings->Filtering.ExcludeInScene) {

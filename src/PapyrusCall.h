@@ -128,4 +128,24 @@ namespace PapyrusCall {
         return RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerVampireQuest");
     }
 
+    // Get player vampire hunger stage via VampireFeedReady global
+    // Returns: 0-3 (VampireStatus - 1), or -1 if not found
+    inline int GetVampireHungerStage() {
+        auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
+        if (global) {
+            return static_cast<int>(global->value);
+        }
+        return -1;
+    }
+
+    // Get actual vampire stage (1-4)
+    // Returns: 1-4 (matching VampireStatus), or -1 if not found
+    inline int GetVampireStage() {
+        int feedReady = GetVampireHungerStage();
+        if (feedReady >= 0) {
+            return feedReady + 1;
+        }
+        return -1;
+    }
+
 }  // namespace PapyrusCall

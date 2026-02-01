@@ -1,0 +1,40 @@
+{
+    "name": "SkyPromptVampireFeed_Sitting",
+    "description": "Sitting feed animations (FeedType 31-34: state=30 + stage 1-4)",
+    "priority": 4255567,
+    "ignoreDontConvertAnnotationsToTriggersFlag": true,
+    "triggersFromAnnotationsOnly": true,
+    "conditions": [
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "HasGraphVariable",
+                    "requiredVersion": "1.0.0.0",
+                    "Graph variable name": "IsSkyPromptFeeding",
+                    "Graph variable type": "Bool",
+                    "Comparison": "==",
+                    "Numeric value": 1.0
+                },
+                {
+                    "condition": "HasGraphVariable",
+                    "requiredVersion": "1.0.0.0",
+                    "Graph variable name": "SkyPromptFeedType",
+                    "Graph variable type": "Int",
+                    "Comparison": ">=",
+                    "Numeric value": 31.0
+                },
+                {
+                    "condition": "HasGraphVariable",
+                    "requiredVersion": "1.0.0.0",
+                    "Graph variable name": "SkyPromptFeedType",
+                    "Graph variable type": "Int",
+                    "Comparison": "<",
+                    "Numeric value": 40.0
+                }
+            ]
+        }
+    ],
+    "pairedConditions": []
+}

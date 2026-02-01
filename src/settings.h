@@ -15,6 +15,10 @@ public:
     struct {
         bool EnableMod{ true };
         bool DebugLogging{ false };
+        bool ForceVampire{ false };  // Debug: skip vampire check
+        bool CheckHungerStage{ false };  // Only allow feeding based on hunger stage
+        int MinHungerStage{ 1 };         // Minimum hunger stage required (1-4)
+        int ForceFeedType{ 0 };          // Debug: force specific FeedType (0=auto)
     } General;
 
     // Non-combat feeding settings
@@ -39,6 +43,7 @@ public:
         bool EnableLevelCheck{ false };
         int MaxLevelDifference{ 10 };           // Max levels above player
         bool ExcludeInScene{ true };            // Skip actors in scenes (dialogues, scripted events)
+        bool ExcludeDead{ true };               // Skip dead actors
         std::vector<std::string> IncludeKeywords;  // Only feed if has any of these keywords
         std::vector<std::string> ExcludeKeywords;  // Never feed if has any of these keywords
     } Filtering;

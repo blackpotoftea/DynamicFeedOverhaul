@@ -1,22 +1,46 @@
 #include "hook.h"
 #include "VampireFeedSink.h"
+#include "Settings.h"
+#include "PapyrusCall.h"
 #include "SkyPrompt/API.hpp"
 
 extern SkyPromptAPI::ClientID g_clientID;
 
 namespace {
     bool IsPlayerVampire() {
-        return true; // for test purpose
+        auto* settings = Settings::GetSingleton();
+
+        // Debug override - always return true if ForceVampire enabled
+        if (settings->General.ForceVampire) {
+            SKSE::log::debug("ForceVampire enabled - bypassing vampire check");
+            return true;
+        }
+
         auto player = RE::PlayerCharacter::GetSingleton();
         if (!player) return false;
 
         // Check for Vampire keyword (ActorTypeVampire)
         auto keyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("ActorTypeVampire");
-        if (keyword && player->HasKeyword(keyword)) {
-            return true;
+        bool hasKeyword = keyword && player->HasKeyword(keyword);
+
+        if (!hasKeyword) {
+            SKSE::log::debug("Player is not a vampire (no ActorTypeVampire keyword)");
+            return false;
         }
 
-        return false;
+        // Optional: Check hunger stage requirement
+        if (settings->General.CheckHungerStage) {
+            int vampireStage = PapyrusCall::GetVampireStage();
+            if (vampireStage < settings->General.MinHungerStage) {
+                SKSE::log::debug("Vampire hunger stage {} < required {} - feeding not allowed",
+                    vampireStage, settings->General.MinHungerStage);
+                return false;
+            }
+            SKSE::log::debug("Vampire hunger stage {} >= {} - feeding allowed",
+                vampireStage, settings->General.MinHungerStage);
+        }
+
+        return true;
     }
 }
 
