@@ -110,21 +110,21 @@ void Settings::LoadINI() {
     Animation.EnableRandomSelection = ini.GetBoolValue("Animation", "EnableRandomSelection", Animation.EnableRandomSelection);
     Animation.HungryThreshold = static_cast<int>(ini.GetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold));
 
-    // Non-combat sated front
-    Animation.NonCombatSatedFrontUnisex = ParseIntList(ini.GetValue("Animation", "NonCombatSatedFrontUnisex", ""));
-    Animation.NonCombatSatedFrontFemale = ParseIntList(ini.GetValue("Animation", "NonCombatSatedFrontFemale", ""));
+    // Sated front (non-combat)
+    Animation.SatedFrontUnisex = ParseIntList(ini.GetValue("Animation", "SatedFrontUnisex", ""));
+    Animation.SatedFrontFemale = ParseIntList(ini.GetValue("Animation", "SatedFrontFemale", ""));
 
-    // Non-combat sated back
-    Animation.NonCombatSatedBackUnisex = ParseIntList(ini.GetValue("Animation", "NonCombatSatedBackUnisex", ""));
-    Animation.NonCombatSatedBackFemale = ParseIntList(ini.GetValue("Animation", "NonCombatSatedBackFemale", ""));
+    // Sated back (non-combat)
+    Animation.SatedBackUnisex = ParseIntList(ini.GetValue("Animation", "SatedBackUnisex", ""));
+    Animation.SatedBackFemale = ParseIntList(ini.GetValue("Animation", "SatedBackFemale", ""));
 
-    // Non-combat hungry front
-    Animation.NonCombatHungryFrontUnisex = ParseIntList(ini.GetValue("Animation", "NonCombatHungryFrontUnisex", ""));
-    Animation.NonCombatHungryFrontFemale = ParseIntList(ini.GetValue("Animation", "NonCombatHungryFrontFemale", ""));
+    // Hungry front (non-combat)
+    Animation.HungryFrontUnisex = ParseIntList(ini.GetValue("Animation", "HungryFrontUnisex", ""));
+    Animation.HungryFrontFemale = ParseIntList(ini.GetValue("Animation", "HungryFrontFemale", ""));
 
-    // Non-combat hungry back
-    Animation.NonCombatHungryBackUnisex = ParseIntList(ini.GetValue("Animation", "NonCombatHungryBackUnisex", ""));
-    Animation.NonCombatHungryBackFemale = ParseIntList(ini.GetValue("Animation", "NonCombatHungryBackFemale", ""));
+    // Hungry back (non-combat)
+    Animation.HungryBackUnisex = ParseIntList(ini.GetValue("Animation", "HungryBackUnisex", ""));
+    Animation.HungryBackFemale = ParseIntList(ini.GetValue("Animation", "HungryBackFemale", ""));
 
     // Combat sated front
     Animation.CombatSatedFrontUnisex = ParseIntList(ini.GetValue("Animation", "CombatSatedFrontUnisex", ""));
@@ -222,29 +222,29 @@ void Settings::SaveINI() {
     ini.SetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold,
         "; Hunger stage >= this uses hungry animations (1=sated, 2=peckish, 3=hungry, 4=starving)");
 
-    // Non-combat sated front
-    ini.SetValue("Animation", "NonCombatSatedFrontUnisex", JoinIntList(Animation.NonCombatSatedFrontUnisex).c_str(),
-        "; FeedType IDs for non-combat sated front animations (unisex)");
-    ini.SetValue("Animation", "NonCombatSatedFrontFemale", JoinIntList(Animation.NonCombatSatedFrontFemale).c_str(),
-        "; FeedType IDs for non-combat sated front animations (female player)");
+    // Sated front (non-combat)
+    ini.SetValue("Animation", "SatedFrontUnisex", JoinIntList(Animation.SatedFrontUnisex).c_str(),
+        "; FeedType IDs for sated front animations (unisex)");
+    ini.SetValue("Animation", "SatedFrontFemale", JoinIntList(Animation.SatedFrontFemale).c_str(),
+        "; FeedType IDs for sated front animations (female player)");
 
-    // Non-combat sated back
-    ini.SetValue("Animation", "NonCombatSatedBackUnisex", JoinIntList(Animation.NonCombatSatedBackUnisex).c_str(),
-        "; FeedType IDs for non-combat sated back animations (unisex)");
-    ini.SetValue("Animation", "NonCombatSatedBackFemale", JoinIntList(Animation.NonCombatSatedBackFemale).c_str(),
-        "; FeedType IDs for non-combat sated back animations (female player)");
+    // Sated back (non-combat)
+    ini.SetValue("Animation", "SatedBackUnisex", JoinIntList(Animation.SatedBackUnisex).c_str(),
+        "; FeedType IDs for sated back animations (unisex)");
+    ini.SetValue("Animation", "SatedBackFemale", JoinIntList(Animation.SatedBackFemale).c_str(),
+        "; FeedType IDs for sated back animations (female player)");
 
-    // Non-combat hungry front
-    ini.SetValue("Animation", "NonCombatHungryFrontUnisex", JoinIntList(Animation.NonCombatHungryFrontUnisex).c_str(),
-        "; FeedType IDs for non-combat hungry front animations (unisex)");
-    ini.SetValue("Animation", "NonCombatHungryFrontFemale", JoinIntList(Animation.NonCombatHungryFrontFemale).c_str(),
-        "; FeedType IDs for non-combat hungry front animations (female player)");
+    // Hungry front (non-combat)
+    ini.SetValue("Animation", "HungryFrontUnisex", JoinIntList(Animation.HungryFrontUnisex).c_str(),
+        "; FeedType IDs for hungry front animations (unisex)");
+    ini.SetValue("Animation", "HungryFrontFemale", JoinIntList(Animation.HungryFrontFemale).c_str(),
+        "; FeedType IDs for hungry front animations (female player)");
 
-    // Non-combat hungry back
-    ini.SetValue("Animation", "NonCombatHungryBackUnisex", JoinIntList(Animation.NonCombatHungryBackUnisex).c_str(),
-        "; FeedType IDs for non-combat hungry back animations (unisex)");
-    ini.SetValue("Animation", "NonCombatHungryBackFemale", JoinIntList(Animation.NonCombatHungryBackFemale).c_str(),
-        "; FeedType IDs for non-combat hungry back animations (female player)");
+    // Hungry back (non-combat)
+    ini.SetValue("Animation", "HungryBackUnisex", JoinIntList(Animation.HungryBackUnisex).c_str(),
+        "; FeedType IDs for hungry back animations (unisex)");
+    ini.SetValue("Animation", "HungryBackFemale", JoinIntList(Animation.HungryBackFemale).c_str(),
+        "; FeedType IDs for hungry back animations (female player)");
 
     // Combat sated front
     ini.SetValue("Animation", "CombatSatedFrontUnisex", JoinIntList(Animation.CombatSatedFrontUnisex).c_str(),

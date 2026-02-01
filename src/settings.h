@@ -53,25 +53,26 @@ public:
     // Animation selection settings
     // FeedType IDs grouped by: combat/non-combat, hungry/sated, front/back, gender
     // Selection: position-based (front/back) > gender (female > unisex fallback)
+    // Non-combat animations have no prefix, combat animations have "Combat" prefix
     struct {
         bool EnableRandomSelection{ true };     // Enable random animation from available list
         int HungryThreshold{ 3 };               // Hunger stage >= this uses hungry animations (1-4)
 
-        // Non-combat sated front animations
-        std::vector<int> NonCombatSatedFrontUnisex;
-        std::vector<int> NonCombatSatedFrontFemale;
+        // Sated front animations (non-combat)
+        std::vector<int> SatedFrontUnisex;
+        std::vector<int> SatedFrontFemale;
 
-        // Non-combat sated back animations
-        std::vector<int> NonCombatSatedBackUnisex;
-        std::vector<int> NonCombatSatedBackFemale;
+        // Sated back animations (non-combat)
+        std::vector<int> SatedBackUnisex;
+        std::vector<int> SatedBackFemale;
 
-        // Non-combat hungry front animations
-        std::vector<int> NonCombatHungryFrontUnisex;
-        std::vector<int> NonCombatHungryFrontFemale;
+        // Hungry front animations (non-combat)
+        std::vector<int> HungryFrontUnisex;
+        std::vector<int> HungryFrontFemale;
 
-        // Non-combat hungry back animations
-        std::vector<int> NonCombatHungryBackUnisex;
-        std::vector<int> NonCombatHungryBackFemale;
+        // Hungry back animations (non-combat)
+        std::vector<int> HungryBackUnisex;
+        std::vector<int> HungryBackFemale;
 
         // Combat sated front animations
         std::vector<int> CombatSatedFrontUnisex;

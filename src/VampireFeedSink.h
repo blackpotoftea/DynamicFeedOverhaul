@@ -5,6 +5,29 @@
 #include "PapyrusCall.h"
 #include "util.h"
 #include <random>
+#include <mutex>
+
+extern SkyPromptAPI::ClientID g_clientID;
+
+// Check if an actor is currently in a paired animation (vampire feed, killmove, etc.)
+// Uses TESConditionItem with GetPairedAnimation function
+namespace PairedAnimation {
+    inline bool IsInPairedAnimation(const RE::Actor* actor) {
+        if (!actor) return false;
+
+        static RE::TESConditionItem cond;
+        static std::once_flag flag;
+        std::call_once(flag, [&]() {
+            cond.data.functionData.function = RE::FUNCTION_DATA::FunctionID::kGetPairedAnimation;
+            cond.data.comparisonValue.f = 0.0f;
+            cond.data.flags.opCode = RE::CONDITION_ITEM_DATA::OpCode::kNotEqualTo;
+            cond.data.object = RE::CONDITIONITEMOBJECT::kSelf;
+        });
+
+        RE::ConditionCheckParams params(const_cast<RE::TESObjectREFR*>(actor->As<RE::TESObjectREFR>()), nullptr);
+        return cond(params);
+    }
+}
 
 // Feed type calculation for OAR graph variable conditions
 // Composite value: (TargetState * 10) + VampireHungerStage
@@ -160,13 +183,13 @@ namespace FeedState {
 
                 auto& a = settings->Animation;
                 if (isBehind) {
-                    sequentialList.insert(sequentialList.end(), a.NonCombatSatedBackUnisex.begin(), a.NonCombatSatedBackUnisex.end());
-                    sequentialList.insert(sequentialList.end(), a.NonCombatHungryBackUnisex.begin(), a.NonCombatHungryBackUnisex.end());
+                    sequentialList.insert(sequentialList.end(), a.SatedBackUnisex.begin(), a.SatedBackUnisex.end());
+                    sequentialList.insert(sequentialList.end(), a.HungryBackUnisex.begin(), a.HungryBackUnisex.end());
                     sequentialList.insert(sequentialList.end(), a.CombatSatedBackUnisex.begin(), a.CombatSatedBackUnisex.end());
                     sequentialList.insert(sequentialList.end(), a.CombatHungryBackUnisex.begin(), a.CombatHungryBackUnisex.end());
                 } else {
-                    sequentialList.insert(sequentialList.end(), a.NonCombatSatedFrontUnisex.begin(), a.NonCombatSatedFrontUnisex.end());
-                    sequentialList.insert(sequentialList.end(), a.NonCombatHungryFrontUnisex.begin(), a.NonCombatHungryFrontUnisex.end());
+                    sequentialList.insert(sequentialList.end(), a.SatedFrontUnisex.begin(), a.SatedFrontUnisex.end());
+                    sequentialList.insert(sequentialList.end(), a.HungryFrontUnisex.begin(), a.HungryFrontUnisex.end());
                     sequentialList.insert(sequentialList.end(), a.CombatSatedFrontUnisex.begin(), a.CombatSatedFrontUnisex.end());
                     sequentialList.insert(sequentialList.end(), a.CombatHungryFrontUnisex.begin(), a.CombatHungryFrontUnisex.end());
                 }
@@ -221,19 +244,19 @@ namespace FeedState {
         } else {
             if (isHungry) {
                 if (isBehind) {
-                    femaleList = &settings->Animation.NonCombatHungryBackFemale;
-                    unisexList = &settings->Animation.NonCombatHungryBackUnisex;
+                    femaleList = &settings->Animation.HungryBackFemale;
+                    unisexList = &settings->Animation.HungryBackUnisex;
                 } else {
-                    femaleList = &settings->Animation.NonCombatHungryFrontFemale;
-                    unisexList = &settings->Animation.NonCombatHungryFrontUnisex;
+                    femaleList = &settings->Animation.HungryFrontFemale;
+                    unisexList = &settings->Animation.HungryFrontUnisex;
                 }
             } else {
                 if (isBehind) {
-                    femaleList = &settings->Animation.NonCombatSatedBackFemale;
-                    unisexList = &settings->Animation.NonCombatSatedBackUnisex;
+                    femaleList = &settings->Animation.SatedBackFemale;
+                    unisexList = &settings->Animation.SatedBackUnisex;
                 } else {
-                    femaleList = &settings->Animation.NonCombatSatedFrontFemale;
-                    unisexList = &settings->Animation.NonCombatSatedFrontUnisex;
+                    femaleList = &settings->Animation.SatedFrontFemale;
+                    unisexList = &settings->Animation.SatedFrontUnisex;
                 }
             }
         }
@@ -399,6 +422,13 @@ public:
         case SkyPromptAPI::PromptEventType::kUp:
             SKSE::log::debug("Feed button UP");
             break;
+        case SkyPromptAPI::PromptEventType::kTimingOut:
+            // Prompt is about to expire - resend to refresh it
+            if (currentTarget_ && g_clientID != 0) {
+                SkyPromptAPI::SendPrompt(this, g_clientID);
+                SKSE::log::debug("Prompt timing out - refreshed");
+            }
+            break;
         default:
             break;
         }
@@ -457,6 +487,17 @@ public:
 
         auto* settings = Settings::GetSingleton();
         if (!settings->General.EnableMod) return true;
+
+        // Check if player or target is in a paired animation
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (player && PairedAnimation::IsInPairedAnimation(player)) {
+            SKSE::log::debug("Excluded: player is in paired animation");
+            return true;
+        }
+        if (PairedAnimation::IsInPairedAnimation(actor)) {
+            SKSE::log::debug("Excluded: {} is in paired animation", actor->GetName());
+            return true;
+        }
 
         // Check common filters first (level, keywords)
         if (IsExcludedByFilters(actor)) return true;

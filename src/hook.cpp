@@ -96,7 +96,6 @@ namespace Hooks {
         }
 
         if (isValidTarget && actor) {
-            // New valid target
             if (sink->GetTarget() != actor) {
                 sink->SetTarget(actor);
                 bool sent = SkyPromptAPI::SendPrompt(sink, g_clientID);
