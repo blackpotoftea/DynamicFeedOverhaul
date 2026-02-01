@@ -7,7 +7,9 @@
 extern SkyPromptAPI::ClientID g_clientID;
 
 namespace {
-    bool IsPlayerVampire() {
+    // Check if player can feed (vampire check + optional hunger check)
+    // targetInCombat: if true and Combat.IgnoreHungerCheck is set, bypasses hunger requirement
+    bool CanPlayerFeed(bool targetInCombat) {
         auto* settings = Settings::GetSingleton();
 
         // Debug override - always return true if ForceVampire enabled
@@ -30,6 +32,12 @@ namespace {
 
         // Optional: Check hunger stage requirement
         if (settings->General.CheckHungerStage) {
+            // Combat targets can bypass hunger check if IgnoreHungerCheck is enabled
+            if (targetInCombat && settings->Combat.IgnoreHungerCheck) {
+                SKSE::log::debug("Combat target - ignoring hunger check (IgnoreHungerCheck=true)");
+                return true;
+            }
+
             int vampireStage = PapyrusCall::GetVampireStage();
             if (vampireStage < settings->General.MinHungerStage) {
                 SKSE::log::debug("Vampire hunger stage {} < required {} - feeding not allowed",
@@ -76,11 +84,14 @@ namespace Hooks {
         bool isValidTarget = false;
         RE::Actor* actor = nullptr;
 
-        if (ref && ref->Is(RE::FormType::ActorCharacter) && IsPlayerVampire()) {
+        if (ref && ref->Is(RE::FormType::ActorCharacter)) {
             actor = ref->As<RE::Actor>();
-            if (actor && actor != RE::PlayerCharacter::GetSingleton() &&
-                !VampireFeedSink::IsExcluded(actor)) {
-                isValidTarget = true;
+            if (actor && actor != RE::PlayerCharacter::GetSingleton()) {
+                // Check vampire status with target's combat state for hunger bypass
+                bool targetInCombat = actor->IsInCombat();
+                if (CanPlayerFeed(targetInCombat) && !VampireFeedSink::IsExcluded(actor)) {
+                    isValidTarget = true;
+                }
             }
         }
 

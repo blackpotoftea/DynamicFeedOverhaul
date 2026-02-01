@@ -137,7 +137,7 @@ namespace PapyrusCall {
         }
         return -1;
     }
-
+    
     // Get actual vampire stage (1-4)
     // Returns: 1-4 (matching VampireStatus), or -1 if not found
     inline int GetVampireStage() {
