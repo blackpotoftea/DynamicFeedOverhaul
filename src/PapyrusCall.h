@@ -148,4 +148,37 @@ namespace PapyrusCall {
         return -1;
     }
 
+    // Send OnVampireFeed event to the target actor
+    // This is the same event sent by the vanilla StartVampireFeed function
+    // Event signature: OnVampireFeed(Actor akTarget)
+    inline bool SendOnVampireFeedEvent(RE::Actor* target) {
+        if (!target) {
+            SKSE::log::error("SendOnVampireFeedEvent: target is null");
+            return false;
+        }
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            SKSE::log::error("SendOnVampireFeedEvent: VM is null");
+            return false;
+        }
+
+        // Get handle for the target actor
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(
+            RE::Actor::FORMTYPE, target);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
+            SKSE::log::error("SendOnVampireFeedEvent: failed to get handle for {}", target->GetName());
+            return false;
+        }
+
+        // Send the event with target as the argument
+        auto* args = RE::MakeFunctionArguments(std::move(target));
+
+        vm->SendEvent(handle, "OnVampireFeed", args);
+
+        SKSE::log::info("SendOnVampireFeedEvent: sent to {} (FormID: {:X})",
+            target->GetName(), target->GetFormID());
+        return true;
+    }
+
 }  // namespace PapyrusCall

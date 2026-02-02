@@ -251,14 +251,6 @@ class FeedAnimationSink : public RE::BSTEventSink<RE::BSAnimationGraphEvent> {
 
 ## Files to Modify/Create
 
-1. **src/IVampireFeed.h** (NEW)
-   - Interface class defining the feed contract
-   - `StartFeed()`, `StopFeed()`, `IsFeeding()`, `Update()`
-
-2. **src/VanillaVampireFeed.h** (NEW)
-   - Thin wrapper around `InitiateVampireFeedPackage`
-   - Allows keeping vanilla behavior as fallback
-
 3. **src/CustomVampireFeed.h** (NEW)
    - Our full reimplementation with recovery logic
    - State tracking: `feedTarget_`, `feedStartTime_`
