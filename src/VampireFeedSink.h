@@ -165,201 +165,168 @@ public:
 
         switch (event.type) {
         case SkyPromptAPI::PromptEventType::kAccepted:
-            if (currentTarget_) {
-                // Remove the prompt immediately when feed starts
-                SkyPromptAPI::RemovePrompt(this, g_clientID);
-
-                // Mark feed as active (skip paired animation exclusion until PairEnd)
-                FeedAnimState::MarkFeedStarted();
-
-                // Register animation event sink to detect when feed ends
-                AnimEventSink::Register();
-
-                // Keep currentTarget_ - animation event (VampireFeedEnd) will trigger prompt re-show
-                RE::Actor* feedTarget = currentTarget_;
-
-                SKSE::log::info("Feed ACCEPTED on target: {} (FormID: {:X})",
-                    feedTarget->GetName(), feedTarget->GetFormID());
-
-                auto player = RE::PlayerCharacter::GetSingleton();
-                if (!player) break;
-
-                // Check target state
-                auto sitSleepState = TargetState::GetSitSleepState(feedTarget);
-                bool isInFurniture = TargetState::IsInFurnitureState(feedTarget);
-                auto furnitureType = TargetState::GetActorFurnitureType(feedTarget);
-                auto furnitureRef = TargetState::GetFurnitureReference(feedTarget);
-
-                SKSE::log::info("Target state: {} | InFurniture: {} | FurnitureType: {}",
-                    TargetState::SitSleepStateToString(sitSleepState),
-                    isInFurniture,
-                    TargetState::FurnitureTypeToString(furnitureType));
-
-                // Determine target state for feed type calculation
-                int targetState = FeedState::kStanding;
-                bool isInCombat = feedTarget->IsInCombat();
-
-                if (isInCombat) {
-                    SKSE::log::info("Target is in COMBAT - using combat feed");
-                    targetState = FeedState::kCombat;
-                } else if (TargetState::IsSleeping(feedTarget)) {
-                    SKSE::log::info("Target is SLEEPING - using bed feed");
-                    targetState = FeedState::kSleeping;
-                } else if (TargetState::IsSitting(feedTarget)) {
-                    SKSE::log::info("Target is SITTING - using seated feed");
-                    targetState = FeedState::kSitting;
-                } else if (TargetState::IsStanding(feedTarget)) {
-                    SKSE::log::info("Target is STANDING - using standing feed");
-                    targetState = FeedState::kStanding;
-
-                    // Pre-position to fix stairs animation issue
-                    // Move the lower actor up to the higher one's Z position
-                    auto* settings = Settings::GetSingleton();
-                    if (settings->NonCombat.EnableHeightAdjust) {
-                        auto playerPos = player->GetPosition();
-                        auto targetPos = feedTarget->GetPosition();
-                        float heightDiff = std::fabs(targetPos.z - playerPos.z);
-
-                        if (heightDiff > settings->NonCombat.MinHeightDiff &&
-                            heightDiff <= settings->NonCombat.MaxHeightDiff) {
-                            float higherZ = std::max(playerPos.z, targetPos.z);
-
-                            if (playerPos.z < targetPos.z) {
-                                // Player is lower - move player up to target
-                                SKSE::log::info("Height diff: {:.1f} - moving player up from {:.1f} to {:.1f}",
-                                    heightDiff, playerPos.z, higherZ);
-                                player->SetPosition(RE::NiPoint3(playerPos.x, playerPos.y, higherZ), true);
-                            } else {
-                                // Target is lower - move target up to player
-                                SKSE::log::info("Height diff: {:.1f} - moving target up from {:.1f} to {:.1f}",
-                                    heightDiff, targetPos.z, higherZ);
-                                feedTarget->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, higherZ), true);
-                            }
-                        } else if (heightDiff > settings->NonCombat.MaxHeightDiff) {
-                            SKSE::log::warn("Height diff {:.1f} exceeds max {:.1f} - skipping repositioning",
-                                heightDiff, settings->NonCombat.MaxHeightDiff);
-                        }
-                    }
-                }
-
-                // Get vampire hunger stage and calculate/select feed type
-                auto* settings = Settings::GetSingleton();
-                int vampireStage = PapyrusCall::GetVampireStage();
-                int feedType;
-
-                if (settings->General.ForceFeedType > 0) {
-                    // Debug override
-                    feedType = settings->General.ForceFeedType;
-                    SKSE::log::info("Using FORCED FeedType: {}", feedType);
-                } else if (targetState == FeedState::kSleeping) {
-                    // Sleeping targets: skip SelectAnimation (which rotates target)
-                    // Bed/bedroll uses left/right based on player position, not front/back
-                    feedType = FeedState::Calculate(targetState, vampireStage);
-                    SKSE::log::info("Sleeping target - skipping rotation. FeedType: {}", feedType);
-                } else {
-                    // Standing/sitting/combat: use SelectAnimation (may rotate target)
-                    feedType = FeedState::SelectAnimation(isInCombat, vampireStage, feedTarget);
-
-                    if (feedType == 0) {
-                        // No animations configured, use default calculation
-                        feedType = FeedState::Calculate(targetState, vampireStage);
-                        SKSE::log::info("Vampire stage: {} | FeedType: {} (state={} + stage={})",
-                            vampireStage, feedType, targetState, vampireStage);
-                    }
-                }
-
-                // Set graph variables on both player and target for OAR conditions
-                // These are read by OAR's HasGraphVariable condition
-                // Only works if user has Behavior Data Injector installed
-                SetFeedGraphVars(player, feedType);
-                SetFeedGraphVars(feedTarget, feedType);
-
-                // Select idle based on target state and position
-                // isBehind was already computed by SelectAnimation() via RotateTargetToClosest()
-                const char* idleEditorID = nullptr;
-
-                // Determine if this is a paired animation or solo idle
-                bool isPairedAnim = true;
-
-                if (targetState == FeedState::kSleeping && furnitureRef) {
-                    // Bed/bedroll - NOT paired, solo idle on player
-                    isPairedAnim = false;
-                    bool isLeft = CustomFeed::IsPlayerOnLeftSide(feedTarget);
-                    bool isBedroll = CustomFeed::IsBedroll(furnitureRef);
-                    if (isBedroll) {
-                        idleEditorID = isLeft ? CustomFeed::Idles::BEDROLL_LEFT : CustomFeed::Idles::BEDROLL_RIGHT;
-                        SKSE::log::info("Bedroll {} side (solo idle)", isLeft ? "left" : "right");
-                    } else {
-                        idleEditorID = isLeft ? CustomFeed::Idles::BED_LEFT : CustomFeed::Idles::BED_RIGHT;
-                        SKSE::log::info("Bed {} side (solo idle)", isLeft ? "left" : "right");
-                    }
-                } else if (targetState == FeedState::kSitting) {
-                    // Sitting - front/back already determined by SelectAnimation
-                    // Note: SelectAnimation calls RotateTargetToClosest which returns isBehind
-                    // We need to check again since feedType doesn't encode front/back directly
-                    bool isBehind = FeedState::RotateTargetToClosest(feedTarget);
-                    idleEditorID = isBehind ? CustomFeed::Idles::SITTING_BACK : CustomFeed::Idles::SITTING_FRONT;
-                    SKSE::log::info("Sitting {} feed", isBehind ? "back" : "front");
-                } else if (targetState == FeedState::kCombat) {
-                    // Combat - front/back
-                    bool isBehind = FeedState::RotateTargetToClosest(feedTarget);
-                    idleEditorID = isBehind ? CustomFeed::Idles::COMBAT_BACK : CustomFeed::Idles::COMBAT_FRONT;
-                    SKSE::log::info("Combat {} feed", isBehind ? "back" : "front");
-                } else {
-                    // Standing - front/back
-                    bool isBehind = FeedState::RotateTargetToClosest(feedTarget);
-                    idleEditorID = isBehind ? CustomFeed::Idles::STANDING_BACK : CustomFeed::Idles::STANDING_FRONT;
-                    SKSE::log::info("Standing {} feed", isBehind ? "back" : "front");
-                }
-
-                // Play the animation (paired or solo)
-                SKSE::log::info("Calling CustomFeed::PlayPairedFeed with idle '{}' (paired={})...", idleEditorID, isPairedAnim);
-                if (CustomFeed::PlayPairedFeed(idleEditorID, feedTarget, isPairedAnim)) {
-                    // Send OnVampireFeed event to target (same as vanilla StartVampireFeed)
-                    PapyrusCall::SendOnVampireFeedEvent(feedTarget);
-
-                    // Call the Papyrus VampireFeed() function to update vampire status
-                    auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
-                    if (vampireQuest) {
-                        PapyrusCall::CallVampireFeed(vampireQuest, feedTarget);
-                    } else {
-                        SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
-                    }
-                } else {
-                    SKSE::log::warn("CustomFeed failed");
-                    // TODO: Re-enable vanilla fallback after testing
-                    // player->InitiateVampireFeedPackage(feedTarget, furnitureRef);
-                }
-            }
-            break;
-        case SkyPromptAPI::PromptEventType::kDeclined:
-            SKSE::log::debug("Feed DECLINED");
-            break;
-        case SkyPromptAPI::PromptEventType::kDown:
-            SKSE::log::debug("Feed button DOWN");
-            break;
-        case SkyPromptAPI::PromptEventType::kUp:
-            SKSE::log::debug("Feed button UP");
+            HandleFeedAccepted();
             break;
         case SkyPromptAPI::PromptEventType::kTimingOut:
-            // Prompt is about to expire - resend to refresh it (but not during animation)
-            if (currentTarget_ && g_clientID != 0) {
-                auto* player = RE::PlayerCharacter::GetSingleton();
-                bool bIsSynced = player && PairedAnimation::IsInPairedAnimation(player);
-
-                SKSE::log::debug("Prompt timing out - bIsSynced: {}", bIsSynced);
-
-                // Only refresh prompt if not in animation
-                if (!bIsSynced) {
-                    [[maybe_unused]] bool sent = SkyPromptAPI::SendPrompt(this, g_clientID);
-                    SKSE::log::debug("Prompt timing out - refreshed (sent={})", sent);
-                }
-            }
+            HandleTimingOut();
             break;
+        case SkyPromptAPI::PromptEventType::kDeclined:
+        case SkyPromptAPI::PromptEventType::kDown:
+        case SkyPromptAPI::PromptEventType::kUp:
         default:
             break;
         }
     }
+
+private:
+    // Determine target state for feed type calculation
+    static int DetermineTargetState(RE::Actor* target, bool& outIsInCombat) {
+        outIsInCombat = target->IsInCombat();
+
+        if (outIsInCombat) {
+            return FeedState::kCombat;
+        } else if (TargetState::IsSleeping(target)) {
+            return FeedState::kSleeping;
+        } else if (TargetState::IsSitting(target)) {
+            return FeedState::kSitting;
+        }
+        return FeedState::kStanding;
+    }
+
+    // Apply height adjustment for standing feeds on stairs
+    static void ApplyHeightAdjustment(RE::PlayerCharacter* player, RE::Actor* target, const Settings* settings) {
+        if (!settings->NonCombat.EnableHeightAdjust) return;
+
+        auto playerPos = player->GetPosition();
+        auto targetPos = target->GetPosition();
+        float heightDiff = std::fabs(targetPos.z - playerPos.z);
+
+        if (heightDiff <= settings->NonCombat.MinHeightDiff) return;
+
+        if (heightDiff > settings->NonCombat.MaxHeightDiff) {
+            SKSE::log::warn("Height diff {:.1f} exceeds max {:.1f} - skipping repositioning",
+                heightDiff, settings->NonCombat.MaxHeightDiff);
+            return;
+        }
+
+        float higherZ = std::max(playerPos.z, targetPos.z);
+        if (playerPos.z < targetPos.z) {
+            SKSE::log::debug("Height diff: {:.1f} - moving player up", heightDiff);
+            player->SetPosition(RE::NiPoint3(playerPos.x, playerPos.y, higherZ), true);
+        } else {
+            SKSE::log::debug("Height diff: {:.1f} - moving target up", heightDiff);
+            target->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, higherZ), true);
+        }
+    }
+
+    // Select idle animation based on target state and position
+    // Returns the idle editor ID and whether it's a paired animation
+    static const char* SelectIdleAnimation(int targetState, RE::Actor* target,
+                                           RE::TESObjectREFR* furnitureRef, bool isBehind,
+                                           bool& outIsPairedAnim) {
+        outIsPairedAnim = true;
+
+        if (targetState == FeedState::kSleeping && furnitureRef) {
+            outIsPairedAnim = false;
+            bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
+            bool isBedroll = CustomFeed::IsBedroll(furnitureRef);
+
+            if (isBedroll) {
+                SKSE::log::debug("Bedroll {} side (solo idle)", isLeft ? "left" : "right");
+                return isLeft ? CustomFeed::Idles::BEDROLL_LEFT : CustomFeed::Idles::BEDROLL_RIGHT;
+            } else {
+                SKSE::log::debug("Bed {} side (solo idle)", isLeft ? "left" : "right");
+                return isLeft ? CustomFeed::Idles::BED_LEFT : CustomFeed::Idles::BED_RIGHT;
+            }
+        }
+
+        const char* posStr = isBehind ? "back" : "front";
+
+        if (targetState == FeedState::kSitting) {
+            SKSE::log::debug("Sitting {} feed", posStr);
+            return isBehind ? CustomFeed::Idles::SITTING_BACK : CustomFeed::Idles::SITTING_FRONT;
+        } else {
+            // Standing and combat use same base idle - OAR uses feedType to select custom animations
+            SKSE::log::debug("{} {} feed", targetState == FeedState::kCombat ? "Combat" : "Standing", posStr);
+            return isBehind ? CustomFeed::Idles::STANDING_BACK : CustomFeed::Idles::STANDING_FRONT;
+        }
+    }
+
+    // Execute the feed animation and update vampire status
+    static void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim) {
+        SKSE::log::info("Playing feed idle '{}' (paired={})", idleEditorID, isPairedAnim);
+
+        if (CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim)) {
+            PapyrusCall::SendOnVampireFeedEvent(target);
+
+            auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
+            if (vampireQuest) {
+                PapyrusCall::CallVampireFeed(vampireQuest, target);
+            } else {
+                SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
+            }
+        } else {
+            SKSE::log::warn("CustomFeed failed");
+        }
+    }
+
+    void HandleFeedAccepted() const {
+        if (!currentTarget_) return;
+
+        SkyPromptAPI::RemovePrompt(this, g_clientID);
+        FeedAnimState::MarkFeedStarted();
+        AnimEventSink::Register();
+
+        RE::Actor* feedTarget = currentTarget_;
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player) return;
+
+        auto* settings = Settings::GetSingleton();
+        auto furnitureRef = TargetState::GetFurnitureReference(feedTarget);
+
+        SKSE::log::info("Feed ACCEPTED on target: {} (FormID: {:X})",
+            feedTarget->GetName(), feedTarget->GetFormID());
+
+        // Determine target state
+        bool isInCombat = false;
+        int targetState = DetermineTargetState(feedTarget, isInCombat);
+        SKSE::log::debug("Target state: {} (combat={})", targetState, isInCombat);
+
+        // Apply height adjustment for standing targets
+        if (targetState == FeedState::kStanding) {
+            ApplyHeightAdjustment(player, feedTarget, settings);
+        }
+
+        // Calculate feed type and determine position (front/back)
+        int vampireStage = PapyrusCall::GetVampireStage();
+        auto [feedType, isBehind] = FeedState::DetermineFeedTypeAndPosition(
+            targetState, vampireStage, isInCombat, feedTarget,
+            settings->General.ForceFeedType);
+
+        // Set graph variables for OAR conditions
+        SetFeedGraphVars(player, feedType);
+        SetFeedGraphVars(feedTarget, feedType);
+
+        // Select and play animation
+        bool isPairedAnim = true;
+        const char* idleEditorID = SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim);
+        ExecuteFeed(idleEditorID, feedTarget, isPairedAnim);
+    }
+
+    void HandleTimingOut() const {
+        if (!currentTarget_ || g_clientID == 0) return;
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (player && PairedAnimation::IsInPairedAnimation(player)) {
+            SKSE::log::debug("Prompt timing out - skipped (in animation)");
+            return;
+        }
+
+        [[maybe_unused]] bool sent = SkyPromptAPI::SendPrompt(this, g_clientID);
+        SKSE::log::debug("Prompt timing out - refreshed (sent={})", sent);
+    }
+
+public:
 
     void SetTarget(RE::Actor* target) {
         currentTarget_ = target;

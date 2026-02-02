@@ -14,11 +14,8 @@ namespace CustomFeed {
         inline constexpr const char* BEDROLL_LEFT = "VampireFeedingBedRollLeft_Loose";      // placeholder
         inline constexpr const char* BEDROLL_RIGHT = "VampireFeedingBedRollRight_Loose";    // placeholder
         // Sitting
-        inline constexpr const char* SITTING_FRONT = "j";    // placeholder
+        inline constexpr const char* SITTING_FRONT = "VampireFeedSittingFront";    // placeholder
         inline constexpr const char* SITTING_BACK = "VampireFeedSittingBack";      // placeholder
-        // Combat
-        inline constexpr const char* COMBAT_FRONT = "VampireFeedCombatFront";      // placeholder
-        inline constexpr const char* COMBAT_BACK = "VampireFeedCombatBack";        // placeholder
     }
 
     // State tracking for recovery
@@ -41,7 +38,7 @@ namespace CustomFeed {
         return cross > 0;
     }
 
-    // Check if furniture is a bedroll (vs regular bed) - case insensitive
+    // Check if furniturej is a bedroll (vs regular bed) - case insensitive
     inline bool IsBedroll(RE::TESObjectREFR* furniture) {
         if (!furniture) return false;
 

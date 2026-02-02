@@ -36,6 +36,18 @@ namespace FeedState {
     constexpr int kSitting = 30;
     constexpr int kCombat = 40;
 
+    // Sentinel value indicating no forced feed type (use automatic calculation)
+    constexpr int kNoForcedFeedType = 0;
+
+    // Sentinel value indicating no animation selected (use fallback calculation)
+    constexpr int kNoAnimationSelected = 0;
+
+    // Result of feed type determination
+    struct FeedResult {
+        int feedType;
+        bool isBehind;
+    };
+
     // Calculate feed type from target state and vampire hunger stage
     inline int Calculate(int targetState, int vampireStage) {
         // Clamp vampire stage to 1-4
@@ -43,9 +55,9 @@ namespace FeedState {
         return targetState + stage;
     }
 
-    // Pick random element from vector
+    // Pick random element from vector (returns kNoAnimationSelected if empty)
     inline int PickRandom(const std::vector<int>& list) {
-        if (list.empty()) return 0;
+        if (list.empty()) return kNoAnimationSelected;
         if (list.size() == 1) return list[0];
 
         static std::random_device rd;
@@ -122,19 +134,19 @@ namespace FeedState {
         return useBack;
     }
 
-    // TODO  refactor SelectAnimation set graph varible not actuaply picking animation
     // Select FeedType based on combat state, hunger level, position, and player gender
     // Priority: position (front/back) > gender (female > unisex fallback)
     // Returns 0 if no animations configured (falls back to default calculation)
-    inline int SelectAnimation(bool isInCombat, int vampireStage, RE::Actor* target) {
+    // out_isBehind: output parameter indicating if target was rotated to face away (back animation)
+    inline int SelectAnimation(bool isInCombat, int vampireStage, RE::Actor* target, bool& out_isBehind) {
         auto* settings = Settings::GetSingleton();
+        out_isBehind = false;
 
         if (!settings->Animation.EnableRandomSelection) {
-            return 0;  // Use default calculation
+            return kNoAnimationSelected;  // Use default calculation
         }
 
         bool isHungry = vampireStage >= settings->Animation.HungryThreshold;
-        bool isBehind;
 
         if (settings->General.SequentialPlay) {
             // Debug mode: sequential animation playthrough
@@ -147,16 +159,16 @@ namespace FeedState {
             static bool lastWasBack = false;
 
             // Determine position and rotate target
-            isBehind = RotateTargetToClosest(target);
+            out_isBehind = RotateTargetToClosest(target);
 
             // If direction changed or list is empty, rebuild the list
-            if (sequentialList.empty() || isBehind != lastWasBack) {
+            if (sequentialList.empty() || out_isBehind != lastWasBack) {
                 sequentialList.clear();
                 sequentialIndex = 0;
-                lastWasBack = isBehind;
+                lastWasBack = out_isBehind;
 
                 auto& a = settings->Animation;
-                if (isBehind) {
+                if (out_isBehind) {
                     sequentialList.insert(sequentialList.end(), a.SatedBackUnisex.begin(), a.SatedBackUnisex.end());
                     sequentialList.insert(sequentialList.end(), a.HungryBackUnisex.begin(), a.HungryBackUnisex.end());
                     sequentialList.insert(sequentialList.end(), a.CombatSatedBackUnisex.begin(), a.CombatSatedBackUnisex.end());
@@ -169,7 +181,7 @@ namespace FeedState {
                 }
 
                 SKSE::log::info("SequentialPlay: rebuilt {} list with {} animations",
-                    isBehind ? "back" : "front", sequentialList.size());
+                    out_isBehind ? "back" : "front", sequentialList.size());
             }
 
             if (!sequentialList.empty()) {
@@ -181,17 +193,17 @@ namespace FeedState {
 
                 int selected = sequentialList[sequentialIndex];
                 SKSE::log::info("SequentialPlay: {} [{}/{}] FeedType={}",
-                    isBehind ? "back" : "front", sequentialIndex + 1, sequentialList.size(), selected);
+                    out_isBehind ? "back" : "front", sequentialIndex + 1, sequentialList.size(), selected);
                 sequentialIndex++;
                 return selected;
             }
 
-            SKSE::log::warn("SequentialPlay: no {} animations configured", isBehind ? "back" : "front");
-            return 0;
+            SKSE::log::warn("SequentialPlay: no {} animations configured", out_isBehind ? "back" : "front");
+            return kNoAnimationSelected;
         }
 
         // Normal mode: rotate target to closest direction and select based on all criteria
-        isBehind = RotateTargetToClosest(target);
+        out_isBehind = RotateTargetToClosest(target);
         Gender gender = GetPlayerGender();
 
         const std::vector<int>* femaleList = nullptr;
@@ -199,7 +211,7 @@ namespace FeedState {
 
         if (isInCombat) {
             if (isHungry) {
-                if (isBehind) {
+                if (out_isBehind) {
                     femaleList = &settings->Animation.CombatHungryBackFemale;
                     unisexList = &settings->Animation.CombatHungryBackUnisex;
                 } else {
@@ -207,7 +219,7 @@ namespace FeedState {
                     unisexList = &settings->Animation.CombatHungryFrontUnisex;
                 }
             } else {
-                if (isBehind) {
+                if (out_isBehind) {
                     femaleList = &settings->Animation.CombatSatedBackFemale;
                     unisexList = &settings->Animation.CombatSatedBackUnisex;
                 } else {
@@ -217,7 +229,7 @@ namespace FeedState {
             }
         } else {
             if (isHungry) {
-                if (isBehind) {
+                if (out_isBehind) {
                     femaleList = &settings->Animation.HungryBackFemale;
                     unisexList = &settings->Animation.HungryBackUnisex;
                 } else {
@@ -225,7 +237,7 @@ namespace FeedState {
                     unisexList = &settings->Animation.HungryFrontUnisex;
                 }
             } else {
-                if (isBehind) {
+                if (out_isBehind) {
                     femaleList = &settings->Animation.SatedBackFemale;
                     unisexList = &settings->Animation.SatedBackUnisex;
                 } else {
@@ -235,7 +247,7 @@ namespace FeedState {
             }
         }
 
-        const char* posStr = isBehind ? "back" : "front";
+        const char* posStr = out_isBehind ? "back" : "front";
 
         // For female players, try female-specific list first
         if (gender == Gender::kFemale && femaleList && !femaleList->empty()) {
@@ -253,6 +265,42 @@ namespace FeedState {
             return selected;
         }
 
-        return 0;  // No animations configured, use default
+        return kNoAnimationSelected;  // No animations configured, use default
+    }
+
+    // Determine feed type and target position (front/back) for animation selection
+    // Consolidates forced feed type, sleeping, and animation selection logic
+    inline FeedResult DetermineFeedTypeAndPosition(
+        int targetState, int vampireStage, bool isInCombat,
+        RE::Actor* target, int forcedFeedType)
+    {
+        FeedResult result{0, false};
+
+        if (forcedFeedType != kNoForcedFeedType) {
+            result.feedType = forcedFeedType;
+            SKSE::log::info("Using FORCED FeedType: {}", result.feedType);
+            if (targetState != kSleeping) {
+                result.isBehind = RotateTargetToClosest(target);
+            }
+            return result;
+        }
+
+        if (targetState == kSleeping) {
+            result.feedType = Calculate(targetState, vampireStage);
+            SKSE::log::debug("Sleeping target. FeedType: {}", result.feedType);
+            return result;
+        }
+
+        // Standing/sitting/combat: try animation selection first
+        result.feedType = SelectAnimation(isInCombat, vampireStage, target, result.isBehind);
+
+        if (result.feedType == kNoAnimationSelected) {
+            // Fallback: basic calculation + manual rotation
+            result.feedType = Calculate(targetState, vampireStage);
+            result.isBehind = RotateTargetToClosest(target);
+        }
+
+        SKSE::log::debug("FeedType: {} (behind={})", result.feedType, result.isBehind);
+        return result;
     }
 }
