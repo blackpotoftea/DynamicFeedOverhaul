@@ -486,10 +486,10 @@ namespace AnimUtil {
         return AnimUtil::kStanding;
     }
 
-    void ApplyHeightAdjustment(RE::PlayerCharacter* player, RE::Actor* target, float minHeightDiff, float maxHeightDiff) {
-        auto playerPos = player->GetPosition();
+    void ApplyHeightAdjustment(RE::Actor* attacker, RE::Actor* target, float minHeightDiff, float maxHeightDiff) {
+        auto attackerPos = attacker->GetPosition();
         auto targetPos = target->GetPosition();
-        float heightDiff = std::fabs(targetPos.z - playerPos.z);
+        float heightDiff = std::fabs(targetPos.z - attackerPos.z);
 
         if (heightDiff <= minHeightDiff) return;
 
@@ -499,10 +499,10 @@ namespace AnimUtil {
             return;
         }
 
-        float higherZ = std::max(playerPos.z, targetPos.z);
-        if (playerPos.z < targetPos.z) {
-            SKSE::log::debug("Height diff: {:.1f} - moving player up", heightDiff);
-            player->SetPosition(RE::NiPoint3(playerPos.x, playerPos.y, higherZ), true);
+        float higherZ = std::max(attackerPos.z, targetPos.z);
+        if (attackerPos.z < targetPos.z) {
+            SKSE::log::debug("Height diff: {:.1f} - moving attacker up", heightDiff);
+            attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, higherZ), true);
         } else {
             SKSE::log::debug("Height diff: {:.1f} - moving target up", heightDiff);
             target->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, higherZ), true);
@@ -581,35 +581,33 @@ namespace AnimUtil {
         SKSE::log::debug("Cleared feed graph vars on {}", actor->GetName());
     }
 
-    // Calculate angle from target to player (in radians)
-    float GetAngleToPlayer(RE::Actor* target) {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player || !target) return 0.0f;
+    // Calculate angle from one actor to another (in radians)
+    float GetAngleBetween(RE::Actor* from, RE::Actor* to) {
+        if (!from || !to) return 0.0f;
 
-        auto playerPos = player->GetPosition();
-        auto targetPos = target->GetPosition();
+        auto fromPos = from->GetPosition();
+        auto toPos = to->GetPosition();
 
-        float dx = playerPos.x - targetPos.x;
-        float dy = playerPos.y - targetPos.y;
+        float dx = toPos.x - fromPos.x;
+        float dy = toPos.y - fromPos.y;
 
-        // atan2 gives angle from target to player
+        // atan2 gives angle from 'from' to 'to'
         return std::atan2(dx, dy);
     }
 
     // Get closest direction (front/back) without rotating target
     // Returns true if back is closer, false if front is closer
-    bool GetClosestDirection(RE::Actor* target) {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player || !target) return false;
+    bool GetClosestDirection(RE::Actor* target, RE::Actor* reference) {
+        if (!target || !reference) return false;
 
-        float angleToPlayer = GetAngleToPlayer(target);
+        float angleToReference = GetAngleBetween(target, reference);
         float currentHeading = target->GetAngleZ();
 
         // Normalize angle difference to -PI to PI
-        float diffToFront = normalizeAngle(angleToPlayer - currentHeading);
+        float diffToFront = normalizeAngle(angleToReference - currentHeading);
 
         // Back angle is opposite (180 degrees / PI radians)
-        float backAngle = angleToPlayer + static_cast<float>(M_PI);
+        float backAngle = angleToReference + static_cast<float>(M_PI);
         float diffToBack = normalizeAngle(backAngle - currentHeading);
 
         bool useBack = std::fabs(diffToBack) < std::fabs(diffToFront);
@@ -618,17 +616,16 @@ namespace AnimUtil {
         return useBack;
     }
 
-    // Rotate target to face toward or away from player (whichever is closer)
+    // Rotate target to face toward or away from reference (whichever is closer)
     // Returns true if rotated to face away (back animation), false if facing toward (front animation)
-    bool RotateTargetToClosest(RE::Actor* target) {
-        bool useBack = GetClosestDirection(target);
+    bool RotateTargetToClosest(RE::Actor* target, RE::Actor* reference) {
+        bool useBack = GetClosestDirection(target, reference);
 
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player || !target) return useBack;
+        if (!target || !reference) return useBack;
 
-        float angleToPlayer = GetAngleToPlayer(target);
-        float backAngle = angleToPlayer + static_cast<float>(M_PI);
-        float newAngle = useBack ? backAngle : angleToPlayer;
+        float angleToReference = GetAngleBetween(target, reference);
+        float backAngle = angleToReference + static_cast<float>(M_PI);
+        float newAngle = useBack ? backAngle : angleToReference;
 
         // Normalize new angle to 0 to 2PI
         while (newAngle < 0) newAngle += 2.0f * static_cast<float>(M_PI);
@@ -644,31 +641,30 @@ namespace AnimUtil {
         return useBack;
     }
 
-    // Rotate player to face the target
-    void RotatePlayerToTarget(RE::Actor* target) {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player || !target) return;
+    // Rotate attacker to face the target
+    void RotateAttackerToTarget(RE::Actor* attacker, RE::Actor* target) {
+        if (!attacker || !target) return;
 
-        auto playerPos = player->GetPosition();
+        auto attackerPos = attacker->GetPosition();
         auto targetPos = target->GetPosition();
 
-        float dx = targetPos.x - playerPos.x;
-        float dy = targetPos.y - playerPos.y;
+        float dx = targetPos.x - attackerPos.x;
+        float dy = targetPos.y - attackerPos.y;
 
-        // Calculate angle from player to target
+        // Calculate angle from attacker to target
         float angleToTarget = std::atan2(dx, dy);
 
         // Normalize angle to 0 to 2PI
         while (angleToTarget < 0) angleToTarget += 2.0f * static_cast<float>(M_PI);
         while (angleToTarget >= 2.0f * static_cast<float>(M_PI)) angleToTarget -= 2.0f * static_cast<float>(M_PI);
 
-        SKSE::log::debug("RotatePlayerToTarget: rotating player to face {} (angle={:.2f})",
-            target->GetName(), angleToTarget);
+        SKSE::log::debug("RotateAttackerToTarget: rotating {} to face {} (angle={:.2f})",
+            attacker->GetName(), target->GetName(), angleToTarget);
 
         // SetAngle takes NiPoint3 with x, y, z angles - we only change z (heading)
-        RE::NiPoint3 angles = player->data.angle;
+        RE::NiPoint3 angles = attacker->data.angle;
         angles.z = angleToTarget;
-        player->SetAngle(angles);
+        attacker->SetAngle(angles);
     }
 
     // Kill target actor (for lethal feeds)

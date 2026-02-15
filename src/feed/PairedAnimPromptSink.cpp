@@ -330,19 +330,36 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
 
         // ExecuteFeed(nullptr, feedTarget, true);
     } else {
-        if (targetState == AnimUtil::kStanding && settings->NonCombat.EnableHeightAdjust) {
-            AnimUtil::ApplyHeightAdjustment(player, feedTarget, settings->NonCombat.MinHeightDiff, settings->NonCombat.MaxHeightDiff);
-        }
+        // Execute all positioning/rotation in a single main-thread task
+        auto playerHandle = player->CreateRefHandle();
+        auto targetHandle = feedTarget->CreateRefHandle();
 
+        SKSE::GetTaskInterface()->AddTask([playerHandle, targetHandle, targetState, settings]() {
+            auto playerRef = playerHandle.get();
+            auto targetRef = targetHandle.get();
+            if (!playerRef || !targetRef) return;
+
+            auto* player = playerRef.get()->As<RE::Actor>();
+            auto* target = targetRef.get()->As<RE::Actor>();
+            if (!player || !target) return;
+
+            if (targetState == AnimUtil::kStanding && settings->NonCombat.EnableHeightAdjust) {
+                AnimUtil::ApplyHeightAdjustment(player, target, settings->NonCombat.MinHeightDiff, settings->NonCombat.MaxHeightDiff);
+            }
+
+            if (targetState == AnimUtil::kStanding) {
+                AnimUtil::RotateTargetToClosest(target, player);
+                AnimUtil::RotateAttackerToTarget(player, target);
+            }
+        });
+
+        // Calculate direction for animation selection (can be done immediately)
         bool isBehind = false;
-        // Only rotate standing targets (not sitting or sleeping)
         if (targetState == AnimUtil::kStanding) {
-            isBehind = AnimUtil::RotateTargetToClosest(feedTarget);
-            // Also rotate player to face the target
-            AnimUtil::RotatePlayerToTarget(feedTarget);
+            isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
         } else {
             // For sitting/sleeping, just detect direction without rotating
-            isBehind = AnimUtil::GetClosestDirection(feedTarget);
+            isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
         }
 
         // --- New Registry Logic ---

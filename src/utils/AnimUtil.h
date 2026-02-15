@@ -90,7 +90,7 @@ namespace AnimUtil {
     // Animation selection and state checking (moved from PairedAnimPromptSink)
     bool IsInPairedAnimation(RE::Actor* actor);
     int DetermineTargetState(RE::Actor* target, bool& outIsInCombat);
-    void ApplyHeightAdjustment(RE::PlayerCharacter* player, RE::Actor* target, float minHeightDiff, float maxHeightDiff);
+    void ApplyHeightAdjustment(RE::Actor* attacker, RE::Actor* target, float minHeightDiff, float maxHeightDiff);
     const char* SelectIdleAnimation(int targetState, RE::Actor* target,
                                     const RE::NiPointer<RE::TESObjectREFR>& furnitureRef, bool isBehind,
                                     bool& outIsPairedAnim);
@@ -104,10 +104,10 @@ namespace AnimUtil {
     void ClearFeedGraphVars(RE::Actor* actor);
 
     // Actor direction and rotation utilities (moved from FeedState)
-    float GetAngleToPlayer(RE::Actor* target);
-    bool GetClosestDirection(RE::Actor* target);
-    bool RotateTargetToClosest(RE::Actor* target);
-    void RotatePlayerToTarget(RE::Actor* target);
+    float GetAngleBetween(RE::Actor* from, RE::Actor* to);
+    bool GetClosestDirection(RE::Actor* target, RE::Actor* reference);
+    bool RotateTargetToClosest(RE::Actor* target, RE::Actor* reference);
+    void RotateAttackerToTarget(RE::Actor* attacker, RE::Actor* target);
 
     // Kill target actor (for lethal feeds)
     void KillTarget(RE::Actor* target);
