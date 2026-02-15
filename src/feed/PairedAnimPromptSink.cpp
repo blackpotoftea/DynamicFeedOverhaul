@@ -247,22 +247,29 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
             }
         }
 
-        // Kill target if lethal feed
-        if (isLethal && target) {
-            SKSE::log::info("Executing lethal feed - scheduling target kill: {}", target->GetName());
+        // Integration-specific post-feed handling
+        PapyrusCall::VampireIntegration integration = PapyrusCall::DetectVampireIntegration();
+        switch (integration) {
+            case PapyrusCall::VampireIntegration::Sacrosanct:
+                SKSE::log::debug("Post-feed: Sacrosanct integration active - letting Sacrosanct handle kill");
+                // Sacrosanct handles killing via ProcessFeed call above
+                // No additional action needed
+                break;
 
-            // Schedule kill slightly after animation starts to allow feed mechanics to process
-            SKSE::GetTaskInterface()->AddTask([targetHandle = target->GetHandle()]() {
-                auto targetRef = targetHandle.get();
-                if (targetRef) {
-                    auto* targetActor = targetRef->As<RE::Actor>();
-                    if (targetActor && !targetActor->IsDead()) {
-                        auto* player = RE::PlayerCharacter::GetSingleton();
-                        targetActor->KillImpl(player, 1.0f, true, true);
-                        SKSE::log::info("Target killed: {}", targetActor->GetName());
-                    }
+            case PapyrusCall::VampireIntegration::BetterVampires:
+                SKSE::log::debug("Post-feed: Better Vampires integration active");
+                // Better Vampires may handle killing differently
+                // No additional action needed for now
+                break;
+
+            case PapyrusCall::VampireIntegration::Vanilla:
+            default:
+                SKSE::log::debug("Post-feed: Vanilla vampire system active");
+                // Vanilla doesn't handle lethal kills automatically - kill manually if needed
+                if (isLethal && target) {
+                    AnimUtil::KillTarget(target);
                 }
-            });
+                break;
         }
     } else {
         SKSE::log::warn("CustomFeed failed");

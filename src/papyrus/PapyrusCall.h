@@ -7,6 +7,13 @@ class Settings;
 
 namespace PapyrusCall {
 
+    // Enum for vampire mod integrations
+    enum class VampireIntegration {
+        Vanilla,        // Vanilla Skyrim vampire system (default)
+        Sacrosanct,     // Sacrosanct - Vampires of Skyrim
+        BetterVampires  // Better Vampires (or other modded vampire quest)
+    };
+
     // Callback for when the Papyrus call completes
     class EmptyCallback : public RE::BSScript::IStackCallbackFunctor {
     public:
@@ -238,6 +245,32 @@ namespace PapyrusCall {
             return feedReady + 1;
         }
         return -1;
+    }
+
+    // Detect which vampire integration is currently active
+    inline VampireIntegration DetectVampireIntegration() {
+        auto* settings = Settings::GetSingleton();
+
+        // Check for Sacrosanct first (highest priority)
+        if (settings->Integration.EnableSacrosanct) {
+            auto* sacrosanctQuest = GetSacrosanctFeedManagerQuest();
+            if (sacrosanctQuest) {
+                return VampireIntegration::Sacrosanct;
+            }
+        }
+
+        // Check for modded vampire quest (Better Vampires, etc.)
+        auto* vampireQuest = GetPlayerVampireQuest();
+        if (vampireQuest) {
+            int signature = GetVampireFeedSignature(vampireQuest);
+            if (signature == 2) {
+                // Has Actor parameter - likely Better Vampires or similar mod
+                return VampireIntegration::BetterVampires;
+            }
+        }
+
+        // Default to Vanilla
+        return VampireIntegration::Vanilla;
     }
 
     // Send OnVampireFeed event to the target actor

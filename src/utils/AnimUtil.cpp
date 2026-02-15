@@ -643,4 +643,27 @@ namespace AnimUtil {
         target->SetAngle(angles);
         return useBack;
     }
+
+    // Kill target actor (for lethal feeds)
+    void KillTarget(RE::Actor* target) {
+        if (!target) {
+            SKSE::log::warn("KillTarget: target is null");
+            return;
+        }
+
+        SKSE::log::info("KillTarget: scheduling kill for {}", target->GetName());
+
+        // Schedule kill slightly after animation starts to allow feed mechanics to process
+        SKSE::GetTaskInterface()->AddTask([targetHandle = target->GetHandle()]() {
+            auto targetRef = targetHandle.get();
+            if (targetRef) {
+                auto* targetActor = targetRef->As<RE::Actor>();
+                if (targetActor && !targetActor->IsDead()) {
+                    auto* player = RE::PlayerCharacter::GetSingleton();
+                    targetActor->KillImpl(player, 1.0f, true, true);
+                    SKSE::log::info("Target killed: {}", targetActor->GetName());
+                }
+            }
+        });
+    }
 }
