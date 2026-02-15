@@ -59,7 +59,7 @@ public:
 private:
     PairedAnimPromptSink();
 
-    static void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal = false);
+    static void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal = false, bool hasOARAnimation = false);
 
     void HandleFeedAccepted() const;
     void HandleTimingOut() const;

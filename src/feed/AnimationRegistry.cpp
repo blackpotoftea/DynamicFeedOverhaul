@@ -105,31 +105,32 @@ namespace Feed {
             targetIsHostile = context.target->IsHostileToActor(context.player);
         }
 
-        for (const auto& anim : animations_) {
-            // 1. Check Combat Type
-            // Use combat animations if in combat OR if target is hostile
-            bool shouldUseCombat = context.isCombat || targetIsHostile;
-            if (shouldUseCombat && anim.type != Type::Combat) continue;
-            if (!shouldUseCombat && anim.type == Type::Combat) continue;
+        // Determine if we should use combat animations (outside loop for efficiency)
+        bool shouldUseCombat = context.isCombat || targetIsHostile || context.isLethal;
 
-            // 2. Check Direction
-            // If anim is Front but we are Back, skip? Or allow if we turn?
-            // Usually we want precise matching.
+        for (const auto& anim : animations_) {
+            // Combat animations are implicitly lethal (they have kills baked in)
+            bool animIsLethal = anim.isLethal || (anim.type == Type::Combat);
+
+            // 1. Lethal filter: In non-combat situations, match lethal preference
+            if (!context.isCombat) {
+                if (context.isLethal && !animIsLethal) continue;  // User wants lethal, anim is not
+                if (!context.isLethal && animIsLethal) continue;  // User wants normal, anim is lethal
+            }
+
+            // 2. Combat type filter: Animation type must match combat context
+            bool animIsCombat = (anim.type == Type::Combat);
+            if (shouldUseCombat != animIsCombat) continue;
+
+            // 3. Direction filter: Front/Back must match (Direction::Any always passes)
             if (anim.direction == Direction::Front && context.isBehind) continue;
             if (anim.direction == Direction::Back && !context.isBehind) continue;
 
-            // 3. Check Hunger
-            // If anim requires hungry but we are not -> Skip
-            // If anim is sated but we are hungry -> Allow (fallback) or Skip?
-            // Standard Logic: Hungry player can do Hungry OR Sated anims. Sated player ONLY Sated.
+            // 4. Hunger filter: Sated player can't use hungry anims, but hungry player can use both
             if (anim.isHungry && !context.isHungry) continue;
 
-            // 4. Check Sex
-            // If anim is Female but player is Male -> Skip
-            // If anim is Male but player is Female -> Skip
-            // Unisex is always okay.
-            if (anim.sex == Sex::Female && playerSex != Sex::Female) continue;
-            if (anim.sex == Sex::Male && playerSex != Sex::Male) continue;
+            // 5. Sex filter: Skip gender-specific anims that don't match player (Unisex always passes)
+            if (anim.sex != Sex::Unisex && anim.sex != playerSex) continue;
 
             candidates.push_back(&anim);
         }
@@ -146,9 +147,13 @@ namespace Feed {
 
         for (const auto* cand : candidates) {
             int score = 0;
+
+            // Prioritize lethal animations if user wants lethal feed
+            if (context.isLethal && cand->isLethal) score += 10; // Highest priority for lethal match
+
             if (cand->sex == playerSex) score += 2; // Specific gender match
             if (cand->sex == Sex::Unisex) score += 1;
-            
+
             if (context.isHungry && cand->isHungry) score += 2; // Prefer hungry anims if hungry
             if (!cand->isHungry) score += 1;
 

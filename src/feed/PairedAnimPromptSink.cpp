@@ -213,7 +213,7 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
 
 
 
-void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal) {
+void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal, bool hasOARAnimation) {
     auto* settings = Settings::GetSingleton();
 
     // if (settings->NonCombat.UseTwoSingleAnimations && isPairedAnim) {
@@ -265,9 +265,14 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
             case PapyrusCall::VampireIntegration::Vanilla:
             default:
                 SKSE::log::debug("Post-feed: Vanilla vampire system active");
-                // Vanilla doesn't handle lethal kills automatically - kill manually if needed
-                if (isLethal && target) {
+                // Only kill if:
+                // 1. User wants lethal feed
+                // 2. NO OAR combat animation found (if OAR anim exists, kill is baked in)
+                if (isLethal && target && !hasOARAnimation) {
+                    SKSE::log::info("No OAR animation found - manually killing target after animation");
                     AnimUtil::KillTarget(target);
+                } else if (isLethal && hasOARAnimation) {
+                    SKSE::log::info("OAR combat animation found - letting animation handle kill");
                 }
                 break;
         }
@@ -342,6 +347,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
         context.isHungry = (vampireStage >= settings->Animation.HungryThreshold);
         context.targetIsStanding = (targetState == AnimUtil::kStanding);
         context.isBehind = isBehind;
+        context.isLethal = isLethalFeedInProgress_;  // Pass user's lethal feed choice to animation selection
 
         const Feed::AnimationDefinition* anim = nullptr;
 
@@ -361,7 +367,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
             animName = anim->eventName;
         }
 
-        // Check if player held button for lethal feed
+        // Override with user's choice if they held button for lethal feed
         if (isLethalFeedInProgress_) {
             isLethal = true;
             SKSE::log::info("Lethal feed triggered by hold duration");
@@ -375,6 +381,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
 
         SKSE::log::info("Registry match: {} (Type: {}, Lethal: {})", animName, feedType, isLethal);
 
+        // Check if we found a valid OAR animation (not "Default")
+        bool hasOARAnimation = (anim != nullptr && animName != "Default");
 
         bool isPairedAnim = true;
         const char* idleEditorID = AnimUtil::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim);
@@ -382,7 +390,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
         AnimUtil::SetFeedGraphVars(player, feedType);
         AnimUtil::SetFeedGraphVars(feedTarget, feedType);
 
-        ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal);
+        ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
 
         // Reset lethal flag after use
         isLethalFeedInProgress_ = false;

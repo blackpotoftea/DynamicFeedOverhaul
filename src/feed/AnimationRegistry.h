@@ -26,6 +26,7 @@ namespace Feed {
         bool isHungry;      // Based on hunger stage
         bool isBehind;
         bool targetIsStanding; // true=Standing, false=Sleeping/Sitting
+        bool isLethal = false;  // User selected lethal feed option
         RE::Actor* player;
         RE::Actor* target;
     };
