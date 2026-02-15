@@ -236,8 +236,13 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
     if (CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim)) {
         PapyrusCall::SendOnVampireFeedEvent(target);
 
-        // Only call vampire script if NOT a werewolf
+        // Send custom DAO_VampireFeed event with attacker and target
         auto* player = RE::PlayerCharacter::GetSingleton();
+        if (player) {
+            PapyrusCall::SendDAO_VampireFeedEvent(player, target);
+        }
+
+        // Only call vampire script if NOT a werewolf
         if (player && !TargetState::IsWerewolf(player)) {
             auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
             if (vampireQuest) {
