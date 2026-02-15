@@ -644,6 +644,33 @@ namespace AnimUtil {
         return useBack;
     }
 
+    // Rotate player to face the target
+    void RotatePlayerToTarget(RE::Actor* target) {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player || !target) return;
+
+        auto playerPos = player->GetPosition();
+        auto targetPos = target->GetPosition();
+
+        float dx = targetPos.x - playerPos.x;
+        float dy = targetPos.y - playerPos.y;
+
+        // Calculate angle from player to target
+        float angleToTarget = std::atan2(dx, dy);
+
+        // Normalize angle to 0 to 2PI
+        while (angleToTarget < 0) angleToTarget += 2.0f * static_cast<float>(M_PI);
+        while (angleToTarget >= 2.0f * static_cast<float>(M_PI)) angleToTarget -= 2.0f * static_cast<float>(M_PI);
+
+        SKSE::log::debug("RotatePlayerToTarget: rotating player to face {} (angle={:.2f})",
+            target->GetName(), angleToTarget);
+
+        // SetAngle takes NiPoint3 with x, y, z angles - we only change z (heading)
+        RE::NiPoint3 angles = player->data.angle;
+        angles.z = angleToTarget;
+        player->SetAngle(angles);
+    }
+
     // Kill target actor (for lethal feeds)
     void KillTarget(RE::Actor* target) {
         if (!target) {

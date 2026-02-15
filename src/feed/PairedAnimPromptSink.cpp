@@ -333,6 +333,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
         // Only rotate standing targets (not sitting or sleeping)
         if (targetState == AnimUtil::kStanding) {
             isBehind = AnimUtil::RotateTargetToClosest(feedTarget);
+            // Also rotate player to face the target
+            AnimUtil::RotatePlayerToTarget(feedTarget);
         } else {
             // For sitting/sleeping, just detect direction without rotating
             isBehind = AnimUtil::GetClosestDirection(feedTarget);
