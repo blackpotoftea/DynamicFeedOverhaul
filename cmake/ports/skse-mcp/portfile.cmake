@@ -1,0 +1,13 @@
+# header-only library
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO Quantumyilmaz/SKSE-MCP
+    REF 5477196dde0d340410e0906577d946f8131d4b7e
+    SHA512 f6cafb1868b15247d2b7278290626c614bec8c907579b8b6060bbaf7b6c1a70afc06df87ae8d196798ffcbb718f88815234e72c5ba7f56cdce62d0d5a5c8cc48
+    HEAD_REF main
+)
+
+# Install codes
+set(SKSEMCP_SOURCE	${SOURCE_PATH}/include/SKSEMCP)
+file(INSTALL ${SKSEMCP_SOURCE} DESTINATION ${CURRENT_PACKAGES_DIR}/include)
+vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")

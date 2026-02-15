@@ -15,12 +15,22 @@ public:
     struct {
         bool EnableMod{ true };
         bool DebugLogging{ false };
+        bool EnableWerewolf{ false };     // Enable for Werewolf form
+        bool EnableVampireLord{ true };  // Enable for Vampire Lord form
         bool ForceVampire{ false };  // Debug: skip vampire check
         bool CheckHungerStage{ false };  // Only allow feeding based on hunger stage
         int MinHungerStage{ 1 };         // Minimum hunger stage required (1-4)
         int ForceFeedType{ 0 };          // Debug: force specific FeedType (0=auto)
-        bool SequentialPlay{ false }; // Debug: sequential animation test mode
+        bool DebugAnimationCycle{ false }; // Debug: cycle through all animations sequentially
+        float AnimationTimeout{ 15.0f }; // Timeout for animation events in seconds
+        float PeriodicCheckInterval{ 1.0f }; // Interval for periodic checks
     } General;
+
+    // Input settings
+    struct {
+        int FeedKey{ 0x22 };          // Keyboard G
+        int FeedGamepadKey{ 0x1000 }; // Gamepad A
+    } Input;
 
     // Non-combat feeding settings
     struct {
@@ -30,6 +40,14 @@ public:
         bool EnableHeightAdjust{ true };  // Adjust actor positions on stairs
         float MinHeightDiff{ 10.0f };     // Minimum height diff to trigger adjustment
         float MaxHeightDiff{ 150.0f };    // Max height diff (~3-4 stair steps)
+        bool UseTwoSingleAnimations{ true };  // Use two single-actor animations instead of paired
+        std::string PlayerStandingFrontAnim{ "VampireFeed_Player_StandingFront" };  // Two-single player animation
+        std::string TargetStandingFrontAnim{ "VampireFeed_Target_StandingFront" };  // Two-single target animation
+        float TargetOffsetX{ 0.0f };   // Target X offset from player (local coords)
+        float TargetOffsetY{ 100.0f }; // Target Y offset (positive = in front)
+        float TargetOffsetZ{ 0.0f };   // Target Z offset (height)
+        bool EnableLethalFeed{ false };      // Enable hold-to-kill feature for non-combat targets
+        float LethalHoldDuration{ 5.0f };    // Seconds to hold button for lethal feed
     } NonCombat;
 
     // Combat feeding settings
@@ -45,51 +63,32 @@ public:
         bool EnableLevelCheck{ false };
         int MaxLevelDifference{ 10 };           // Max levels above player
         bool ExcludeInScene{ true };            // Skip actors in scenes (dialogues, scripted events)
+        bool ExcludeOStimScenes{ true };        // Skip actors in OStim scenes (requires OStim NG)
         bool ExcludeDead{ true };               // Skip dead actors
         std::vector<std::string> IncludeKeywords;  // Only feed if has any of these keywords
         std::vector<std::string> ExcludeKeywords;  // Never feed if has any of these keywords
     } Filtering;
 
+    // Icon overlay settings
+    struct {
+        bool EnableIconOverlay{ true };          // Show icon above target's head during feed
+        int IconPosition{ 0 };                    // 0=AboveHead, 1=RightOfHead
+        float IconDuration{ 5.0f };              // How long to display icon (seconds)
+        float IconSize{ 64.0f };                 // Size of the icon
+        float IconHeightOffset{ 15.0f };         // Height offset above head (game units)
+        std::string IconPath{ "Data\\Interface\\ImGuiIcons\\Icons\\vampireFang.png" }; // Path to icon file
+    } IconOverlay;
+
     // Animation selection settings
-    // FeedType IDs grouped by: combat/non-combat, hungry/sated, front/back, gender
-    // Selection: position-based (front/back) > gender (female > unisex fallback)
-    // Non-combat animations have no prefix, combat animations have "Combat" prefix
     struct {
         bool EnableRandomSelection{ true };     // Enable random animation from available list
         int HungryThreshold{ 3 };               // Hunger stage >= this uses hungry animations (1-4)
-
-        // Sated front animations (non-combat)
-        std::vector<int> SatedFrontUnisex;
-        std::vector<int> SatedFrontFemale;
-
-        // Sated back animations (non-combat)
-        std::vector<int> SatedBackUnisex;
-        std::vector<int> SatedBackFemale;
-
-        // Hungry front animations (non-combat)
-        std::vector<int> HungryFrontUnisex;
-        std::vector<int> HungryFrontFemale;
-
-        // Hungry back animations (non-combat)
-        std::vector<int> HungryBackUnisex;
-        std::vector<int> HungryBackFemale;
-
-        // Combat sated front animations
-        std::vector<int> CombatSatedFrontUnisex;
-        std::vector<int> CombatSatedFrontFemale;
-
-        // Combat sated back animations
-        std::vector<int> CombatSatedBackUnisex;
-        std::vector<int> CombatSatedBackFemale;
-
-        // Combat hungry front animations
-        std::vector<int> CombatHungryFrontUnisex;
-        std::vector<int> CombatHungryFrontFemale;
-
-        // Combat hungry back animations
-        std::vector<int> CombatHungryBackUnisex;
-        std::vector<int> CombatHungryBackFemale;
     } Animation;
+
+    // Integration settings
+    struct {
+        bool EnableSacrosanct{ true };          // Enable Sacrosanct integration
+    } Integration;
 
     void LoadINI();
     void SaveINI();
@@ -103,5 +102,5 @@ private:
     Settings& operator=(const Settings&) = delete;
     Settings& operator=(Settings&&) = delete;
 
-    static constexpr const wchar_t* INI_PATH = L"Data/SKSE/Plugins/SkyPromptVampireFeed.ini";
+    static constexpr const wchar_t* INI_PATH = L"Data/SKSE/Plugins/DynamicFeedOverhaul.ini";
 };

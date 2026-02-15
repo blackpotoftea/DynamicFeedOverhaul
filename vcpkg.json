@@ -6,6 +6,7 @@
         "commonlibsse-ng-fork",
         "simpleini",
         "nlohmann-json",
-        "skyprompt-api"
+        "skyprompt-api",
+        "skse-mcp"
     ]
 }

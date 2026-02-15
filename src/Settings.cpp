@@ -78,11 +78,29 @@ void Settings::LoadINI() {
     // General
     General.EnableMod = ini.GetBoolValue("General", "EnableMod", General.EnableMod);
     General.DebugLogging = ini.GetBoolValue("General", "DebugLogging", General.DebugLogging);
+    General.EnableWerewolf = ini.GetBoolValue("General", "EnableWerewolf", General.EnableWerewolf);
+    General.EnableVampireLord = ini.GetBoolValue("General", "EnableVampireLord", General.EnableVampireLord);
+
+    // Update log level based on INI setting
+    if (General.DebugLogging) {
+        spdlog::set_level(spdlog::level::trace);
+        spdlog::flush_on(spdlog::level::trace);
+    } else {
+        spdlog::set_level(spdlog::level::info);
+        spdlog::flush_on(spdlog::level::info);
+    }
+
     General.ForceVampire = ini.GetBoolValue("General", "ForceVampire", General.ForceVampire);
     General.CheckHungerStage = ini.GetBoolValue("General", "CheckHungerStage", General.CheckHungerStage);
     General.MinHungerStage = static_cast<int>(ini.GetLongValue("General", "MinHungerStage", General.MinHungerStage));
     General.ForceFeedType = static_cast<int>(ini.GetLongValue("General", "ForceFeedType", General.ForceFeedType));
-    General.SequentialPlay = ini.GetBoolValue("General", "SequentialPlay", General.SequentialPlay);
+    General.DebugAnimationCycle = ini.GetBoolValue("General", "DebugAnimationCycle", General.DebugAnimationCycle);
+    General.AnimationTimeout = static_cast<float>(ini.GetDoubleValue("General", "AnimationTimeout", General.AnimationTimeout));
+    General.PeriodicCheckInterval = static_cast<float>(ini.GetDoubleValue("General", "PeriodicCheckInterval", General.PeriodicCheckInterval));
+
+    // Input
+    Input.FeedKey = static_cast<int>(ini.GetLongValue("Input", "FeedKey", Input.FeedKey));
+    Input.FeedGamepadKey = static_cast<int>(ini.GetLongValue("Input", "FeedGamepadKey", Input.FeedGamepadKey));
 
     // NonCombat
     NonCombat.AllowStanding = ini.GetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding);
@@ -91,6 +109,14 @@ void Settings::LoadINI() {
     NonCombat.EnableHeightAdjust = ini.GetBoolValue("NonCombat", "EnableHeightAdjust", NonCombat.EnableHeightAdjust);
     NonCombat.MinHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MinHeightDiff", NonCombat.MinHeightDiff));
     NonCombat.MaxHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MaxHeightDiff", NonCombat.MaxHeightDiff));
+    NonCombat.UseTwoSingleAnimations = ini.GetBoolValue("NonCombat", "UseTwoSingleAnimations", NonCombat.UseTwoSingleAnimations);
+    NonCombat.PlayerStandingFrontAnim = ini.GetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str());
+    NonCombat.TargetStandingFrontAnim = ini.GetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str());
+    NonCombat.TargetOffsetX = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX));
+    NonCombat.TargetOffsetY = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY));
+    NonCombat.TargetOffsetZ = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetZ", NonCombat.TargetOffsetZ));
+    NonCombat.EnableLethalFeed = ini.GetBoolValue("NonCombat", "EnableLethalFeed", NonCombat.EnableLethalFeed);
+    NonCombat.LethalHoldDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "LethalHoldDuration", NonCombat.LethalHoldDuration));
 
     // Combat
     Combat.Enabled = ini.GetBoolValue("Combat", "Enabled", Combat.Enabled);
@@ -102,60 +128,48 @@ void Settings::LoadINI() {
     Filtering.EnableLevelCheck = ini.GetBoolValue("Filtering", "EnableLevelCheck", Filtering.EnableLevelCheck);
     Filtering.MaxLevelDifference = static_cast<int>(ini.GetLongValue("Filtering", "MaxLevelDifference", Filtering.MaxLevelDifference));
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
+    Filtering.ExcludeOStimScenes = ini.GetBoolValue("Filtering", "ExcludeOStimScenes", Filtering.ExcludeOStimScenes);
     Filtering.ExcludeDead = ini.GetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead);
     Filtering.IncludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "IncludeKeywords", ""));
     Filtering.ExcludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "ExcludeKeywords", ""));
+
+    // IconOverlay
+    IconOverlay.EnableIconOverlay = ini.GetBoolValue("IconOverlay", "EnableIconOverlay", IconOverlay.EnableIconOverlay);
+    IconOverlay.IconPosition = static_cast<int>(ini.GetLongValue("IconOverlay", "IconPosition", IconOverlay.IconPosition));
+    IconOverlay.IconDuration = static_cast<float>(ini.GetDoubleValue("IconOverlay", "IconDuration", IconOverlay.IconDuration));
+    IconOverlay.IconSize = static_cast<float>(ini.GetDoubleValue("IconOverlay", "IconSize", IconOverlay.IconSize));
+    IconOverlay.IconHeightOffset = static_cast<float>(ini.GetDoubleValue("IconOverlay", "IconHeightOffset", IconOverlay.IconHeightOffset));
+    IconOverlay.IconPath = ini.GetValue("IconOverlay", "IconPath", IconOverlay.IconPath.c_str());
 
     // Animation
     Animation.EnableRandomSelection = ini.GetBoolValue("Animation", "EnableRandomSelection", Animation.EnableRandomSelection);
     Animation.HungryThreshold = static_cast<int>(ini.GetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold));
 
-    // Sated front (non-combat)
-    Animation.SatedFrontUnisex = ParseIntList(ini.GetValue("Animation", "SatedFrontUnisex", ""));
-    Animation.SatedFrontFemale = ParseIntList(ini.GetValue("Animation", "SatedFrontFemale", ""));
-
-    // Sated back (non-combat)
-    Animation.SatedBackUnisex = ParseIntList(ini.GetValue("Animation", "SatedBackUnisex", ""));
-    Animation.SatedBackFemale = ParseIntList(ini.GetValue("Animation", "SatedBackFemale", ""));
-
-    // Hungry front (non-combat)
-    Animation.HungryFrontUnisex = ParseIntList(ini.GetValue("Animation", "HungryFrontUnisex", ""));
-    Animation.HungryFrontFemale = ParseIntList(ini.GetValue("Animation", "HungryFrontFemale", ""));
-
-    // Hungry back (non-combat)
-    Animation.HungryBackUnisex = ParseIntList(ini.GetValue("Animation", "HungryBackUnisex", ""));
-    Animation.HungryBackFemale = ParseIntList(ini.GetValue("Animation", "HungryBackFemale", ""));
-
-    // Combat sated front
-    Animation.CombatSatedFrontUnisex = ParseIntList(ini.GetValue("Animation", "CombatSatedFrontUnisex", ""));
-    Animation.CombatSatedFrontFemale = ParseIntList(ini.GetValue("Animation", "CombatSatedFrontFemale", ""));
-
-    // Combat sated back
-    Animation.CombatSatedBackUnisex = ParseIntList(ini.GetValue("Animation", "CombatSatedBackUnisex", ""));
-    Animation.CombatSatedBackFemale = ParseIntList(ini.GetValue("Animation", "CombatSatedBackFemale", ""));
-
-    // Combat hungry front
-    Animation.CombatHungryFrontUnisex = ParseIntList(ini.GetValue("Animation", "CombatHungryFrontUnisex", ""));
-    Animation.CombatHungryFrontFemale = ParseIntList(ini.GetValue("Animation", "CombatHungryFrontFemale", ""));
-
-    // Combat hungry back
-    Animation.CombatHungryBackUnisex = ParseIntList(ini.GetValue("Animation", "CombatHungryBackUnisex", ""));
-    Animation.CombatHungryBackFemale = ParseIntList(ini.GetValue("Animation", "CombatHungryBackFemale", ""));
+    // Integration
+    Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
 
     SKSE::log::info("Settings loaded:");
-    SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, SequentialPlay={}",
-        General.EnableMod, General.DebugLogging, General.ForceVampire,
-        General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.SequentialPlay);
-    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={})",
+    SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}",
+        General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
+        General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval);
+    SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}", Input.FeedKey, Input.FeedGamepadKey);
+    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
-        NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff);
+        NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
+        NonCombat.UseTwoSingleAnimations, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration);
+    if (NonCombat.UseTwoSingleAnimations) {
+        SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
+            NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
+    }
     SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold);
-    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeDead={}, IncludeKW=[{}], ExcludeKW=[{}]",
-        Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeDead,
+    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, IncludeKW=[{}], ExcludeKW=[{}]",
+        Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold);
+    SKSE::log::info("  [Integration] EnableSacrosanct={}",
+        Integration.EnableSacrosanct);
 }
 
 void Settings::SaveINI() {
@@ -167,6 +181,10 @@ void Settings::SaveINI() {
         "; Enable or disable the entire mod");
     ini.SetBoolValue("General", "DebugLogging", General.DebugLogging,
         "; Enable detailed debug logging");
+    ini.SetBoolValue("General", "EnableWerewolf", General.EnableWerewolf,
+        "; Enable for Werewolf form (EXPERIMENTAL: May be buggy and needs more work)");
+    ini.SetBoolValue("General", "EnableVampireLord", General.EnableVampireLord,
+        "; Enable for Vampire Lord form");
     ini.SetBoolValue("General", "ForceVampire", General.ForceVampire,
         "; Debug: skip vampire check, always allow feeding");
     ini.SetBoolValue("General", "CheckHungerStage", General.CheckHungerStage,
@@ -175,8 +193,18 @@ void Settings::SaveINI() {
         "; Minimum hunger stage required to feed (1-4, where 4 is most hungry)");
     ini.SetLongValue("General", "ForceFeedType", General.ForceFeedType,
         "; Debug: force specific FeedType (0=auto, 11-14=standing, 21-24=sleeping, 31-34=sitting, 41-44=combat)");
-    ini.SetBoolValue("General", "SequentialPlay", General.SequentialPlay,
-        "; Debug: sequential animation test mode - plays all unisex animations for detected direction");
+    ini.SetBoolValue("General", "DebugAnimationCycle", General.DebugAnimationCycle,
+        "; Debug: cycle through all animations sequentially");
+    ini.SetDoubleValue("General", "AnimationTimeout", General.AnimationTimeout,
+        "; Timeout for animation events in seconds (default 15.0)");
+    ini.SetDoubleValue("General", "PeriodicCheckInterval", General.PeriodicCheckInterval,
+        "; Interval in seconds for periodic validity checks (default 1.0)");
+
+    // Input
+    ini.SetLongValue("Input", "FeedKey", Input.FeedKey,
+        "; Keyboard key code for feed prompt (default 0x22 = G)");
+    ini.SetLongValue("Input", "FeedGamepadKey", Input.FeedGamepadKey,
+        "; Gamepad key code for feed prompt (default 0x1000 = A)");
 
     // NonCombat
     ini.SetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding,
@@ -191,6 +219,22 @@ void Settings::SaveINI() {
         "; Minimum height difference to trigger adjustment (units)");
     ini.SetDoubleValue("NonCombat", "MaxHeightDiff", NonCombat.MaxHeightDiff,
         "; Maximum height difference for adjustment (~3-4 stair steps)");
+    ini.SetBoolValue("NonCombat", "UseTwoSingleAnimations", NonCombat.UseTwoSingleAnimations,
+        "; Use two single-actor animations instead of paired animations (requires custom animations)");
+    ini.SetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str(),
+        "; Animation event name for player in two-single standing front feed");
+    ini.SetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str(),
+        "; Animation event name for target in two-single standing front feed");
+    ini.SetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX,
+        "; Target X offset from player in local coordinates (0=centered)");
+    ini.SetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY,
+        "; Target Y offset (positive=in front of player, 100=~1 meter)");
+    ini.SetDoubleValue("NonCombat", "TargetOffsetZ", NonCombat.TargetOffsetZ,
+        "; Target Z offset (height adjustment)");
+    ini.SetBoolValue("NonCombat", "EnableLethalFeed", NonCombat.EnableLethalFeed,
+        "; Enable hold-to-kill feature: Hold button for LethalHoldDuration to kill non-combat targets");
+    ini.SetDoubleValue("NonCombat", "LethalHoldDuration", NonCombat.LethalHoldDuration,
+        "; Seconds to hold button for lethal feed (default 5.0)");
 
     // Combat
     ini.SetBoolValue("Combat", "Enabled", Combat.Enabled,
@@ -209,6 +253,8 @@ void Settings::SaveINI() {
         "; Max levels target can be above player (ignored if EnableLevelCheck=false)");
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,
         "; Exclude targets currently in a scene (dialogues, scripted events)");
+    ini.SetBoolValue("Filtering", "ExcludeOStimScenes", Filtering.ExcludeOStimScenes,
+        "; Exclude targets in OStim NG scenes (auto-detects OStim, gracefully disabled if not installed)");
     ini.SetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead,
         "; Exclude dead actors from feeding");
     ini.SetValue("Filtering", "IncludeKeywords", JoinKeywordList(Filtering.IncludeKeywords).c_str(),
@@ -216,59 +262,29 @@ void Settings::SaveINI() {
     ini.SetValue("Filtering", "ExcludeKeywords", JoinKeywordList(Filtering.ExcludeKeywords).c_str(),
         "; Never allow feeding if target has ANY of these keywords (comma-separated)");
 
+    // IconOverlay
+    ini.SetBoolValue("IconOverlay", "EnableIconOverlay", IconOverlay.EnableIconOverlay,
+        "; Show vampire fang icon above target's head during feeding");
+    ini.SetLongValue("IconOverlay", "IconPosition", IconOverlay.IconPosition,
+        "; Icon position: 0=AboveHead, 1=RightOfHead");
+    ini.SetDoubleValue("IconOverlay", "IconDuration", IconOverlay.IconDuration,
+        "; How long to display icon in seconds");
+    ini.SetDoubleValue("IconOverlay", "IconSize", IconOverlay.IconSize,
+        "; Size of the icon in pixels");
+    ini.SetDoubleValue("IconOverlay", "IconHeightOffset", IconOverlay.IconHeightOffset,
+        "; Height offset above the target's head in game units (default 15.0)");
+    ini.SetValue("IconOverlay", "IconPath", IconOverlay.IconPath.c_str(),
+        "; Path to the icon image file (PNG, JPG, etc.)");
+
     // Animation
     ini.SetBoolValue("Animation", "EnableRandomSelection", Animation.EnableRandomSelection,
         "; Enable random animation selection from available FeedType lists");
     ini.SetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold,
         "; Hunger stage >= this uses hungry animations (1=sated, 2=peckish, 3=hungry, 4=starving)");
 
-    // Sated front (non-combat)
-    ini.SetValue("Animation", "SatedFrontUnisex", JoinIntList(Animation.SatedFrontUnisex).c_str(),
-        "; FeedType IDs for sated front animations (unisex)");
-    ini.SetValue("Animation", "SatedFrontFemale", JoinIntList(Animation.SatedFrontFemale).c_str(),
-        "; FeedType IDs for sated front animations (female player)");
-
-    // Sated back (non-combat)
-    ini.SetValue("Animation", "SatedBackUnisex", JoinIntList(Animation.SatedBackUnisex).c_str(),
-        "; FeedType IDs for sated back animations (unisex)");
-    ini.SetValue("Animation", "SatedBackFemale", JoinIntList(Animation.SatedBackFemale).c_str(),
-        "; FeedType IDs for sated back animations (female player)");
-
-    // Hungry front (non-combat)
-    ini.SetValue("Animation", "HungryFrontUnisex", JoinIntList(Animation.HungryFrontUnisex).c_str(),
-        "; FeedType IDs for hungry front animations (unisex)");
-    ini.SetValue("Animation", "HungryFrontFemale", JoinIntList(Animation.HungryFrontFemale).c_str(),
-        "; FeedType IDs for hungry front animations (female player)");
-
-    // Hungry back (non-combat)
-    ini.SetValue("Animation", "HungryBackUnisex", JoinIntList(Animation.HungryBackUnisex).c_str(),
-        "; FeedType IDs for hungry back animations (unisex)");
-    ini.SetValue("Animation", "HungryBackFemale", JoinIntList(Animation.HungryBackFemale).c_str(),
-        "; FeedType IDs for hungry back animations (female player)");
-
-    // Combat sated front
-    ini.SetValue("Animation", "CombatSatedFrontUnisex", JoinIntList(Animation.CombatSatedFrontUnisex).c_str(),
-        "; FeedType IDs for combat sated front animations (unisex)");
-    ini.SetValue("Animation", "CombatSatedFrontFemale", JoinIntList(Animation.CombatSatedFrontFemale).c_str(),
-        "; FeedType IDs for combat sated front animations (female player)");
-
-    // Combat sated back
-    ini.SetValue("Animation", "CombatSatedBackUnisex", JoinIntList(Animation.CombatSatedBackUnisex).c_str(),
-        "; FeedType IDs for combat sated back animations (unisex)");
-    ini.SetValue("Animation", "CombatSatedBackFemale", JoinIntList(Animation.CombatSatedBackFemale).c_str(),
-        "; FeedType IDs for combat sated back animations (female player)");
-
-    // Combat hungry front
-    ini.SetValue("Animation", "CombatHungryFrontUnisex", JoinIntList(Animation.CombatHungryFrontUnisex).c_str(),
-        "; FeedType IDs for combat hungry front animations (unisex)");
-    ini.SetValue("Animation", "CombatHungryFrontFemale", JoinIntList(Animation.CombatHungryFrontFemale).c_str(),
-        "; FeedType IDs for combat hungry front animations (female player)");
-
-    // Combat hungry back
-    ini.SetValue("Animation", "CombatHungryBackUnisex", JoinIntList(Animation.CombatHungryBackUnisex).c_str(),
-        "; FeedType IDs for combat hungry back animations (unisex)");
-    ini.SetValue("Animation", "CombatHungryBackFemale", JoinIntList(Animation.CombatHungryBackFemale).c_str(),
-        "; FeedType IDs for combat hungry back animations (female player)");
+    // Integration
+    ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,
+        "; Enable Sacrosanct vampire overhaul integration (auto-detects mod)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

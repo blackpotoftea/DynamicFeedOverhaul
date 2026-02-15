@@ -21,6 +21,7 @@
                 "VCPKG_TARGET_TRIPLET": "x64-windows-skse",
                 "VCPKG_HOST_TRIPLET": "x64-windows-skse",
                 "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake",
+                "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports",
                 "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
             }
         },
@@ -105,6 +106,30 @@
                     "value": "Release"
                 }
             }
+        },
+        {
+            "name": "build-relwithdebinfo-msvc",
+            "inherits": [
+                "base",
+                "vcpkg",
+                "win32-unicode",
+                "x64",
+                "msvc"
+            ],
+            "displayName": "RelWithDebInfo",
+            "description": "Optimized build with debug symbols (PDB).",
+            "generator": "Visual Studio 17 2022",
+            "binaryDir": "${sourceDir}/build/relwithdebinfo-msvc",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": {
+                    "type": "STRING",
+                    "value": "RelWithDebInfo"
+                },
+                "CMAKE_MSVC_RUNTIME_LIBRARY": {
+                    "type": "STRING",
+                    "value": "MultiThreadedDLL"
+                }
+            }
         }
     ],
     "buildPresets": [
@@ -113,6 +138,12 @@
             "displayName": "Release (MSVC)",
             "configurePreset": "build-release-msvc",
             "description": "Optimized release build."
+        },
+        {
+            "name": "relwithdebinfo-msvc",
+            "displayName": "RelWithDebInfo (MSVC)",
+            "configurePreset": "build-relwithdebinfo-msvc",
+            "description": "Optimized build with PDB debug symbols."
         },
         {
             "name": "debug-msvc",

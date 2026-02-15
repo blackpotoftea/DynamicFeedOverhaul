@@ -1,31 +1,10 @@
 #pragma once
 #include "Settings.h"
-#include "TargetState.h"
+#include "feed/TargetState.h"
+#include "utils/FormUtils.h"
 
 // Feed target filtering/exclusion logic
 namespace FeedFiltering {
-
-    // Check if actor has a keyword by editor ID
-    inline bool HasKeyword(RE::Actor* actor, const std::string& keywordEditorID) {
-        if (!actor) return false;
-
-        auto* dataHandler = RE::TESDataHandler::GetSingleton();
-        if (!dataHandler) return false;
-
-        auto* keyword = dataHandler->LookupForm<RE::BGSKeyword>(RE::FormID(0), keywordEditorID);
-        if (!keyword) {
-            // Try to find by iterating keywords (slower but works for all keywords)
-            for (const auto& kw : dataHandler->GetFormArray<RE::BGSKeyword>()) {
-                if (kw && kw->GetFormEditorID() == keywordEditorID) {
-                    keyword = kw;
-                    break;
-                }
-            }
-        }
-
-        if (!keyword) return false;
-        return actor->HasKeyword(keyword);
-    }
 
     // Check level and keyword filters (applies to both combat and non-combat)
     inline bool IsExcludedByFilters(RE::Actor* actor) {
@@ -65,7 +44,7 @@ namespace FeedFiltering {
 
         // Exclude keywords check (if has any excluded keyword, exclude)
         for (const auto& kw : settings->Filtering.ExcludeKeywords) {
-            if (HasKeyword(actor, kw)) {
+            if (FormUtils::HasKeywordByEditorID(actor, kw)) {
                 SKSE::log::debug("Excluded: {} - has excluded keyword '{}'", actor->GetName(), kw);
                 return true;
             }
@@ -75,7 +54,7 @@ namespace FeedFiltering {
         if (!settings->Filtering.IncludeKeywords.empty()) {
             bool hasIncludedKeyword = false;
             for (const auto& kw : settings->Filtering.IncludeKeywords) {
-                if (HasKeyword(actor, kw)) {
+                if (FormUtils::HasKeywordByEditorID(actor, kw)) {
                     hasIncludedKeyword = true;
                     break;
                 }

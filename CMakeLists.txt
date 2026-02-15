@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Set your project name. This will be the name of your SKSE .dll file.
-project(SkyPromptVampireFeed VERSION 0.0.1 LANGUAGES CXX)
+project(DynamicFeedOverhaul VERSION 0.0.1 LANGUAGES CXX)
 
 #
 
@@ -35,6 +35,7 @@ endif()
 
 # Setup your SKSE plugin as an SKSE plugin!
 find_package(CommonLibSSE CONFIG REQUIRED)
+find_package(directxmath CONFIG REQUIRED)
 find_package(directxtk CONFIG REQUIRED)
 find_path(SkyPromptAPI_INCLUDE_DIRS "SkyPrompt/API.hpp")
 include(cmake/headerlist.cmake)
@@ -42,6 +43,7 @@ include(cmake/sourcelist.cmake)
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES ${headers} ${sources}) # <--- specifies plugin.cpp
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
+target_compile_definitions(${PROJECT_NAME} PRIVATE UNICODE _UNICODE NOMINMAX) # <--- fix Windows API issues
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/PCH.h) # <--- PCH.h is required!
 
 target_include_directories(
@@ -49,6 +51,7 @@ target_include_directories(
 	PRIVATE
 		${SIMPLEINI_INCLUDE_DIRS}
 		${SkyPromptAPI_INCLUDE_DIRS}
+		"src"
 )
 # When your SKSE .dll is compiled, this will automatically copy the .dll into your mods folder.
 # Only works if you configure DEPLOY_ROOT above (or set the SKYRIM_MODS_FOLDER environment variable)

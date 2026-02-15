@@ -1,21 +1,49 @@
-#include "log.h"
-#include "hook.h"
+#include "utils/log.h"
+#include "hooks/hook.h"
 #include "Settings.h"
-#include "VampireFeedSink.h"
+#include "feed/PairedAnimPromptSink.h"
 #include "SkyPrompt/API.hpp"
+#include "SKSEMCP/SKSEMenuFramework.hpp"
+#include "feed/FeedIconOverlay.h"
+#include "integration/OStimIntegration.h"
+#include "feed/AnimationRegistry.h"
+#include "utils/FormUtils.h"
 
-SkyPromptAPI::ClientID g_clientID = 0;
+std::atomic<SkyPromptAPI::ClientID> g_clientID{0};
 
 void OnDataLoaded()
 {
-    g_clientID = SkyPromptAPI::RequestClientID();
-    if (g_clientID == 0) {
-        SKSE::log::error("Failed to obtain SkyPrompt ClientID");
+    g_clientID.store(SkyPromptAPI::RequestClientID(), std::memory_order_release);
+    if (g_clientID.load(std::memory_order_acquire) == 0) {
+        SKSE::log::error("Failed to obtain SkyPrompt ClientID - SkyPrompt mod is not installed. Initialization aborted");
         return;
     }
-    SKSE::log::info("Obtained SkyPrompt ClientID: {}", g_clientID);
+
+    SKSE::log::info("Obtained SkyPrompt ClientID: {}", g_clientID.load(std::memory_order_acquire));
+
+
+    FormUtils::InitializeCache();
+    Feed::AnimationRegistry::GetSingleton()->LoadAnimations("Data/SKSE/Plugins");
+
+    if (OStimIntegration::Initialize()) {
+        SKSE::log::info("OStim NG integration initialized successfully");
+    } else {
+        SKSE::log::info("OStim NG not detected - scene exclusion will be skipped");
+    }
+
+    if (SKSEMenuFramework::IsInstalled()) {
+        SKSE::log::info("SKSEMenuFramework detected, registering icon overlay as HUD element");
+
+        SKSEMenuFramework::AddHudElement([]() {
+            FeedIconOverlay::GetSingleton()->RenderOverlay();
+        });
+        SKSE::log::info("Successfully registered icon overlay HUD element with SKSEMenuFramework");
+    } else {
+        SKSE::log::error("SKSEMenuFramework not found - icon overlay will not render");
+    }
 
     Hooks::Install();
+    SKSE::log::info("Mod initialization complete");
 }
 
 void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
@@ -41,7 +69,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
 	SetupLog();
 
-    SKSE::log::info("SkyPromptVampireFeed loaded");
+    SKSE::log::info("Dynamic Feed Overhaul loaded");
 
     // Load settings from INI
     Settings::GetSingleton()->LoadINI();

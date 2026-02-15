@@ -1,10 +1,14 @@
 set(headers ${headers}
 	src/PCH.h
-    src/log.h
-    src/util.h
-    src/hook.h
     src/Settings.h
-    src/TargetState.h
-    src/VampireFeedSink.h
-    src/PapyrusCall.h
+    src/utils/log.h
+    src/utils/AnimUtil.h
+    src/hooks/hook.h
+    src/feed/TargetState.h
+    src/feed/PairedAnimPromptSink.h
+    src/feed/FeedIconOverlay.h
+    src/papyrus/PapyrusCall.h
+    src/integration/OStimIntegration.h
+    src/utils/MenuCheck.h
+    src/feed/AnimationRegistry.h
 )

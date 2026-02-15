@@ -1,5 +1,10 @@
 #pragma once
 
+#include "../feed/TargetState.h"
+
+// Forward declaration to avoid including Settings.h
+class Settings;
+
 namespace PapyrusCall {
 
     // Callback for when the Papyrus call completes
@@ -75,7 +80,12 @@ namespace PapyrusCall {
             callback
         );
 
-        SKSE::log::info("CallVampireFeedNoArgs returned: {}", result);
+        // DispatchMethodCall takes ownership only on success; delete on failure
+        if (!result) {
+            delete args;
+        }
+
+        SKSE::log::debug("CallVampireFeedNoArgs returned: {}", result);
         return result;
     }
 
@@ -102,25 +112,107 @@ namespace PapyrusCall {
             callback
         );
 
-        SKSE::log::info("CallVampireFeedWithActor({}) returned: {}", target->GetName(), result);
+        // DispatchMethodCall takes ownership only on success; delete on failure
+        if (!result) {
+            delete args;
+        }
+
+        SKSE::log::debug("CallVampireFeedWithActor({}) returned: {}", target->GetName(), result);
+        return result;
+    }
+
+    // Get the Sacrosanct FeedManager quest by editor ID
+    inline RE::TESQuest* GetSacrosanctFeedManagerQuest() {
+        return RE::TESForm::LookupByEditorID<RE::TESQuest>("SCS_FeedManager_Quest");
+    }
+
+    // Call Sacrosanct ProcessFeed function with full parameters
+    // Function signature: ProcessFeed(Actor akTarget, Bool akIsLethal, Bool akIsSleeping,
+    //                                 Bool akIsSneakFeed, Bool akIsParalyzed, Bool akIsCombatFeed, Bool akIsEmbrace)
+    inline bool CallSacrosanctProcessFeed(RE::TESQuest* quest, RE::Actor* target,
+                                         bool isLethal = false, bool isSleeping = false,
+                                         bool isSneakFeed = false, bool isParalyzed = false,
+                                         bool isCombatFeed = false, bool isEmbrace = false) {
+        if (!quest || !target) return false;
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) return false;
+
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(
+            RE::TESQuest::FORMTYPE, quest);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
+
+        // Create arguments: Actor + 7 booleans
+        // Note: Must move all arguments to avoid reference types
+        auto* args = RE::MakeFunctionArguments(
+            std::move(target),
+            std::move(isLethal),
+            std::move(isSleeping),
+            std::move(isSneakFeed),
+            std::move(isParalyzed),
+            std::move(isCombatFeed),
+            std::move(isEmbrace)
+        );
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
+
+        bool result = vm->DispatchMethodCall(
+            handle,
+            "SCS_FeedManager_Quest",
+            "ProcessFeed",
+            args,
+            callback
+        );
+
+        // DispatchMethodCall takes ownership only on success; delete on failure
+        if (!result) {
+            delete args;
+        }
+
+        SKSE::log::debug("CallSacrosanctProcessFeed({}) returned: {}", target->GetName(), result);
         return result;
     }
 
     // Main function: detects signature and calls appropriately
-    inline bool CallVampireFeed(RE::TESQuest* quest, RE::Actor* target) {
+    inline bool CallVampireFeed(RE::TESQuest* quest, RE::Actor* target, bool isLethal = false) {
+        // Check if Sacrosanct is enabled and quest present
+        auto* settings = Settings::GetSingleton();
+        bool enableSacrosanct = settings && settings->Integration.EnableSacrosanct;
+        auto* sacrosanctQuest = GetSacrosanctFeedManagerQuest();
+        bool hasSacrosanct = enableSacrosanct && sacrosanctQuest != nullptr;
+
+        if (enableSacrosanct && sacrosanctQuest) {
+            SKSE::log::info("Sacrosanct quest detected - using Sacrosanct integration");
+        }
+
+        // Call vanilla/Better Vampires path first
+        bool success = false;
         int signature = GetVampireFeedSignature(quest);
 
         switch (signature) {
             case 1:
-                SKSE::log::info("Using vanilla VampireFeed() - no args");
-                return CallVampireFeedNoArgs(quest);
+                SKSE::log::debug("Using vanilla VampireFeed() - no args");
+                success = CallVampireFeedNoArgs(quest);
+                break;
             case 2:
-                SKSE::log::info("Using modded VampireFeed(Actor) - with target");
-                return CallVampireFeedWithActor(quest, target);
+                SKSE::log::debug("Using modded VampireFeed(Actor) - with target");
+                success = CallVampireFeedWithActor(quest, target);
+                break;
             default:
                 SKSE::log::error("VampireFeed function not found on quest");
-                return false;
+                break;
         }
+
+        // Then call Sacrosanct if detected
+        if (hasSacrosanct) {
+            bool isCombatFeed = target->IsInCombat();
+            bool isSleeping = TargetState::IsSleeping(target);
+
+            SKSE::log::debug("Calling Sacrosanct ProcessFeed (combat={}, sleeping={}, lethal={})", isCombatFeed, isSleeping, isLethal);
+            bool sacrosanctResult = CallSacrosanctProcessFeed(sacrosanctQuest, target, isLethal, isSleeping, false, false, isCombatFeed, false);
+            success = success || sacrosanctResult;
+        }
+
+        return success;
     }
 
     // Get the PlayerVampireQuest by editor ID
@@ -172,11 +264,12 @@ namespace PapyrusCall {
         }
 
         // Send the event with target as the argument
+        // Note: SendEvent always takes ownership of args (unlike DispatchMethodCall)
         auto* args = RE::MakeFunctionArguments(std::move(target));
 
         vm->SendEvent(handle, "OnVampireFeed", args);
 
-        SKSE::log::info("SendOnVampireFeedEvent: sent to {} (FormID: {:X})",
+        SKSE::log::debug("SendOnVampireFeedEvent: sent to {} (FormID: {:X})",
             target->GetName(), target->GetFormID());
         return true;
     }

@@ -1,0 +1,720 @@
+#include "PCH.h"
+#include "feed/PairedAnimPromptSink.h"
+#include "Settings.h"
+#include "feed/TargetState.h"
+#include "papyrus/PapyrusCall.h"
+#include "feed/CustomFeed.h"
+#include "feed/FeedFiltering.h"
+#include "feed/TwoSingleFeed.h"
+#include "feed/FeedIconOverlay.h"
+#include "integration/OStimIntegration.h"
+#include "utils/MenuCheck.h"
+#include "feed/AnimationRegistry.h"
+#include "utils/AnimUtil.h"
+#include <thread>
+
+extern std::atomic<SkyPromptAPI::ClientID> g_clientID;
+
+namespace FeedAnimState {
+    // Single atomic state enum prevents race conditions between coupled states
+    enum class State {
+        Idle,     // No feed active
+        Active,   // Feed in progress
+        Ended     // Feed just ended (needs acknowledgment)
+    };
+
+    std::atomic<State> feedState{State::Idle};
+
+    void MarkFeedStarted() {
+        feedState.store(State::Active, std::memory_order_release);
+        SKSE::log::debug("Feed animation started - skipping paired animation exclusion");
+    }
+
+    void MarkFeedEnded() {
+        feedState.store(State::Ended, std::memory_order_release);
+        SKSE::log::info("Feed animation ended");
+        CustomFeed::OnComplete();
+        // disable as require more refactor
+        //TwoSingleFeed::OnComplete();
+        PairedAnimPromptSink::GetSingleton()->RefreshPrompt();
+    }
+
+    bool CheckAndClearFeedEnded() {
+        // Atomically check if ended and transition to idle
+        State expected = State::Ended;
+        bool wasEnded = feedState.compare_exchange_strong(
+            expected, State::Idle,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire
+        );
+        return wasEnded;
+    }
+
+    bool IsFeedActive() {
+        return feedState.load(std::memory_order_acquire) == State::Active;
+    }
+}
+
+// AnimEventSink Implementation
+std::chrono::steady_clock::time_point AnimEventSink::registeredTime_{};
+std::mutex AnimEventSink::mutex_;
+
+AnimEventSink* AnimEventSink::GetSingleton() {
+    static AnimEventSink singleton;
+    return &singleton;
+}
+
+RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
+    const RE::BSAnimationGraphEvent* event,
+    [[maybe_unused]] RE::BSTEventSource<RE::BSAnimationGraphEvent>* source)
+{
+    if (!event || !event->tag.data()) {
+        return RE::BSEventNotifyControl::kContinue;
+    }
+
+    const auto& tag = event->tag;
+
+    if (tag == "PairEnd" || tag == "IdleStop") {
+        SKSE::log::info("{} detected - marking feed ended", tag.c_str());
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            registeredTime_ = std::chrono::steady_clock::time_point{};
+        }
+
+        // Move to main thread to avoid race conditions on feedTargetHandle_
+        SKSE::GetTaskInterface()->AddTask([]() {
+            FeedAnimState::MarkFeedEnded();
+            AnimEventSink::Unregister();
+            SKSE::log::debug("Animation event sink unregistered (deferred)");
+        });
+    } else {
+         // SKSE::log::debug("[AnimEvent] {}", tag.c_str());
+    }
+
+    return RE::BSEventNotifyControl::kContinue;
+}
+
+void AnimEventSink::Register() {
+    auto player = RE::PlayerCharacter::GetSingleton();
+    if (player) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        // Remove first to prevent double registration
+        player->RemoveAnimationGraphEventSink(GetSingleton());
+        player->AddAnimationGraphEventSink(GetSingleton());
+        registeredTime_ = std::chrono::steady_clock::now();
+        SKSE::log::info("Animation event sink registered");
+    }
+}
+
+void AnimEventSink::Unregister() {
+    auto player = RE::PlayerCharacter::GetSingleton();
+    if (player) {
+        // Safe to call even if not registered (idempotent)
+        player->RemoveAnimationGraphEventSink(GetSingleton());
+        SKSE::log::debug("Animation event sink unregistered");
+    }
+}
+
+void AnimEventSink::CheckTimeout() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (registeredTime_.time_since_epoch().count() == 0) return;
+
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - registeredTime_).count();
+    
+    float timeout = Settings::GetSingleton()->General.AnimationTimeout;
+
+    if (elapsed >= timeout) {
+        SKSE::log::warn("Animation event timeout ({:.1f}s) - forcing prompt refresh", timeout);
+        registeredTime_ = std::chrono::steady_clock::time_point{}; // Reset
+        lock.unlock(); // Release lock before calling external functions that might call back or take time
+
+        // Move to main thread to avoid race conditions on feedTargetHandle_
+        SKSE::GetTaskInterface()->AddTask([]() {
+            FeedAnimState::MarkFeedEnded();
+            AnimEventSink::Unregister();
+        });
+    }
+}
+
+// PairedAnimPromptSink Implementation
+
+PairedAnimPromptSink* PairedAnimPromptSink::GetSingleton() {
+    static PairedAnimPromptSink singleton;
+    return &singleton;
+}
+
+PairedAnimPromptSink::PairedAnimPromptSink() {
+    UpdateFeedButtons();
+}
+
+void PairedAnimPromptSink::UpdateFeedButtons() {
+    auto* settings = Settings::GetSingleton();
+
+    // Update button bindings only - prompt is constructed dynamically in SetTarget()
+    feedButtons_ = {{
+        {RE::INPUT_DEVICE::kKeyboard, static_cast<SkyPromptAPI::ButtonID>(settings->Input.FeedKey)},
+        {RE::INPUT_DEVICE::kGamepad, static_cast<SkyPromptAPI::ButtonID>(settings->Input.FeedGamepadKey)}
+    }};
+
+    // If there's an active target, refresh the prompt with new buttons
+    auto currentTargetPtr = GetTarget();
+    if (currentTargetPtr) {
+        SKSE::log::debug("UpdateFeedButtons: Refreshing prompt for current target");
+        ShowPrompt(currentTargetPtr.get());
+    }
+}
+
+std::span<const SkyPromptAPI::Prompt> PairedAnimPromptSink::GetPrompts() const {
+    return prompts_;
+}
+
+void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
+    SKSE::log::info("ProcessEvent - eventType: {}, promptType: {}, text: '{}'",
+        static_cast<int>(event.type),
+        static_cast<int>(event.prompt.type),
+        event.prompt.text);
+
+    switch (event.type) {
+    case SkyPromptAPI::PromptEventType::kDown:
+        // Button pressed - just log, don't act yet (wait for kUp or kAccepted)
+        SKSE::log::debug("kDown event - button pressed (waiting for release or hold completion)");
+        break;
+    case SkyPromptAPI::PromptEventType::kUp:
+        // Button released - for kHold prompts this means quick press (normal feed)
+        if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
+            SKSE::log::info("kUp on kHold prompt - button released early, executing normal feed (non-lethal)");
+            isLethalFeedInProgress_ = false;
+            HandleFeedAccepted();
+        } else {
+            SKSE::log::debug("kUp on kSinglePress prompt - ignoring");
+        }
+        break;
+    case SkyPromptAPI::PromptEventType::kAccepted:
+        // For kHold: held to completion (lethal feed)
+        // For kSinglePress: normal single press
+        if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
+            SKSE::log::info("kAccepted on kHold prompt - hold completed, executing lethal feed");
+            isLethalFeedInProgress_ = true;
+        } else {
+            SKSE::log::info("kAccepted on kSinglePress prompt - executing normal feed");
+        }
+        HandleFeedAccepted();
+        break;
+    case SkyPromptAPI::PromptEventType::kTimingOut:
+        HandleTimingOut();
+        break;
+    default:
+        break;
+    }
+}
+
+
+
+
+void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal) {
+    auto* settings = Settings::GetSingleton();
+
+    // if (settings->NonCombat.UseTwoSingleAnimations && isPairedAnim) {
+    //     SKSE::log::info("Using two-single animation mode");
+    //     // temporary disabled
+    //     // if (TwoSingleFeed::PlayTwoSingleFeed(target)) {
+    //     //     PapyrusCall::SendOnVampireFeedEvent(target);
+    //     //     auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
+    //     //     if (vampireQuest) {
+    //     //         PapyrusCall::CallVampireFeed(vampireQuest, target);
+    //     //     } else {
+    //     //         SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
+    //     //     }
+    //     //     return;
+    //     // }
+    //     SKSE::log::warn("Two-single feed failed, falling back to paired animation");
+    // }
+
+    SKSE::log::info("Playing feed idle '{}' (paired={}, lethal={})", idleEditorID, isPairedAnim, isLethal);
+    if (CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim)) {
+        PapyrusCall::SendOnVampireFeedEvent(target);
+
+        // Only call vampire script if NOT a werewolf
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (player && !TargetState::IsWerewolf(player)) {
+            auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
+            if (vampireQuest) {
+                PapyrusCall::CallVampireFeed(vampireQuest, target, isLethal);
+            } else {
+                SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
+            }
+        }
+
+        // Kill target if lethal feed
+        if (isLethal && target) {
+            SKSE::log::info("Executing lethal feed - scheduling target kill: {}", target->GetName());
+
+            // Schedule kill slightly after animation starts to allow feed mechanics to process
+            SKSE::GetTaskInterface()->AddTask([targetHandle = target->GetHandle()]() {
+                auto targetRef = targetHandle.get();
+                if (targetRef) {
+                    auto* targetActor = targetRef->As<RE::Actor>();
+                    if (targetActor && !targetActor->IsDead()) {
+                        auto* player = RE::PlayerCharacter::GetSingleton();
+                        targetActor->KillImpl(player, 1.0f, true, true);
+                        SKSE::log::info("Target killed: {}", targetActor->GetName());
+                    }
+                }
+            });
+        }
+    } else {
+        SKSE::log::warn("CustomFeed failed");
+    }
+}
+
+// We have 2 animation systems Vannila Idle and OAR which we set via GraphVariable
+// We need both select idle -> set correct graph variable to macht OAR animations
+void PairedAnimPromptSink::HandleFeedAccepted() const {
+    auto feedTargetPtr = GetTarget();
+    if (!feedTargetPtr) return;
+
+    // Safe to use raw pointer now - NiPointer keeps it alive for entire function scope
+    RE::Actor* feedTarget = feedTargetPtr.get();
+
+    // Use const_cast to call non-const method HidePrompt()
+    const_cast<PairedAnimPromptSink*>(this)->HidePrompt();
+    
+    FeedAnimState::MarkFeedStarted();
+    AnimEventSink::Register();
+
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (!player) return;
+
+    auto* settings = Settings::GetSingleton();
+    auto furnitureRef = TargetState::GetFurnitureReference(feedTarget);
+
+    SKSE::log::info("Feed ACCEPTED on target: {} (FormID: {:X})",
+        feedTarget->GetName(), feedTarget->GetFormID());
+
+    if (settings->IconOverlay.EnableIconOverlay) {
+        // Trigger bite animation instead of just stopping
+        FeedIconOverlay::GetSingleton()->TriggerFeedAnimation();
+    }
+
+    bool isInCombat = false;
+    int targetState = AnimUtil::DetermineTargetState(feedTarget, isInCombat);
+    SKSE::log::debug("Target state: {} (combat={})", targetState, isInCombat);
+
+    int vampireStage = PapyrusCall::GetVampireStage();
+    bool useTwoSingle = settings->NonCombat.UseTwoSingleAnimations && targetState == AnimUtil::kStanding;
+
+    if (useTwoSingle) {
+        // int feedType = 0;
+
+        // AnimUtil::SetFeedGraphVars(player, feedType);
+        // AnimUtil::SetFeedGraphVars(feedTarget, feedType);
+
+        // ExecuteFeed(nullptr, feedTarget, true);
+    } else {
+        if (targetState == AnimUtil::kStanding && settings->NonCombat.EnableHeightAdjust) {
+            AnimUtil::ApplyHeightAdjustment(player, feedTarget, settings->NonCombat.MinHeightDiff, settings->NonCombat.MaxHeightDiff);
+        }
+
+        bool isBehind = false;
+        // Only rotate standing targets (not sitting or sleeping)
+        if (targetState == AnimUtil::kStanding) {
+            isBehind = AnimUtil::RotateTargetToClosest(feedTarget);
+        } else {
+            // For sitting/sleeping, just detect direction without rotating
+            isBehind = AnimUtil::GetClosestDirection(feedTarget);
+        }
+
+        // --- New Registry Logic ---
+        Feed::FeedContext context;
+        context.player = player;
+        context.target = feedTarget;
+        context.isCombat = isInCombat;
+        context.isSneaking = player->IsSneaking();
+        context.isHungry = (vampireStage >= settings->Animation.HungryThreshold);
+        context.targetIsStanding = (targetState == AnimUtil::kStanding);
+        context.isBehind = isBehind;
+
+        const Feed::AnimationDefinition* anim = nullptr;
+
+        if (settings->General.DebugAnimationCycle) {
+            anim = Feed::AnimationRegistry::GetSingleton()->GetNextDebugAnimation(context);
+        } else {
+            anim = Feed::AnimationRegistry::GetSingleton()->GetBestMatch(context);
+        }
+
+        int feedType = 0;
+        bool isLethal = false;
+        std::string animName = "Default";
+
+        if (anim) {
+            feedType = anim->feedTypeID;
+            isLethal = anim->isLethal;
+            animName = anim->eventName;
+        }
+
+        // Check if player held button for lethal feed
+        if (isLethalFeedInProgress_) {
+            isLethal = true;
+            SKSE::log::info("Lethal feed triggered by hold duration");
+        }
+
+        if (settings->General.ForceFeedType > 0){
+            feedType = settings->General.ForceFeedType;
+            SKSE::log::info("Animation override set ");
+        }
+
+
+        SKSE::log::info("Registry match: {} (Type: {}, Lethal: {})", animName, feedType, isLethal);
+
+
+        bool isPairedAnim = true;
+        const char* idleEditorID = AnimUtil::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim);
+
+        AnimUtil::SetFeedGraphVars(player, feedType);
+        AnimUtil::SetFeedGraphVars(feedTarget, feedType);
+
+        ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal);
+
+        // Reset lethal flag after use
+        isLethalFeedInProgress_ = false;
+    }
+}
+
+void PairedAnimPromptSink::HandleTimingOut() const {
+    if (!GetTarget() || g_clientID.load(std::memory_order_acquire) == 0) return;
+
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (player && AnimUtil::IsInPairedAnimation(player)) {
+        SKSE::log::debug("Prompt timing out - skipped (in animation)");
+        return;
+    }
+
+    // Use const_cast to call non-const method ShowPrompt()
+    // Note: ShowPrompt calls SendPrompt which refreshes the prompt
+    auto targetPtr = GetTarget();
+    if (targetPtr) {
+        // Validate target before refreshing
+        if (!IsValidFeedTarget(targetPtr.get())) {
+            SKSE::log::debug("Prompt timing out - target invalid, removing prompt");
+            const_cast<PairedAnimPromptSink*>(this)->HidePrompt();
+            return;
+        }
+
+        const_cast<PairedAnimPromptSink*>(this)->ShowPrompt(targetPtr.get());
+        SKSE::log::debug("Prompt timing out - refreshed");
+    }
+}
+
+// Thread-safe wrapper methods for currentTargetHandle_
+void PairedAnimPromptSink::SetTargetHandle(const RE::ObjectRefHandle& handle) {
+    std::lock_guard<std::mutex> lock(targetMutex_);
+    currentTargetHandle_ = handle;
+}
+
+RE::ObjectRefHandle PairedAnimPromptSink::GetTargetHandle() const {
+    std::lock_guard<std::mutex> lock(targetMutex_);
+    return currentTargetHandle_;
+}
+
+void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
+    // Store new target as handle
+    if (target) {
+        SetTargetHandle(target->GetHandle());
+    } else {
+        RE::ObjectRefHandle emptyHandle;
+        SetTargetHandle(emptyHandle);
+    }
+
+    // Construct prompt dynamically if needed to ensure keys are up to date
+    // But we update buttons on init or update, here we just attach target
+    if (target) {
+        auto* settings = Settings::GetSingleton();
+        auto* player = RE::PlayerCharacter::GetSingleton();
+
+        // Determine prompt type based on combat state
+        SkyPromptAPI::PromptType promptType = SkyPromptAPI::PromptType::kSinglePress;
+        std::string promptText = "Feed";
+        float progressValue = 0.0f;
+        uint32_t textColor = 0xFFFFFFFF;  // White (AABBGGRR format)
+
+        // Check if target is NOT in combat and lethal feed is enabled
+        bool targetInCombat = target->IsInCombat();
+        bool playerInCombat = player && player->IsInCombat();
+
+        if (!targetInCombat && !playerInCombat && settings->NonCombat.EnableLethalFeed) {
+            // Use HOLD prompt for non-combat (lethal feed)
+            promptType = SkyPromptAPI::PromptType::kHold;
+            promptText = "Feed (Hold to Kill)";
+            progressValue = settings->NonCombat.LethalHoldDuration;
+            textColor = 0xFF5555FF;  // Red warning color for lethal option
+            SKSE::log::info("SetTarget: Using kHold prompt (lethal feed enabled) - target: {}, duration: {}s",
+                target->GetName(), progressValue);
+        } else {
+            SKSE::log::info("SetTarget: Using kSinglePress prompt - target: {}, targetInCombat: {}, playerInCombat: {}",
+                target->GetName(), targetInCombat, playerInCombat);
+        }
+
+        prompts_[0] = SkyPromptAPI::Prompt(
+            promptText,
+            1, 1, promptType,
+            target->GetFormID(),
+            feedButtons_,
+            textColor,
+            progressValue  // progress threshold for hold
+        );
+    } else {
+        // Clear prompt array to avoid stale FormID
+        prompts_[0] = SkyPromptAPI::Prompt();
+    }
+}
+
+RE::NiPointer<RE::Actor> PairedAnimPromptSink::GetTarget() const {
+    auto handle = GetTargetHandle();
+    auto ref = handle.get();
+    if (!ref) {
+        return nullptr;
+    }
+    // NiPointer<Actor> keeps ref alive in the caller's scope
+    return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
+}
+
+bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
+    if (!actor) return true;
+
+    auto* settings = Settings::GetSingleton();
+    if (!settings->General.EnableMod) return true;
+
+    if (FeedAnimState::IsFeedActive()) {
+        return true;
+    }
+    
+    // Check common filters first (fast)
+    if (FeedFiltering::IsExcludedByFilters(actor)) return true;
+
+    bool isInCombat = actor->IsInCombat();
+    SKSE::log::debug("IsExcluded check: {} | InCombat: {}", actor->GetName(), isInCombat);
+
+    if (isInCombat) {
+        if (FeedFiltering::IsExcludedCombat(actor)) return true;
+    } else {
+        if (FeedFiltering::IsExcludedNonCombat(actor)) return true;
+    }
+
+    // Graph vars checks (slow)
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (player && AnimUtil::IsInPairedAnimation(player)) {
+        SKSE::log::debug("Excluded: player is in paired animation");
+        return true;
+    }
+    if (AnimUtil::IsInPairedAnimation(actor)) {
+        SKSE::log::debug("Excluded: {} is in paired animation", actor->GetName());
+        return true;
+    }
+    
+    return false;
+}
+
+bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
+    if (!target) {
+        SKSE::log::debug("IsValidFeedTarget: false - no target");
+        return false;
+    }
+
+    // 0. Check for Open Menus (New check)
+    if (MenuCheck::IsAnyBlockedMenuOpen()) {
+        SKSE::log::debug("IsValidFeedTarget: false - blocked menu open");
+        return false;
+    }
+
+    // 1. Check Player Status (Vampire/Werewolf, Hunger, Settings)
+    // Pass combat state because it might bypass hunger checks
+    bool inCombat = target->IsInCombat();
+    if (!AnimUtil::CanPlayerFeed(inCombat)) {
+        SKSE::log::debug("IsValidFeedTarget: false - player can't feed");
+        return false;
+    }
+
+    // 2. Check Standard Exclusions (Filters, Paired Animations, etc.)
+    if (IsExcluded(target)) {
+        SKSE::log::debug("IsValidFeedTarget: false - target excluded");
+        return false;
+    }
+
+    // 3. Check Distance (Max 250 units)
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (player) {
+        float dist = player->GetPosition().GetDistance(target->GetPosition());
+        if (dist > 250.0f) {
+            SKSE::log::debug("IsValidFeedTarget: false - target too far: {:.1f}", dist);
+            return false;
+        }
+    }
+
+    // 4. Check OStim Scenes (Player AND Target)
+    auto* settings = Settings::GetSingleton();
+    if (settings->Filtering.ExcludeOStimScenes) {
+        // Check Target
+        if (OStimIntegration::IsActorInScene(target)) {
+            SKSE::log::debug("IsValidFeedTarget: false - target {} in OStim scene", target->GetName());
+            return false;
+        }
+
+        // Check Player
+        if (player && OStimIntegration::IsActorInScene(player)) {
+            SKSE::log::debug("IsValidFeedTarget: false - player in OStim scene");
+            return false;
+        }
+    }
+
+    SKSE::log::debug("IsValidFeedTarget: true - {} is valid", target->GetName());
+    return true;
+}
+
+// Event Handlers
+void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
+    if (g_clientID.load(std::memory_order_acquire) == 0) return;
+
+    // Track last crosshair target for refresh after animations
+    if (newTarget) {
+        lastCrosshairActor_ = newTarget->GetHandle();
+    } else {
+        lastCrosshairActor_.reset();
+    }
+
+    // Check animation event timeout (safety net)
+    AnimEventSink::CheckTimeout();
+
+    // Check if feed animation just ended - force resend prompt
+    bool feedJustEnded = FeedAnimState::CheckAndClearFeedEnded();
+
+    bool isValidTarget = false;
+    // Check if looking at a valid feed target
+    if (newTarget && newTarget != RE::PlayerCharacter::GetSingleton()) {
+        if (IsValidFeedTarget(newTarget)) {
+            isValidTarget = true;
+        }
+    }
+
+    auto currentTargetPtr = GetTarget();
+    RE::Actor* currentTarget = currentTargetPtr.get();
+
+    if (isValidTarget && newTarget) {
+        // Send prompt if target changed OR feed animation just ended
+        if (currentTarget != newTarget || feedJustEnded) {
+            ShowPrompt(newTarget);
+            SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) {}",
+                newTarget->GetName(), newTarget->GetFormID(),
+                feedJustEnded ? "(after feed ended)" : "");
+        }
+    } else {
+        // No valid target or excluded - remove prompt if we had one
+        if (currentTarget) {
+            HidePrompt();
+            SKSE::log::debug("Removed feed prompt");
+        }
+    }
+}
+
+void PairedAnimPromptSink::OnMenuStateChange(bool isMenuOpen) {
+    if (isMenuOpen) {
+        if (GetTarget()) {
+            HidePrompt();
+            SKSE::log::debug("Menu opened, removing prompt");
+        }
+    }
+}
+
+void PairedAnimPromptSink::OnPeriodicValidation() {
+    // Early exit: If player isn't a feeding race (Vampire/Werewolf/VL), skip all validation
+    // This avoids expensive IsValidFeedTarget checks when player can't feed
+    // Note: When player transforms (via quest), they'll need to look at a target to trigger validation
+    // This is acceptable since transformations are rare and player typically needs to re-target anyway
+    if (!AnimUtil::IsPlayerFeedingRace()) {
+        // If we have an active target, hide the prompt since player can no longer feed
+        auto targetPtr = GetTarget();
+        if (targetPtr) {
+            HidePrompt();
+        }
+        return;
+    }
+
+    auto currentTargetPtr = GetTarget();
+    if (currentTargetPtr) {
+        RE::Actor* currentTarget = currentTargetPtr.get();
+
+        // // Dummy logging for OStim
+        // bool inScene = OStimIntegration::IsActorInScene(currentTarget);
+        // SKSE::log::debug("OnPeriodicValidation: Target {} | OStim Scene: {}", currentTarget->GetName(), inScene);
+
+        // Re-validate the current target
+        if (!IsValidFeedTarget(currentTarget)) {
+            SKSE::log::debug("Target {} became invalid during periodic check", currentTarget->GetName());
+            HidePrompt();
+        }
+    } else {
+        // Check if we should restore prompt for last known crosshair target
+        // This handles cases where prompt was hidden (e.g. during feed) but is now valid again
+        // and RefreshPrompt failed due to race conditions (animation state lagging)
+        auto ref = lastCrosshairActor_.get();
+        if (ref && ref->Is(RE::FormType::ActorCharacter)) {
+             RE::Actor* actor = ref->As<RE::Actor>();
+             if (IsValidFeedTarget(actor)) {
+                 ShowPrompt(actor);
+                 SKSE::log::debug("Prompt restored during periodic check for: {}", actor->GetName());
+             }
+        }
+    }
+}
+
+void PairedAnimPromptSink::RefreshPrompt() {
+    if (g_clientID.load(std::memory_order_acquire) == 0) return;
+
+    // Logic similar to OnCrosshairUpdate but typically called when we just want to re-evaluate
+    // or when we know animation ended.
+    
+    // First, check if we already have a target
+    auto targetPtr = GetTarget();
+    RE::Actor* target = targetPtr.get();
+
+    // If not, check what is currently under the crosshair
+    if (!target) {
+        auto ref = lastCrosshairActor_.get();
+        if (ref && ref->Is(RE::FormType::ActorCharacter)) {
+            target = ref->As<RE::Actor>();
+        }
+    }
+
+    if (target) {
+        if (IsValidFeedTarget(target)) {
+            ShowPrompt(target);
+            SKSE::log::debug("Refreshed prompt for target: {}", target->GetName());
+        }
+    }
+}
+
+void PairedAnimPromptSink::ShowPrompt(RE::Actor* target) {
+    SetTarget(target);
+    bool sent = SkyPromptAPI::SendPrompt(this, g_clientID.load(std::memory_order_acquire));
+    if (!sent) {
+        SKSE::log::debug("SendPrompt returned false");
+    }
+
+    auto* settings = Settings::GetSingleton();
+    if (settings->IconOverlay.EnableIconOverlay) {
+        FeedIconOverlay::GetSingleton()->ShowIcon(target, settings->IconOverlay.IconPath, 3600.0f);
+    }
+}
+
+void PairedAnimPromptSink::HidePrompt() {
+    SkyPromptAPI::RemovePrompt(this, g_clientID.load(std::memory_order_acquire));
+    
+    auto* settings = Settings::GetSingleton();
+    if (settings->IconOverlay.EnableIconOverlay) {
+        FeedIconOverlay::GetSingleton()->StopIcon();
+    }
+    
+    SetTarget(nullptr);
+}
+

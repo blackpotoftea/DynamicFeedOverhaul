@@ -1,0 +1,72 @@
+{
+  "pa_front_feed": {
+    "direction": "Front",
+    "sex": "Unisex",
+    "type": "Normal",
+    "isHungry": false,
+    "feedType": 447
+  },
+  "pa_front_feed_2": {
+    "direction": "Front",
+    "sex": "Unisex",
+    "type": "Normal",
+    "isHungry": false,
+    "feedType": 828
+  },
+  "paired_vampfeedback": {
+    "direction": "Back",
+    "sex": "Unisex",
+    "type": "Normal",
+    "isHungry": false,
+    "feedType": 837
+  },
+  "pa_front_feed_3": {
+    "direction": "Front",
+    "sex": "Unisex",
+    "type": "Normal",
+    "isHungry": true,
+    "feedType": 652
+  },
+  "km_front_feed_bite": {
+    "direction": "Front",
+    "sex": "Unisex",
+    "type": "Combat",
+    "isHungry": false,
+    "feedType": 695
+  },
+  "km_back_feed_bite": {
+    "direction": "Back",
+    "sex": "Unisex",
+    "type": "Combat",
+    "isHungry": false,
+    "feedType": 907
+  },
+  "km_front_feed_decap": {
+    "direction": "Front",
+    "sex": "Unisex",
+    "type": "Combat",
+    "isHungry": true,
+    "feedType": 873
+  },
+  "km_front_feed_bodyslam": {
+    "direction": "Front",
+    "sex": "Unisex",
+    "type": "Combat",
+    "isHungry": true,
+    "feedType": 955
+  },
+  "km_front_feed_bloodrayne": {
+    "direction": "Front",
+    "sex": "Female",
+    "type": "Combat",
+    "isHungry": true,
+    "feedType": 821
+  },
+  "km_back_feed_jump_bite": {
+    "direction": "Back",
+    "sex": "Unisex",
+    "type": "Combat",
+    "isHungry": true,
+    "feedType": 748
+  }
+}

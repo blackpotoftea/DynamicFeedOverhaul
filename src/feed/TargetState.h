@@ -1,5 +1,7 @@
 #pragma once
 
+#include <RE/Skyrim.h>
+
 namespace TargetState {
 
     // Get raw SIT_SLEEP_STATE - must be first as other functions depend on it
@@ -34,37 +36,15 @@ namespace TargetState {
         }
     }
 
+    // Get the furniture reference the actor is using (returns empty NiPointer if not using furniture)
+    // Note: GetOccupiedFurniture() can return stale data, so also check SitSleepState
+    // Returns NiPointer to ensure proper reference counting and lifetime management
+    RE::NiPointer<RE::TESObjectREFR> GetFurnitureReference(RE::Actor* actor);
+
     // Matches Papyrus IsInFurnitureState - checks if actor is using any furniture
     // Note: GetOccupiedFurniture() can return stale data, so also check SitSleepState
     inline bool IsInFurnitureState(RE::Actor* actor) {
-        if (!actor) return false;
-
-        // First check if actor is actually in a sitting/sleeping state
-        auto sitSleepState = GetSitSleepState(actor);
-        if (sitSleepState == RE::SIT_SLEEP_STATE::kNormal) {
-            return false;  // Actor is standing, not using furniture
-        }
-
-        auto furnHandle = actor->GetOccupiedFurniture();
-        return furnHandle.get() != nullptr;
-    }
-
-    // Get the furniture reference the actor is using (nullptr if not using furniture)
-    // Note: GetOccupiedFurniture() can return stale data, so also check SitSleepState
-    inline RE::TESObjectREFR* GetFurnitureReference(RE::Actor* actor) {
-        if (!actor) return nullptr;
-
-        // First check if actor is actually in a sitting/sleeping state
-        auto sitSleepState = GetSitSleepState(actor);
-        if (sitSleepState == RE::SIT_SLEEP_STATE::kNormal) {
-            return nullptr;  // Actor is standing, not using furniture
-        }
-
-        auto furnHandle = actor->GetOccupiedFurniture();
-        if (auto furnRef = furnHandle.get()) {
-            return furnRef.get();
-        }
-        return nullptr;
+        return GetFurnitureReference(actor) != nullptr;
     }
 
     // Check if actor is sitting (chair, bench, etc.)
@@ -99,32 +79,10 @@ namespace TargetState {
         kOther
     };
 
-    inline FurnitureType GetFurnitureType(RE::TESObjectREFR* furnRef) {
-        if (!furnRef) return FurnitureType::kNone;
-
-        auto baseObj = furnRef->GetBaseObject();
-        if (!baseObj) return FurnitureType::kOther;
-
-        auto furn = baseObj->As<RE::TESFurniture>();
-        if (!furn) return FurnitureType::kOther;
-
-        auto flags = furn->furnFlags;
-
-        if (flags.any(RE::TESFurniture::ActiveMarker::kCanSleep)) {
-            return FurnitureType::kBed;
-        }
-        if (flags.any(RE::TESFurniture::ActiveMarker::kCanSit)) {
-            return FurnitureType::kChair;
-        }
-        if (flags.any(RE::TESFurniture::ActiveMarker::kCanLean)) {
-            return FurnitureType::kLean;
-        }
-
-        return FurnitureType::kOther;
-    }
+    FurnitureType GetFurnitureType(RE::TESObjectREFR* furnRef);
 
     inline FurnitureType GetActorFurnitureType(RE::Actor* actor) {
-        return GetFurnitureType(GetFurnitureReference(actor));
+        return GetFurnitureType(GetFurnitureReference(actor).get());
     }
 
     // String conversions for logging
@@ -153,4 +111,22 @@ namespace TargetState {
             default: return "Unknown";
         }
     }
+
+    // Get the actor's race
+    inline RE::TESRace* GetActorRace(RE::Actor* actor) {
+        if (!actor) return nullptr;
+        return actor->GetRace();
+    }
+
+    // Check if actor is a vampire
+    bool IsVampire(RE::Actor* actor);
+
+    // Check if actor is a werewolf
+    bool IsWerewolf(RE::Actor* actor);
+
+    // Check if actor is a Vampire Lord
+    bool IsVampireLord(RE::Actor* actor);
+
+    // Check if actor is Essential or Protected
+    bool IsEssentialOrProtected(RE::Actor* actor);
 }
