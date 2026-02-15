@@ -88,6 +88,7 @@ public:
     // Integration settings
     struct {
         bool EnableSacrosanct{ true };          // Enable Sacrosanct integration
+        bool EnableBetterVampires{ true };      // Enable Better Vampires integration
     } Integration;
 
     void LoadINI();

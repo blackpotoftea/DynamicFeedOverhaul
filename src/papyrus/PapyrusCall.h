@@ -260,12 +260,14 @@ namespace PapyrusCall {
         }
 
         // Check for modded vampire quest (Better Vampires, etc.)
-        auto* vampireQuest = GetPlayerVampireQuest();
-        if (vampireQuest) {
-            int signature = GetVampireFeedSignature(vampireQuest);
-            if (signature == 2) {
-                // Has Actor parameter - likely Better Vampires or similar mod
-                return VampireIntegration::BetterVampires;
+        if (settings->Integration.EnableBetterVampires) {
+            auto* vampireQuest = GetPlayerVampireQuest();
+            if (vampireQuest) {
+                int signature = GetVampireFeedSignature(vampireQuest);
+                if (signature == 2) {
+                    // Has Actor parameter - likely Better Vampires or similar mod
+                    return VampireIntegration::BetterVampires;
+                }
             }
         }
 

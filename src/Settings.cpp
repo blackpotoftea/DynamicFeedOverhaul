@@ -147,6 +147,7 @@ void Settings::LoadINI() {
 
     // Integration
     Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
+    Integration.EnableBetterVampires = ini.GetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}",
@@ -168,8 +169,8 @@ void Settings::LoadINI() {
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}",
-        Integration.EnableSacrosanct);
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableBetterVampires={}",
+        Integration.EnableSacrosanct, Integration.EnableBetterVampires);
 }
 
 void Settings::SaveINI() {
@@ -285,6 +286,8 @@ void Settings::SaveINI() {
     // Integration
     ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,
         "; Enable Sacrosanct vampire overhaul integration (auto-detects mod)");
+    ini.SetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires,
+        "; Enable Better Vampires integration (auto-detects mod)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {
