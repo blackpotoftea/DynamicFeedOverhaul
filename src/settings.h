@@ -34,7 +34,7 @@ public:
 
     // Prompt Display settings
     struct {
-        bool RequireWeaponDrawn{ true };  // Only show prompt when weapon/magic drawn or in combat
+        bool RequireWeaponDrawn{ false };  // Only show prompt when weapon/magic drawn or in combat
     } PromptDisplay;
 
     // Non-combat feeding settings
