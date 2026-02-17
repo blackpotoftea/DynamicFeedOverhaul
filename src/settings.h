@@ -24,6 +24,7 @@ public:
         bool DebugAnimationCycle{ false }; // Debug: cycle through all animations sequentially
         float AnimationTimeout{ 15.0f }; // Timeout for animation events in seconds
         float PeriodicCheckInterval{ 1.0f }; // Interval for periodic checks
+        float PromptDelaySeconds{ 0.2f }; // Delay before showing prompt when targeting new NPC
     } General;
 
     // Input settings

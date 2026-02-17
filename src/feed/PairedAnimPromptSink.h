@@ -91,4 +91,8 @@ private:
     mutable std::mutex targetMutex_;
     RE::ObjectRefHandle lastCrosshairActor_;
     mutable bool isLethalFeedInProgress_{false};  // Mutable: transient state for event processing
+
+    // Prompt delay tracking - wait before showing prompt on new target
+    RE::ObjectRefHandle pendingTarget_;
+    std::chrono::steady_clock::time_point pendingTargetTime_;
 };

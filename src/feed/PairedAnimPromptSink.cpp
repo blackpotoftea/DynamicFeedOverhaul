@@ -686,15 +686,39 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
     RE::Actor* currentTarget = currentTargetPtr.get();
 
     if (isValidTarget && newTarget) {
-        // Send prompt if target changed OR feed animation just ended
-        if (currentTarget != newTarget || feedJustEnded) {
+        auto newTargetHandle = newTarget->GetHandle();
+        auto settings = Settings::GetSingleton();
+        float delaySeconds = settings->General.PromptDelaySeconds;
+
+        // Feed just ended - show prompt immediately (no delay)
+        if (feedJustEnded) {
+            pendingTarget_.reset();
             ShowPrompt(newTarget);
-            SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) {}",
-                newTarget->GetName(), newTarget->GetFormID(),
-                feedJustEnded ? "(after feed ended)" : "");
+            SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) (after feed ended)",
+                newTarget->GetName(), newTarget->GetFormID());
+        }
+        // New target - start delay timer
+        else if (currentTarget != newTarget && pendingTarget_ != newTargetHandle) {
+            pendingTarget_ = newTargetHandle;
+            pendingTargetTime_ = std::chrono::steady_clock::now();
+            SKSE::log::debug("New target detected: {} - waiting {:.2f}s before showing prompt",
+                newTarget->GetName(), delaySeconds);
+        }
+        // Same pending target - check if delay has elapsed
+        else if (pendingTarget_ == newTargetHandle) {
+            auto elapsed = std::chrono::steady_clock::now() - pendingTargetTime_;
+            float elapsedSeconds = std::chrono::duration<float>(elapsed).count();
+
+            if (elapsedSeconds >= delaySeconds) {
+                pendingTarget_.reset();
+                ShowPrompt(newTarget);
+                SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) (after {:.2f}s delay)",
+                    newTarget->GetName(), newTarget->GetFormID(), elapsedSeconds);
+            }
         }
     } else {
-        // No valid target or excluded - remove prompt if we had one
+        // No valid target or excluded - remove prompt and clear pending
+        pendingTarget_.reset();
         if (currentTarget) {
             HidePrompt();
             SKSE::log::debug("Removed feed prompt");

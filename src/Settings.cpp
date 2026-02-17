@@ -97,6 +97,7 @@ void Settings::LoadINI() {
     General.DebugAnimationCycle = ini.GetBoolValue("General", "DebugAnimationCycle", General.DebugAnimationCycle);
     General.AnimationTimeout = static_cast<float>(ini.GetDoubleValue("General", "AnimationTimeout", General.AnimationTimeout));
     General.PeriodicCheckInterval = static_cast<float>(ini.GetDoubleValue("General", "PeriodicCheckInterval", General.PeriodicCheckInterval));
+    General.PromptDelaySeconds = static_cast<float>(ini.GetDoubleValue("General", "PromptDelaySeconds", General.PromptDelaySeconds));
 
     // Input
     Input.FeedKey = static_cast<int>(ini.GetLongValue("Input", "FeedKey", Input.FeedKey));
@@ -157,9 +158,9 @@ void Settings::LoadINI() {
     Integration.EnableBetterVampires = ini.GetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires);
 
     SKSE::log::info("Settings loaded:");
-    SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}",
+    SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
         General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
-        General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval);
+        General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelaySeconds);
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}", Input.FeedKey, Input.FeedGamepadKey);
     SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}", PromptDisplay.RequireWeaponDrawn);
     SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}",
@@ -209,6 +210,8 @@ void Settings::SaveINI() {
         "; Timeout for animation events in seconds (default 15.0)");
     ini.SetDoubleValue("General", "PeriodicCheckInterval", General.PeriodicCheckInterval,
         "; Interval in seconds for periodic validity checks (default 1.0)");
+    ini.SetDoubleValue("General", "PromptDelaySeconds", General.PromptDelaySeconds,
+        "; Delay in seconds before showing prompt when targeting a new NPC (default 0.2)");
 
     // Input
     ini.SetLongValue("Input", "FeedKey", Input.FeedKey,
