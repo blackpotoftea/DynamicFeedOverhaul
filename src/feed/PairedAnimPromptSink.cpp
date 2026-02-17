@@ -11,6 +11,7 @@
 #include "utils/MenuCheck.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/AnimUtil.h"
+#include "feed/WitnessDetection.h"
 #include <thread>
 
 extern std::atomic<SkyPromptAPI::ClientID> g_clientID;
@@ -33,6 +34,10 @@ namespace FeedAnimState {
     void MarkFeedEnded() {
         feedState.store(State::Ended, std::memory_order_release);
         SKSE::log::info("Feed animation ended");
+
+        // Clear the active feed target
+        PairedAnimPromptSink::GetSingleton()->activeFeedTargetHandle_.reset();
+
         CustomFeed::OnComplete();
         // disable as require more refactor
         //TwoSingleFeed::OnComplete();
@@ -295,9 +300,12 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
     // Safe to use raw pointer now - NiPointer keeps it alive for entire function scope
     RE::Actor* feedTarget = feedTargetPtr.get();
 
+    // Store the feed target for witness detection
+    const_cast<PairedAnimPromptSink*>(this)->activeFeedTargetHandle_ = feedTarget->GetHandle();
+
     // Use const_cast to call non-const method HidePrompt()
     const_cast<PairedAnimPromptSink*>(this)->HidePrompt();
-    
+
     FeedAnimState::MarkFeedStarted();
     AnimEventSink::Register();
 
@@ -337,14 +345,36 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
         SKSE::GetTaskInterface()->AddTask([playerHandle, targetHandle, targetState, settings]() {
             auto playerRef = playerHandle.get();
             auto targetRef = targetHandle.get();
-            if (!playerRef || !targetRef) return;
+            if (!playerRef || !targetRef) {
+                SKSE::log::warn("Position task: Handle resolution failed");
+                return;
+            }
 
             auto* player = playerRef.get()->As<RE::Actor>();
             auto* target = targetRef.get()->As<RE::Actor>();
-            if (!player || !target) return;
+            if (!player || !target) {
+                SKSE::log::warn("Position task: Actor cast failed");
+                return;
+            }
+
+            SKSE::log::debug("Position task: targetState={}, EnableHeightAdjust={}",
+                targetState, settings->NonCombat.EnableHeightAdjust);
 
             if (targetState == AnimUtil::kStanding && settings->NonCombat.EnableHeightAdjust) {
+                auto playerPos = player->GetPosition();
+                auto targetPos = target->GetPosition();
+                float heightDiff = std::fabs(targetPos.z - playerPos.z);
+                SKSE::log::info("Height check BEFORE adjustment: player Z={:.2f}, target Z={:.2f}, diff={:.2f}",
+                    playerPos.z, targetPos.z, heightDiff);
+
                 AnimUtil::ApplyHeightAdjustment(player, target, settings->NonCombat.MinHeightDiff, settings->NonCombat.MaxHeightDiff);
+
+                // Log AFTER adjustment
+                playerPos = player->GetPosition();
+                targetPos = target->GetPosition();
+                heightDiff = std::fabs(targetPos.z - playerPos.z);
+                SKSE::log::info("Height check AFTER adjustment: player Z={:.2f}, target Z={:.2f}, diff={:.2f}",
+                    playerPos.z, targetPos.z, heightDiff);
             }
 
             if (targetState == AnimUtil::kStanding) {
@@ -567,10 +597,30 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
         return false;
     }
 
+    // 0.5. Get player singleton (used throughout function)
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (!player) {
+        SKSE::log::debug("IsValidFeedTarget: false - no player");
+        return false;
+    }
+
+    // 0.6. Check if player has weapon/magic drawn OR is in combat (if required by settings)
+    auto* settings = Settings::GetSingleton();
+    if (settings->PromptDisplay.RequireWeaponDrawn) {
+        auto* playerState = player->AsActorState();
+        bool weaponDrawn = playerState && playerState->IsWeaponDrawn();
+        bool playerInCombat = player->IsInCombat();
+
+        if (!weaponDrawn && !playerInCombat) {
+            SKSE::log::debug("IsValidFeedTarget: false - weapon/magic not drawn and not in combat");
+            return false;
+        }
+    }
+
     // 1. Check Player Status (Vampire/Werewolf, Hunger, Settings)
-    // Pass combat state because it might bypass hunger checks
-    bool inCombat = target->IsInCombat();
-    if (!AnimUtil::CanPlayerFeed(inCombat)) {
+    // Pass target's combat state because it might bypass hunger checks
+    bool targetInCombat = target->IsInCombat();
+    if (!AnimUtil::CanPlayerFeed(targetInCombat)) {
         SKSE::log::debug("IsValidFeedTarget: false - player can't feed");
         return false;
     }
@@ -582,17 +632,13 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
     }
 
     // 3. Check Distance (Max 250 units)
-    auto* player = RE::PlayerCharacter::GetSingleton();
-    if (player) {
-        float dist = player->GetPosition().GetDistance(target->GetPosition());
-        if (dist > 250.0f) {
-            SKSE::log::debug("IsValidFeedTarget: false - target too far: {:.1f}", dist);
-            return false;
-        }
+    float dist = player->GetPosition().GetDistance(target->GetPosition());
+    if (dist > 250.0f) {
+        SKSE::log::debug("IsValidFeedTarget: false - target too far: {:.1f}", dist);
+        return false;
     }
 
     // 4. Check OStim Scenes (Player AND Target)
-    auto* settings = Settings::GetSingleton();
     if (settings->Filtering.ExcludeOStimScenes) {
         // Check Target
         if (OStimIntegration::IsActorInScene(target)) {
@@ -601,7 +647,7 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
         }
 
         // Check Player
-        if (player && OStimIntegration::IsActorInScene(player)) {
+        if (OStimIntegration::IsActorInScene(player)) {
             SKSE::log::debug("IsValidFeedTarget: false - player in OStim scene");
             return false;
         }
@@ -748,12 +794,13 @@ void PairedAnimPromptSink::ShowPrompt(RE::Actor* target) {
 
 void PairedAnimPromptSink::HidePrompt() {
     SkyPromptAPI::RemovePrompt(this, g_clientID.load(std::memory_order_acquire));
-    
+
     auto* settings = Settings::GetSingleton();
     if (settings->IconOverlay.EnableIconOverlay) {
         FeedIconOverlay::GetSingleton()->StopIcon();
     }
-    
+
     SetTarget(nullptr);
 }
+
 

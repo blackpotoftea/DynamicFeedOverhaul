@@ -269,6 +269,32 @@ namespace AnimUtil {
         }
     }
 
+    // Redraw weapon/magic after animation (restores drawn state)
+    void redrawWeapon(RE::Actor* actor) {
+        if (!actor) return;
+
+        auto actorHandle = actor->CreateRefHandle();
+
+        // // Schedule the weapon draw after a short delay
+        // SKSE::GetTaskInterface()->AddTask([actorHandle] {
+        //     auto actorRef = actorHandle.get();
+        //     if (auto* a = actorRef.get()) {
+        //         // Send weaponDraw event to animation graph to redraw weapon/magic
+        //         a->NotifyAnimationGraph("weaponDraw");
+        //         SKSE::log::info("[AnimUtil::redrawWeapon] Sent weaponDraw event to {}", a->GetName());
+        //     }
+        // });
+
+        SKSE::GetTaskInterface()->AddTask([actorHandle] {
+            auto actorRef = actorHandle.get();
+            if (auto* a = actorRef.get()) {
+                // Use DrawWeaponMagicHands which is the actual function to draw weapons
+                a->DrawWeaponMagicHands(true);
+                SKSE::log::info("[AnimUtil::redrawWeapon] Called DrawWeaponMagicHands for {}", a->GetName());
+            }
+        });
+    }
+
     // Set actor restrained state (calls Papyrus native function via VM)
     void setRestrained(RE::Actor* actor, bool restrained) {
         if (!actor) return;
@@ -491,20 +517,29 @@ namespace AnimUtil {
         auto targetPos = target->GetPosition();
         float heightDiff = std::fabs(targetPos.z - attackerPos.z);
 
-        if (heightDiff <= minHeightDiff) return;
+        SKSE::log::info("ApplyHeightAdjustment: heightDiff={:.2f}, min={:.2f}, max={:.2f}",
+            heightDiff, minHeightDiff, maxHeightDiff);
+
+        if (heightDiff <= minHeightDiff) {
+            SKSE::log::info("ApplyHeightAdjustment: SKIPPED - height diff {:.2f} <= min {:.2f}",
+                heightDiff, minHeightDiff);
+            return;
+        }
 
         if (heightDiff > maxHeightDiff) {
-            SKSE::log::warn("Height diff {:.1f} exceeds max {:.1f} - skipping repositioning",
+            SKSE::log::warn("ApplyHeightAdjustment: SKIPPED - height diff {:.2f} > max {:.2f}",
                 heightDiff, maxHeightDiff);
             return;
         }
 
         float higherZ = std::max(attackerPos.z, targetPos.z);
         if (attackerPos.z < targetPos.z) {
-            SKSE::log::debug("Height diff: {:.1f} - moving attacker up", heightDiff);
+            SKSE::log::info("ApplyHeightAdjustment: Moving attacker UP from {:.2f} to {:.2f} (diff: {:.2f})",
+                attackerPos.z, higherZ, heightDiff);
             attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, higherZ), true);
         } else {
-            SKSE::log::debug("Height diff: {:.1f} - moving target up", heightDiff);
+            SKSE::log::info("ApplyHeightAdjustment: Moving target UP from {:.2f} to {:.2f} (diff: {:.2f})",
+                targetPos.z, higherZ, heightDiff);
             target->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, higherZ), true);
         }
     }

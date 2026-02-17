@@ -32,6 +32,11 @@ public:
         int FeedGamepadKey{ 0x1000 }; // Gamepad A
     } Input;
 
+    // Prompt Display settings
+    struct {
+        bool RequireWeaponDrawn{ true };  // Only show prompt when weapon/magic drawn or in combat
+    } PromptDisplay;
+
     // Non-combat feeding settings
     struct {
         bool AllowStanding{ true };
@@ -56,6 +61,10 @@ public:
         bool IgnoreHungerCheck{ true };  // Allow combat feeding even when not hungry
         bool RequireLowHealth{ false };
         float LowHealthThreshold{ 0.25f };
+        bool EnableWitnessDetection{ true };     // Stop feed if witnessed by NPCs
+        float WitnessDetectionRadius{ 1500.0f }; // Detection radius in units (~1500 = reasonable distance)
+        float WitnessCheckInterval{ 0.5f };      // How often to check for witnesses during feed (seconds)
+        bool WitnessDebugLogging{ false };       // Enable verbose witness detection logging
     } Combat;
 
     // Target filtering settings

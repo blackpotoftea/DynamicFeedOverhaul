@@ -1,5 +1,6 @@
 #include "hooks/hook.h"
 #include "feed/PairedAnimPromptSink.h"
+#include "feed/WitnessDetection.h"
 #include "Settings.h"
 #include "utils/MenuCheck.h"
 
@@ -12,12 +13,43 @@ namespace {
         static void thunk(RE::PlayerCharacter* a_this, float a_delta) {
             func(a_this, a_delta);
 
-            // Rate limit the periodic check to avoid excessive overhead
-            static float timer = 0.0f;
-            timer += a_delta;
-            if (timer > Settings::GetSingleton()->General.PeriodicCheckInterval) { 
-                timer = 0.0f;
-                PairedAnimPromptSink::GetSingleton()->OnPeriodicValidation();
+            auto* sink = PairedAnimPromptSink::GetSingleton();
+            auto* settings = Settings::GetSingleton();
+
+            // 1. Periodic Check
+            sink->periodicCheckTimer_ += a_delta;
+            if (sink->periodicCheckTimer_ > settings->General.PeriodicCheckInterval) {
+                sink->periodicCheckTimer_ = 0.0f;
+                sink->OnPeriodicValidation();
+            }
+
+            // 2. Witness Check (only if enabled in settings)
+            if (settings->Combat.EnableWitnessDetection) {
+                if (FeedAnimState::IsFeedActive()) {
+                    sink->witnessCheckTimer_ += a_delta;
+                    if (sink->witnessCheckTimer_ > settings->Combat.WitnessCheckInterval) {
+                        sink->witnessCheckTimer_ = 0.0f;
+                        auto targetHandle = sink->activeFeedTargetHandle_;
+                        auto ref = targetHandle.get();
+                        if (ref) {
+                            // Use NiPointer to keep target alive during check
+                            RE::NiPointer<RE::Actor> target(ref->As<RE::Actor>());
+                            if (target) {
+                                if (settings->Combat.WitnessDebugLogging) {
+                                    SKSE::log::info("[PlayerUpdateHook] Calling witness check for active feed");
+                                }
+                                WitnessDetection::PerformWitnessCheck(a_this, target.get());
+                            } else {
+                                SKSE::log::warn("[PlayerUpdateHook] Feed active but target actor is null");
+                            }
+                        } else {
+                            SKSE::log::warn("[PlayerUpdateHook] Feed active but target ref is null");
+                        }
+                    }
+                } else {
+                    // Reset witness timer when feed is not active
+                    sink->witnessCheckTimer_ = 0.0f;
+                }
             }
         }
         static inline REL::Relocation<decltype(thunk)> func;

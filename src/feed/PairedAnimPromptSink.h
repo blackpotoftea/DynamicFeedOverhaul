@@ -56,6 +56,19 @@ public:
     void OnPeriodicValidation();
     void RefreshPrompt();
 
+    // Target being fed on during active feed (accessed by witness detection hook)
+    mutable RE::ObjectRefHandle activeFeedTargetHandle_;
+
+    // Timers for periodic checks (updated from PlayerUpdateHook)
+    float periodicCheckTimer_ = 0.0f;
+    float witnessCheckTimer_ = 0.0f;
+
+    // Reset timers (call on loading screens or game state changes if needed)
+    void ResetTimers() {
+        periodicCheckTimer_ = 0.0f;
+        witnessCheckTimer_ = 0.0f;
+    }
+
 private:
     PairedAnimPromptSink();
 

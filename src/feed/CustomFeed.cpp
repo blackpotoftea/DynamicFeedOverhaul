@@ -6,6 +6,9 @@ namespace CustomFeed {
     // THREADING: Must only be accessed from main game thread (ensured via SKSE::GetTaskInterface()->AddTask)
     static RE::ObjectRefHandle feedTargetHandle_{};
 
+    // Track weapon/magic drawn state before feeding so we can restore it afterwards
+    static bool wasWeaponDrawn_ = false;
+
     // Set feed target - stores ObjectRefHandle for safe persistence
     void SetFeedTarget(RE::Actor* target) {
         if (target) {
@@ -91,6 +94,11 @@ namespace CustomFeed {
             SKSE::log::error("[CustomFeed] FAILED: player is null");
             return false;
         }
+
+        // Save weapon/magic drawn state so we can restore it after feeding
+        auto* playerState = player->AsActorState();
+        wasWeaponDrawn_ = playerState && playerState->IsWeaponDrawn();
+        SKSE::log::info("[CustomFeed] Saved weapon drawn state: {}", wasWeaponDrawn_);
         if (!idleEditorID) {
             SKSE::log::error("[CustomFeed] FAILED: idleEditorID is null");
             return false;
@@ -134,6 +142,13 @@ namespace CustomFeed {
             if (auto* process = player->GetActorRuntimeData().currentProcess) {
                 process->StopCurrentIdle(player, true);
             }
+
+            // Restore weapon/magic drawn state if it was drawn before feeding
+            if (wasWeaponDrawn_) {
+                SKSE::log::info("[CustomFeed] ForceStop: Restoring weapon drawn state");
+                AnimUtil::redrawWeapon(player);
+                wasWeaponDrawn_ = false;
+            }
         }
         // Safely retrieve target actor via handle (returns smart pointer)
         if (auto targetPtr = GetFeedTarget()) {
@@ -153,6 +168,14 @@ namespace CustomFeed {
         //     player->SetAIDriven(false);
         //     SKSE::log::debug("[CustomFeed] SetAIDriven(false) called");
         // }
+
+        // Restore weapon/magic drawn state if it was drawn before feeding
+        if (player && wasWeaponDrawn_) {
+            SKSE::log::info("[CustomFeed] OnComplete: Restoring weapon drawn state");
+            AnimUtil::redrawWeapon(player);
+            wasWeaponDrawn_ = false;  // Reset the flag
+        }
+
         ClearFeedTarget();
     }
 }

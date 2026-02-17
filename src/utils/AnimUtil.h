@@ -70,6 +70,9 @@ namespace AnimUtil {
     // Stop animation and restore actor control
     void stopAnimation(RE::Actor* actor);
 
+    // Redraw weapon/magic after animation (restores drawn state)
+    void redrawWeapon(RE::Actor* actor);
+
     // Set actor restrained state (calls Papyrus native function)
     void setRestrained(RE::Actor* actor, bool restrained = true);
 

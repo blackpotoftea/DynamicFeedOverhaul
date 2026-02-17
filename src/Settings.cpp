@@ -102,6 +102,9 @@ void Settings::LoadINI() {
     Input.FeedKey = static_cast<int>(ini.GetLongValue("Input", "FeedKey", Input.FeedKey));
     Input.FeedGamepadKey = static_cast<int>(ini.GetLongValue("Input", "FeedGamepadKey", Input.FeedGamepadKey));
 
+    // PromptDisplay
+    PromptDisplay.RequireWeaponDrawn = ini.GetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn);
+
     // NonCombat
     NonCombat.AllowStanding = ini.GetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding);
     NonCombat.AllowSleeping = ini.GetBoolValue("NonCombat", "AllowSleeping", NonCombat.AllowSleeping);
@@ -123,6 +126,10 @@ void Settings::LoadINI() {
     Combat.IgnoreHungerCheck = ini.GetBoolValue("Combat", "IgnoreHungerCheck", Combat.IgnoreHungerCheck);
     Combat.RequireLowHealth = ini.GetBoolValue("Combat", "RequireLowHealth", Combat.RequireLowHealth);
     Combat.LowHealthThreshold = static_cast<float>(ini.GetDoubleValue("Combat", "LowHealthThreshold", Combat.LowHealthThreshold));
+    Combat.EnableWitnessDetection = ini.GetBoolValue("Combat", "EnableWitnessDetection", Combat.EnableWitnessDetection);
+    Combat.WitnessDetectionRadius = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessDetectionRadius", Combat.WitnessDetectionRadius));
+    Combat.WitnessCheckInterval = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessCheckInterval", Combat.WitnessCheckInterval));
+    Combat.WitnessDebugLogging = ini.GetBoolValue("Combat", "WitnessDebugLogging", Combat.WitnessDebugLogging);
 
     // Filtering
     Filtering.EnableLevelCheck = ini.GetBoolValue("Filtering", "EnableLevelCheck", Filtering.EnableLevelCheck);
@@ -154,6 +161,7 @@ void Settings::LoadINI() {
         General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
         General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval);
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}", Input.FeedKey, Input.FeedGamepadKey);
+    SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}", PromptDisplay.RequireWeaponDrawn);
     SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
@@ -162,8 +170,9 @@ void Settings::LoadINI() {
         SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
             NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
     }
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}",
-        Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold);
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}",
+        Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold,
+        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging);
     SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, IncludeKW=[{}], ExcludeKW=[{}]",
         Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords));
@@ -207,6 +216,10 @@ void Settings::SaveINI() {
     ini.SetLongValue("Input", "FeedGamepadKey", Input.FeedGamepadKey,
         "; Gamepad key code for feed prompt (default 0x1000 = A)");
 
+    // PromptDisplay
+    ini.SetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn,
+        "; Only show feed prompt when weapon/magic is drawn or player is in combat");
+
     // NonCombat
     ini.SetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding,
         "; Allow feeding on standing NPCs");
@@ -246,6 +259,14 @@ void Settings::SaveINI() {
         "; Require target to be below health threshold for combat feeding");
     ini.SetDoubleValue("Combat", "LowHealthThreshold", Combat.LowHealthThreshold,
         "; Health percentage threshold (0.0-1.0) for combat feeding");
+    ini.SetBoolValue("Combat", "EnableWitnessDetection", Combat.EnableWitnessDetection,
+        "; Stop feed if witnessed by nearby NPCs who detect the player");
+    ini.SetDoubleValue("Combat", "WitnessDetectionRadius", Combat.WitnessDetectionRadius,
+        "; Maximum distance (units) to check for witnesses during feed (default 1500 = ~30 meters)");
+    ini.SetDoubleValue("Combat", "WitnessCheckInterval", Combat.WitnessCheckInterval,
+        "; How often to check for witnesses during active feed in seconds (default 0.5)");
+    ini.SetBoolValue("Combat", "WitnessDebugLogging", Combat.WitnessDebugLogging,
+        "; Enable verbose witness detection debug logging (can be very spammy)");
 
     // Filtering
     ini.SetBoolValue("Filtering", "EnableLevelCheck", Filtering.EnableLevelCheck,

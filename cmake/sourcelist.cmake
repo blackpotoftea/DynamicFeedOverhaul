@@ -6,6 +6,7 @@ set(sources ${sources}
     src/feed/FeedIconOverlay.cpp
     src/feed/PairedAnimPromptSink.cpp
     src/feed/CustomFeed.cpp
+    src/feed/WitnessDetection.cpp
     src/utils/AnimUtil.cpp
     src/integration/OStimIntegration.cpp
     src/utils/MenuCheck.cpp

@@ -5,8 +5,8 @@ namespace CustomFeed {
     // Idle EditorIDs - TODO: replace with actual Skyrim.esm names
     namespace Idles {
         // Standing
-        inline constexpr const char* VAMPIRE_STANDING_FRONT = "IdleVampireStandingFront";
-        inline constexpr const char* VAMPIRE_STANDING_BACK = "IdleVampireStandingBack";
+        inline constexpr const char* VAMPIRE_STANDING_FRONT = "IdleVampireStandingFront"; // "pa_1HMKillMoveShortA"; //"IdleVampireStandingFront";
+        inline constexpr const char* VAMPIRE_STANDING_BACK =  "IdleVampireStandingBack"; //"pa_1HMSneakKillBackA"; //"IdleVampireStandingBack";
         // Bed
         inline constexpr const char* VAMPIRE_BED_LEFT = "VampireFeedingBedLeft_Loose";
         inline constexpr const char* VAMPIRE_BED_RIGHT = "VampireFeedingBedRight_Loose";

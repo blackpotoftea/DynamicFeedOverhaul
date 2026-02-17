@@ -129,4 +129,26 @@ namespace TargetState {
 
     // Check if actor is Essential or Protected
     bool IsEssentialOrProtected(RE::Actor* actor);
+
+    // Check if actor is unconscious
+    inline bool IsUnconscious(RE::Actor* actor) {
+        if (!actor) return false;
+        auto actorState = actor->AsActorState();
+        if (!actorState) return false;
+        return actorState->IsUnconscious();
+    }
+
+    // Check if actor is bleeding out
+    inline bool IsBleedingOut(RE::Actor* actor) {
+        if (!actor) return false;
+        auto actorState = actor->AsActorState();
+        if (!actorState) return false;
+        return actorState->IsBleedingOut();
+    }
+
+    // Check if actor is conscious and able to witness (not sleeping, unconscious, or bleeding out)
+    inline bool IsConsciousAndAware(RE::Actor* actor) {
+        if (!actor) return false;
+        return !IsSleeping(actor) && !IsUnconscious(actor) && !IsBleedingOut(actor);
+    }
 }
