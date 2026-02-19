@@ -54,6 +54,7 @@ public:
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)
         bool EnableLethalFeed{ false };      // Enable hold-to-kill feature for non-combat targets
         float LethalHoldDuration{ 5.0f };    // Seconds to hold button for lethal feed
+        bool EnableRotation{ true };         // Rotate player/target to face each other before feed
     } NonCombat;
 
     // Combat feeding settings

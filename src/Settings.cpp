@@ -121,6 +121,7 @@ void Settings::LoadINI() {
     NonCombat.TargetOffsetZ = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetZ", NonCombat.TargetOffsetZ));
     NonCombat.EnableLethalFeed = ini.GetBoolValue("NonCombat", "EnableLethalFeed", NonCombat.EnableLethalFeed);
     NonCombat.LethalHoldDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "LethalHoldDuration", NonCombat.LethalHoldDuration));
+    NonCombat.EnableRotation = ini.GetBoolValue("NonCombat", "EnableRotation", NonCombat.EnableRotation);
 
     // Combat
     Combat.Enabled = ini.GetBoolValue("Combat", "Enabled", Combat.Enabled);
@@ -252,6 +253,8 @@ void Settings::SaveINI() {
         "; Enable hold-to-kill feature: Hold button for LethalHoldDuration to kill non-combat targets");
     ini.SetDoubleValue("NonCombat", "LethalHoldDuration", NonCombat.LethalHoldDuration,
         "; Seconds to hold button for lethal feed (default 5.0)");
+    ini.SetBoolValue("NonCombat", "EnableRotation", NonCombat.EnableRotation,
+        "; Rotate player and target to face each other before feed animation");
 
     // Combat
     ini.SetBoolValue("Combat", "Enabled", Combat.Enabled,

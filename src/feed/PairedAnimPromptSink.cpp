@@ -377,7 +377,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
                     playerPos.z, targetPos.z, heightDiff);
             }
 
-            if (targetState == AnimUtil::kStanding) {
+            if (targetState == AnimUtil::kStanding && settings->NonCombat.EnableRotation) {
                 AnimUtil::RotateTargetToClosest(target, player);
                 AnimUtil::RotateAttackerToTarget(player, target);
             }
