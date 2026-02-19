@@ -105,6 +105,8 @@ void Settings::LoadINI() {
 
     // PromptDisplay
     PromptDisplay.RequireWeaponDrawn = ini.GetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn);
+    PromptDisplay.RequirePlayerFacing = ini.GetBoolValue("PromptDisplay", "RequirePlayerFacing", PromptDisplay.RequirePlayerFacing);
+    PromptDisplay.FacingAngleThreshold = static_cast<float>(ini.GetDoubleValue("PromptDisplay", "FacingAngleThreshold", PromptDisplay.FacingAngleThreshold));
 
     // NonCombat
     NonCombat.AllowStanding = ini.GetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding);
@@ -163,7 +165,8 @@ void Settings::LoadINI() {
         General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
         General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelaySeconds);
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}", Input.FeedKey, Input.FeedGamepadKey);
-    SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}", PromptDisplay.RequireWeaponDrawn);
+    SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
+        PromptDisplay.RequireWeaponDrawn, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
     SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
@@ -223,6 +226,10 @@ void Settings::SaveINI() {
     // PromptDisplay
     ini.SetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn,
         "; Only show feed prompt when weapon/magic is drawn or player is in combat");
+    ini.SetBoolValue("PromptDisplay", "RequirePlayerFacing", PromptDisplay.RequirePlayerFacing,
+        "; Only show feed prompt when player is facing the target");
+    ini.SetDoubleValue("PromptDisplay", "FacingAngleThreshold", PromptDisplay.FacingAngleThreshold,
+        "; Maximum angle (degrees) from player heading to target (90 = 180 degree cone in front)");
 
     // NonCombat
     ini.SetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding,

@@ -702,6 +702,32 @@ namespace AnimUtil {
         attacker->SetAngle(angles);
     }
 
+    // Check if player is facing the target within a given angle threshold
+    // maxAngleDegrees: maximum angle from player's heading to target (default 90 = 180 degree cone in front)
+    bool IsPlayerFacingTarget(RE::Actor* player, RE::Actor* target, float maxAngleDegrees) {
+        if (!player || !target) return false;
+
+        // Get angle from player to target
+        float angleToTarget = GetAngleBetween(player, target);
+
+        // Get player's current heading
+        float playerHeading = player->GetAngleZ();
+
+        // Calculate angle difference and normalize to -PI to PI
+        float diff = angleToTarget - playerHeading;
+        while (diff > static_cast<float>(M_PI)) diff -= 2.0f * static_cast<float>(M_PI);
+        while (diff < -static_cast<float>(M_PI)) diff += 2.0f * static_cast<float>(M_PI);
+
+        // Convert threshold to radians
+        float maxAngleRad = maxAngleDegrees * (static_cast<float>(M_PI) / 180.0f);
+
+        bool isFacing = std::fabs(diff) <= maxAngleRad;
+        SKSE::log::debug("IsPlayerFacingTarget: angleToTarget={:.2f}, playerHeading={:.2f}, diff={:.2f}, threshold={:.2f} -> {}",
+            angleToTarget, playerHeading, diff, maxAngleRad, isFacing ? "FACING" : "NOT FACING");
+
+        return isFacing;
+    }
+
     // Kill target actor (for lethal feeds)
     void KillTarget(RE::Actor* target) {
         if (!target) {

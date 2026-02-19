@@ -617,6 +617,14 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
         }
     }
 
+    // 0.7. Check if player is facing target (camera can rotate independently in 3rd person)
+    if (settings->PromptDisplay.RequirePlayerFacing) {
+        if (!AnimUtil::IsPlayerFacingTarget(player, target, settings->PromptDisplay.FacingAngleThreshold)) {
+            SKSE::log::debug("IsValidFeedTarget: false - player not facing target");
+            return false;
+        }
+    }
+
     // 1. Check Player Status (Vampire/Werewolf, Hunger, Settings)
     // Pass target's combat state because it might bypass hunger checks
     bool targetInCombat = target->IsInCombat();

@@ -111,6 +111,7 @@ namespace AnimUtil {
     bool GetClosestDirection(RE::Actor* target, RE::Actor* reference);
     bool RotateTargetToClosest(RE::Actor* target, RE::Actor* reference);
     void RotateAttackerToTarget(RE::Actor* attacker, RE::Actor* target);
+    bool IsPlayerFacingTarget(RE::Actor* player, RE::Actor* target, float maxAngleDegrees = 90.0f);
 
     // Kill target actor (for lethal feeds)
     void KillTarget(RE::Actor* target);

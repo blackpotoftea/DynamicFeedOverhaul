@@ -36,6 +36,8 @@ public:
     // Prompt Display settings
     struct {
         bool RequireWeaponDrawn{ false };  // Only show prompt when weapon/magic drawn or in combat
+        bool RequirePlayerFacing{ true };  // Only show prompt when player is facing target
+        float FacingAngleThreshold{ 90.0f };  // Max angle (degrees) from player heading to target
     } PromptDisplay;
 
     // Non-combat feeding settings
