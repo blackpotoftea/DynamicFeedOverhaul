@@ -465,6 +465,7 @@ namespace AnimUtil {
     bool CanPlayerFeed(bool targetInCombat) {
         // First check if player is the right race
         if (!IsPlayerFeedingRace()) {
+            SKSE::log::debug("CanPlayerFeed: false - not a feeding race");
             return false;
         }
 
@@ -485,7 +486,9 @@ namespace AnimUtil {
             }
 
             int vampireStage = PapyrusCall::GetVampireStage();
+            SKSE::log::debug("CanPlayerFeed: vampireStage={}, minRequired={}", vampireStage, settings->General.MinHungerStage);
             if (vampireStage < settings->General.MinHungerStage) {
+                SKSE::log::debug("CanPlayerFeed: false - hunger stage {} < min {}", vampireStage, settings->General.MinHungerStage);
                 return false;
             }
         }
