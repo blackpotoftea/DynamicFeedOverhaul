@@ -822,6 +822,36 @@ namespace AnimUtil {
         return isRecent;
     }
 
+    // Dead feed count tracking (in-memory, resets on game reload)
+    static std::unordered_map<RE::FormID, int> g_DeadFeedCounts;
+    static std::mutex g_DeadFeedCountsMutex;
+
+    int GetDeadFeedCount(RE::Actor* actor) {
+        if (!actor) return 0;
+        std::lock_guard<std::mutex> lock(g_DeadFeedCountsMutex);
+        auto it = g_DeadFeedCounts.find(actor->GetFormID());
+        return (it != g_DeadFeedCounts.end()) ? it->second : 0;
+    }
+
+    void IncrementDeadFeedCount(RE::Actor* actor) {
+        if (!actor) return;
+        std::lock_guard<std::mutex> lock(g_DeadFeedCountsMutex);
+        g_DeadFeedCounts[actor->GetFormID()]++;
+        SKSE::log::debug("IncrementDeadFeedCount: {} now has {} feeds",
+            actor->GetName(), g_DeadFeedCounts[actor->GetFormID()]);
+    }
+
+    bool HasExceededDeadFeedLimit(RE::Actor* actor, int maxFeeds) {
+        if (maxFeeds <= 0) return false;  // 0 = unlimited
+        int count = GetDeadFeedCount(actor);
+        bool exceeded = count >= maxFeeds;
+        if (exceeded) {
+            SKSE::log::debug("HasExceededDeadFeedLimit: {} - count {} >= max {}",
+                actor->GetName(), count, maxFeeds);
+        }
+        return exceeded;
+    }
+
     // Check if attacker's attack should kill victim (uses game's ShouldAttackKill condition)
     // "Borrowed" from Pentalimbed
     bool ShouldAttackKill(const RE::Actor* attacker, const RE::Actor* victim) {

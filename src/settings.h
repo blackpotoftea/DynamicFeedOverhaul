@@ -80,6 +80,7 @@ public:
         bool ExcludeDead{ true };               // Skip dead actors
         bool AllowRecentlyDead{ false };        // Allow feeding on recently dead actors
         float MaxDeadHours{ 1.0f };             // Maximum hours since death to allow feeding
+        int MaxDeadFeeds{ 1 };                  // Maximum times to feed on a single corpse (0=unlimited)
         std::vector<std::string> IncludeKeywords;  // Only feed if has any of these keywords
         std::vector<std::string> ExcludeKeywords;  // Never feed if has any of these keywords
     } Filtering;

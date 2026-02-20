@@ -143,6 +143,7 @@ void Settings::LoadINI() {
     Filtering.ExcludeDead = ini.GetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead);
     Filtering.AllowRecentlyDead = ini.GetBoolValue("Filtering", "AllowRecentlyDead", Filtering.AllowRecentlyDead);
     Filtering.MaxDeadHours = static_cast<float>(ini.GetDoubleValue("Filtering", "MaxDeadHours", Filtering.MaxDeadHours));
+    Filtering.MaxDeadFeeds = static_cast<int>(ini.GetLongValue("Filtering", "MaxDeadFeeds", Filtering.MaxDeadFeeds));
     Filtering.IncludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "IncludeKeywords", ""));
     Filtering.ExcludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "ExcludeKeywords", ""));
 
@@ -180,9 +181,9 @@ void Settings::LoadINI() {
     SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging);
-    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, IncludeKW=[{}], ExcludeKW=[{}]",
+    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}]",
         Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
-        Filtering.AllowRecentlyDead, Filtering.MaxDeadHours,
+        Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold);
@@ -299,6 +300,8 @@ void Settings::SaveINI() {
         "; Allow feeding on recently dead actors (overrides ExcludeDead for fresh corpses)");
     ini.SetDoubleValue("Filtering", "MaxDeadHours", Filtering.MaxDeadHours,
         "; Maximum in-game hours since death to allow feeding (default 1.0 = 1 hour)");
+    ini.SetLongValue("Filtering", "MaxDeadFeeds", Filtering.MaxDeadFeeds,
+        "; Maximum times to feed on a single corpse (0=unlimited, resets on game reload)");
     ini.SetValue("Filtering", "IncludeKeywords", JoinKeywordList(Filtering.IncludeKeywords).c_str(),
         "; Only allow feeding if target has ANY of these keywords (comma-separated, empty=allow all)");
     ini.SetValue("Filtering", "ExcludeKeywords", JoinKeywordList(Filtering.ExcludeKeywords).c_str(),

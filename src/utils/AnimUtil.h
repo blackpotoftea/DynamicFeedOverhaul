@@ -124,6 +124,11 @@ namespace AnimUtil {
     // Check if actor is recently dead (within maxHours)
     bool IsRecentlyDead(RE::Actor* actor, float maxHours);
 
+    // Dead feed count tracking (in-memory, resets on game reload)
+    int GetDeadFeedCount(RE::Actor* actor);
+    void IncrementDeadFeedCount(RE::Actor* actor);
+    bool HasExceededDeadFeedLimit(RE::Actor* actor, int maxFeeds);
+
     // Check if attacker's attack should kill victim (uses game's ShouldAttackKill condition)
     bool ShouldAttackKill(const RE::Actor* attacker, const RE::Actor* victim);
 }

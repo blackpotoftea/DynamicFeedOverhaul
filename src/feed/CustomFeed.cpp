@@ -169,6 +169,15 @@ namespace CustomFeed {
         //     SKSE::log::debug("[CustomFeed] SetAIDriven(false) called");
         // }
 
+        // Increment dead feed count if target was dead (before clearing)
+        auto ref = feedTargetHandle_.get();
+        if (ref) {
+            auto* actor = ref->As<RE::Actor>();
+            if (actor && actor->IsDead()) {
+                AnimUtil::IncrementDeadFeedCount(actor);
+            }
+        }
+
         // Restore weapon/magic drawn state if it was drawn before feeding
         if (player && wasWeaponDrawn_) {
             SKSE::log::info("[CustomFeed] OnComplete: Restoring weapon drawn state");
