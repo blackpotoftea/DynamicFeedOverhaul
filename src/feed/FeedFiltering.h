@@ -17,10 +17,17 @@ namespace FeedFiltering {
         // Dead check - skip dead actors unless AllowRecentlyDead is enabled
         if (actor->IsDead()) {
             if (settings->Filtering.AllowRecentlyDead) {
+                // Check death time - returns -1 if invalid (pre-placed corpse or no AI process)
+                float hoursSinceDeath = AnimUtil::GetHoursSinceDeath(actor);
+                if (hoursSinceDeath < 0.0f) {
+                    SKSE::log::debug("Excluded: {} - invalid corpse (no death time, pre-placed or skeleton)",
+                        actor->GetName());
+                    return true;
+                }
                 // Check if recently dead
-                if (!AnimUtil::IsRecentlyDead(actor, settings->Filtering.MaxDeadHours)) {
-                    SKSE::log::debug("Excluded: {} - dead too long (>{:.2f}h)",
-                        actor->GetName(), settings->Filtering.MaxDeadHours);
+                if (hoursSinceDeath > settings->Filtering.MaxDeadHours) {
+                    SKSE::log::debug("Excluded: {} - dead too long ({:.2f}h > {:.2f}h limit)",
+                        actor->GetName(), hoursSinceDeath, settings->Filtering.MaxDeadHours);
                     return true;
                 }
                 // Check if feed limit exceeded
@@ -29,8 +36,8 @@ namespace FeedFiltering {
                         actor->GetName(), settings->Filtering.MaxDeadFeeds);
                     return true;
                 }
-                SKSE::log::debug("Allowed: {} - recently dead ({:.2f}h limit, {}/{} feeds)",
-                    actor->GetName(), settings->Filtering.MaxDeadHours,
+                SKSE::log::debug("Allowed: {} - recently dead ({:.2f}h/{:.2f}h, {}/{} feeds)",
+                    actor->GetName(), hoursSinceDeath, settings->Filtering.MaxDeadHours,
                     AnimUtil::GetDeadFeedCount(actor), settings->Filtering.MaxDeadFeeds);
                 // Continue to other checks - don't exclude
             } else if (settings->Filtering.ExcludeDead) {
