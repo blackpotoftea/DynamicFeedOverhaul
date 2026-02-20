@@ -146,6 +146,7 @@ void Settings::LoadINI() {
     Filtering.MaxDeadFeeds = static_cast<int>(ini.GetLongValue("Filtering", "MaxDeadFeeds", Filtering.MaxDeadFeeds));
     Filtering.IncludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "IncludeKeywords", ""));
     Filtering.ExcludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "ExcludeKeywords", ""));
+    Filtering.ExcludeActorIDs = ParseKeywordList(ini.GetValue("Filtering", "ExcludeActorIDs", ""));
 
     // IconOverlay
     IconOverlay.EnableIconOverlay = ini.GetBoolValue("IconOverlay", "EnableIconOverlay", IconOverlay.EnableIconOverlay);
@@ -181,10 +182,10 @@ void Settings::LoadINI() {
     SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging);
-    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}]",
+    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
         Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
-        JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords));
+        JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold);
     SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableBetterVampires={}",
@@ -306,6 +307,8 @@ void Settings::SaveINI() {
         "; Only allow feeding if target has ANY of these keywords (comma-separated, empty=allow all)");
     ini.SetValue("Filtering", "ExcludeKeywords", JoinKeywordList(Filtering.ExcludeKeywords).c_str(),
         "; Never allow feeding if target has ANY of these keywords (comma-separated)");
+    ini.SetValue("Filtering", "ExcludeActorIDs", JoinKeywordList(Filtering.ExcludeActorIDs).c_str(),
+        "; Never allow feeding on specific NPCs by base form ID (format: PluginName|0xFormID, e.g., Dawnguard.esm|0x002B6C for Serana)");
 
     // IconOverlay
     ini.SetBoolValue("IconOverlay", "EnableIconOverlay", IconOverlay.EnableIconOverlay,

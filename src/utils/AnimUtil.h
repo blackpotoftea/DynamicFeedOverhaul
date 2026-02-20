@@ -61,6 +61,9 @@ namespace AnimUtil {
     void playAnimation(RE::Actor* actor, const std::string& animation, float playbackSpeed);
     void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target = nullptr);
 
+    // Preprocessing for paired animations - clears stagger/attack/knockdown states
+    void PrepareActorForPairedIdle(RE::Actor* actor);
+
     // Position and rotation functions
     void setPosition(RE::Actor* actor, float x, float y, float z, float rotation);
     void setRotation(RE::Actor* actor, float rotation);

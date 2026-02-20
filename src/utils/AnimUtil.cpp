@@ -69,6 +69,29 @@ namespace AnimUtil {
         });
     }
 
+    // Preprocessing for paired animations - clears stagger/attack/knockdown states
+    // Must be called on main thread (via SKSE task)
+    void PrepareActorForPairedIdle(RE::Actor* actor) {
+        if (!actor) return;
+
+        // Stop any ongoing attack/stagger animations
+        actor->NotifyAnimationGraph("attackStop");
+        actor->NotifyAnimationGraph("staggerStop");
+
+        // Handle knocked-down state - force actor to normal state if getting up
+        auto* actorState = actor->AsActorState();
+        if (actorState) {
+            auto knockState = actorState->GetKnockState();
+            if (knockState == RE::KNOCK_STATE_ENUM::kGetUp ||
+                knockState == RE::KNOCK_STATE_ENUM::kQueued) {
+                actorState->actorState1.knockState = RE::KNOCK_STATE_ENUM::kNormal;
+                actor->NotifyAnimationGraph("GetUpEnd");
+                SKSE::log::debug("[AnimUtil::PrepareActorForPairedIdle] Reset knock state for {}",
+                    actor->GetName());
+            }
+        }
+    }
+
     // Play idle animation (thread-safe)
     void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target) {
         if (!actor || !idle) {
@@ -108,6 +131,7 @@ namespace AnimUtil {
             }
 
             RE::TESObjectREFR* t = nullptr;
+            RE::Actor* targetActor = nullptr;
             if (targetHandle) {
                 auto targetRefPtr = targetHandle.get();
                 if (!targetRefPtr) {
@@ -115,7 +139,15 @@ namespace AnimUtil {
                 } else {
                     // Target can be TESObjectREFR (for furniture/beds) or Actor, so we use .get()
                     t = targetRefPtr.get();
+                    targetActor = t->As<RE::Actor>();
                 }
+            }
+
+            // Preprocess for paired animations - clear stagger/attack/knockdown states
+            if (targetActor) {
+                SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
+                PrepareActorForPairedIdle(a);
+                PrepareActorForPairedIdle(targetActor);
             }
 
             auto* process = a->GetActorRuntimeData().currentProcess;

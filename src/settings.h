@@ -83,6 +83,7 @@ public:
         int MaxDeadFeeds{ 1 };                  // Maximum times to feed on a single corpse (0=unlimited)
         std::vector<std::string> IncludeKeywords;  // Only feed if has any of these keywords
         std::vector<std::string> ExcludeKeywords;  // Never feed if has any of these keywords
+        std::vector<std::string> ExcludeActorIDs;  // Never feed on specific NPC base IDs (format: PluginName|0xFormID)
     } Filtering;
 
     // Icon overlay settings

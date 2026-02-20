@@ -129,4 +129,63 @@ namespace FormUtils {
         Cache::KeywordsByEditorID.clear();
         SKSE::log::info("FormUtils: Cache cleared");
     }
+
+    // Check if actor's base form matches a specific form ID string (format: PluginName|0xFormID)
+    // Example: "Dawnguard.esm|0x002B6C" for Serana
+    inline bool MatchesBaseFormID(RE::Actor* actor, const std::string& formIDStr) {
+        if (!actor) return false;
+
+        // Parse the format: PluginName|0xFormID
+        size_t delimPos = formIDStr.find('|');
+        if (delimPos == std::string::npos) {
+            SKSE::log::warn("Invalid actor ID format (missing '|'): {}", formIDStr);
+            return false;
+        }
+
+        std::string pluginName = formIDStr.substr(0, delimPos);
+        std::string formIDPart = formIDStr.substr(delimPos + 1);
+
+        // Trim whitespace from both parts
+        auto trimWs = [](std::string& s) {
+            size_t start = s.find_first_not_of(" \t");
+            size_t end = s.find_last_not_of(" \t");
+            if (start == std::string::npos) {
+                s.clear();
+            } else {
+                s = s.substr(start, end - start + 1);
+            }
+        };
+        trimWs(pluginName);
+        trimWs(formIDPart);
+
+        if (pluginName.empty() || formIDPart.empty()) {
+            SKSE::log::warn("Invalid actor ID format (empty plugin or formID): {}", formIDStr);
+            return false;
+        }
+
+        // Parse form ID (supports 0x prefix or plain hex)
+        RE::FormID targetFormID = 0;
+        try {
+            targetFormID = static_cast<RE::FormID>(std::stoul(formIDPart, nullptr, 16));
+        } catch (...) {
+            SKSE::log::warn("Invalid form ID hex value: {}", formIDPart);
+            return false;
+        }
+
+        // Get actor's base form (TESNPC)
+        auto* baseForm = actor->GetActorBase();
+        if (!baseForm) return false;
+
+        // Lookup the target form from the specified plugin
+        auto* dataHandler = RE::TESDataHandler::GetSingleton();
+        if (!dataHandler) return false;
+
+        auto* targetForm = dataHandler->LookupForm(targetFormID, pluginName);
+        if (!targetForm) {
+            // Plugin or form might not exist - this is fine, just means no match
+            return false;
+        }
+
+        return baseForm == targetForm;
+    }
 }

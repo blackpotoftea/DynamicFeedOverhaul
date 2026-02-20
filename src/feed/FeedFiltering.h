@@ -75,6 +75,14 @@ namespace FeedFiltering {
             }
         }
 
+        // Exclude actor IDs check (if matches any excluded base form ID, exclude)
+        for (const auto& actorID : settings->Filtering.ExcludeActorIDs) {
+            if (FormUtils::MatchesBaseFormID(actor, actorID)) {
+                SKSE::log::debug("Excluded: {} - matches excluded actor ID '{}'", actor->GetName(), actorID);
+                return true;
+            }
+        }
+
         // Include keywords check (if list not empty, must have at least one)
         if (!settings->Filtering.IncludeKeywords.empty()) {
             bool hasIncludedKeyword = false;
