@@ -15,6 +15,7 @@ namespace AnimUtil {
     constexpr int kSleeping = 20;
     constexpr int kSitting = 30;
     constexpr int kCombat = 40;
+    constexpr int kDead = 50;
 
     // Lightweight position and alignment structs
     struct Position {
@@ -115,4 +116,14 @@ namespace AnimUtil {
 
     // Kill target actor (for lethal feeds)
     void KillTarget(RE::Actor* target);
+
+    // Death time utilities
+    // Returns hours since death, or -1.0f if actor is not dead or has no process
+    float GetHoursSinceDeath(RE::Actor* actor);
+
+    // Check if actor is recently dead (within maxHours)
+    bool IsRecentlyDead(RE::Actor* actor, float maxHours);
+
+    // Check if attacker's attack should kill victim (uses game's ShouldAttackKill condition)
+    bool ShouldAttackKill(const RE::Actor* attacker, const RE::Actor* victim);
 }

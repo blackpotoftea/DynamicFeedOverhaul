@@ -2,6 +2,7 @@
 #include "Settings.h"
 #include "feed/TargetState.h"
 #include "utils/FormUtils.h"
+#include "utils/AnimUtil.h"
 
 // Feed target filtering/exclusion logic
 namespace FeedFiltering {
@@ -13,9 +14,20 @@ namespace FeedFiltering {
         auto* settings = Settings::GetSingleton();
         auto* player = RE::PlayerCharacter::GetSingleton();
 
-        // Dead check - skip dead actors
-        if (settings->Filtering.ExcludeDead) {
-            if (actor->IsDead()) {
+        // Dead check - skip dead actors unless AllowRecentlyDead is enabled
+        if (actor->IsDead()) {
+            if (settings->Filtering.AllowRecentlyDead) {
+                // Check if recently dead
+                if (AnimUtil::IsRecentlyDead(actor, settings->Filtering.MaxDeadHours)) {
+                    SKSE::log::debug("Allowed: {} - recently dead ({:.2f}h limit)",
+                        actor->GetName(), settings->Filtering.MaxDeadHours);
+                    // Continue to other checks - don't exclude
+                } else {
+                    SKSE::log::debug("Excluded: {} - dead too long (>{:.2f}h)",
+                        actor->GetName(), settings->Filtering.MaxDeadHours);
+                    return true;
+                }
+            } else if (settings->Filtering.ExcludeDead) {
                 SKSE::log::debug("Excluded: {} - actor is dead", actor->GetName());
                 return true;
             }

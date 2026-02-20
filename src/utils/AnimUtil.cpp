@@ -6,6 +6,17 @@
 #include <memory>
 #include <mutex>
 #include <unordered_set>
+#include <bit>
+
+namespace {
+    // Union for condition parameter handling
+    union ConditionParam {
+        char         c;
+        std::int32_t i;
+        float        f;
+        RE::TESForm* form;
+    };
+}
 
 namespace AnimUtil {
     // Continuous task management
@@ -508,6 +519,11 @@ namespace AnimUtil {
     }
 
     int DetermineTargetState(RE::Actor* target, bool& outIsInCombat) {
+        // Check dead first - dead actors are never in combat
+        if (target->IsDead()) {
+            outIsInCombat = false;
+            return AnimUtil::kDead;
+        }
         outIsInCombat = target->IsInCombat();
         if (outIsInCombat) return AnimUtil::kCombat;
         else if (TargetState::IsSleeping(target)) return AnimUtil::kSleeping;
@@ -564,6 +580,14 @@ namespace AnimUtil {
                 SKSE::log::debug("Player is Vampire Lord - using VL feed");
                 return isBehind ? CustomFeed::Idles::VAMPIRELORD_STANDING_BACK : CustomFeed::Idles::VAMPIRELORD_STANDING_FRONT;
             }
+        }
+
+        // Dead targets use bedroll animation (corpse on ground)
+        if (targetState == AnimUtil::kDead) {
+            outIsPairedAnim = false;
+            bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
+            SKSE::log::debug("Dead target - using bedroll {} side (solo idle)", isLeft ? "left" : "right");
+            return isLeft ? CustomFeed::Idles::VAMPIRE_BEDROLL_LEFT : CustomFeed::Idles::VAMPIRE_BEDROLL_RIGHT;
         }
 
         if (targetState == AnimUtil::kSleeping && furnitureRef) {
@@ -752,5 +776,69 @@ namespace AnimUtil {
                 }
             }
         });
+    }
+
+    // Get hours since actor died
+    // Returns -1.0f if actor is not dead or has no AI process
+    float GetHoursSinceDeath(RE::Actor* actor) {
+        if (!actor || !actor->IsDead()) {
+            return -1.0f;
+        }
+
+        auto* process = actor->GetActorRuntimeData().currentProcess;
+        if (!process) {
+            SKSE::log::debug("GetHoursSinceDeath: {} has no AI process", actor->GetName());
+            return -1.0f;
+        }
+
+        // Get death time from AI process
+        float deathTime = process->deathTime;
+
+        // Get current game time in hours
+        auto* calendar = RE::Calendar::GetSingleton();
+        if (!calendar) {
+            SKSE::log::warn("GetHoursSinceDeath: Calendar singleton not available");
+            return -1.0f;
+        }
+
+        float currentGameHours = calendar->GetHoursPassed();
+        float hoursSinceDeath = currentGameHours - deathTime;
+
+        SKSE::log::debug("GetHoursSinceDeath: {} - deathTime={:.2f}, currentHours={:.2f}, hoursSinceDeath={:.2f}",
+            actor->GetName(), deathTime, currentGameHours, hoursSinceDeath);
+
+        return hoursSinceDeath;
+    }
+
+    // Check if actor died recently (within maxHours)
+    bool IsRecentlyDead(RE::Actor* actor, float maxHours) {
+        float hoursSinceDeath = GetHoursSinceDeath(actor);
+        if (hoursSinceDeath < 0.0f) {
+            return false;  // Not dead or no process
+        }
+        bool isRecent = hoursSinceDeath <= maxHours;
+        SKSE::log::debug("IsRecentlyDead: {} - {:.2f} hours since death, max={:.2f}, isRecent={}",
+            actor->GetName(), hoursSinceDeath, maxHours, isRecent);
+        return isRecent;
+    }
+
+    // Check if attacker's attack should kill victim (uses game's ShouldAttackKill condition)
+    // "Borrowed" from Pentalimbed
+    bool ShouldAttackKill(const RE::Actor* attacker, const RE::Actor* victim) {
+        static RE::TESConditionItem cond;
+        static std::once_flag       flag;
+        std::call_once(flag, [&]() {
+            cond.data.functionData.function = RE::FUNCTION_DATA::FunctionID::kShouldAttackKill;
+            cond.data.flags.opCode          = RE::CONDITION_ITEM_DATA::OpCode::kEqualTo;
+            cond.data.comparisonValue.f     = 1.0f;
+        });
+
+        ConditionParam cond_param;
+        cond_param.form                  = const_cast<RE::TESObjectREFR*>(victim->As<RE::TESObjectREFR>());
+        cond.data.functionData.params[0] = std::bit_cast<void*>(cond_param);
+
+        RE::ConditionCheckParams params(const_cast<RE::TESObjectREFR*>(attacker->As<RE::TESObjectREFR>()),
+                                        const_cast<RE::TESObjectREFR*>(victim->As<RE::TESObjectREFR>()));
+        return cond(params);
     }
 }

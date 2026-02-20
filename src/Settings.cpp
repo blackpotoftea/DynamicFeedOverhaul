@@ -141,6 +141,8 @@ void Settings::LoadINI() {
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
     Filtering.ExcludeOStimScenes = ini.GetBoolValue("Filtering", "ExcludeOStimScenes", Filtering.ExcludeOStimScenes);
     Filtering.ExcludeDead = ini.GetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead);
+    Filtering.AllowRecentlyDead = ini.GetBoolValue("Filtering", "AllowRecentlyDead", Filtering.AllowRecentlyDead);
+    Filtering.MaxDeadHours = static_cast<float>(ini.GetDoubleValue("Filtering", "MaxDeadHours", Filtering.MaxDeadHours));
     Filtering.IncludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "IncludeKeywords", ""));
     Filtering.ExcludeKeywords = ParseKeywordList(ini.GetValue("Filtering", "ExcludeKeywords", ""));
 
@@ -178,8 +180,9 @@ void Settings::LoadINI() {
     SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging);
-    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, IncludeKW=[{}], ExcludeKW=[{}]",
+    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, IncludeKW=[{}], ExcludeKW=[{}]",
         Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
+        Filtering.AllowRecentlyDead, Filtering.MaxDeadHours,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold);
@@ -292,6 +295,10 @@ void Settings::SaveINI() {
         "; Exclude targets in OStim NG scenes (auto-detects OStim, gracefully disabled if not installed)");
     ini.SetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead,
         "; Exclude dead actors from feeding");
+    ini.SetBoolValue("Filtering", "AllowRecentlyDead", Filtering.AllowRecentlyDead,
+        "; Allow feeding on recently dead actors (overrides ExcludeDead for fresh corpses)");
+    ini.SetDoubleValue("Filtering", "MaxDeadHours", Filtering.MaxDeadHours,
+        "; Maximum in-game hours since death to allow feeding (default 1.0 = 1 hour)");
     ini.SetValue("Filtering", "IncludeKeywords", JoinKeywordList(Filtering.IncludeKeywords).c_str(),
         "; Only allow feeding if target has ANY of these keywords (comma-separated, empty=allow all)");
     ini.SetValue("Filtering", "ExcludeKeywords", JoinKeywordList(Filtering.ExcludeKeywords).c_str(),

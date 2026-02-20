@@ -78,6 +78,8 @@ public:
         bool ExcludeInScene{ true };            // Skip actors in scenes (dialogues, scripted events)
         bool ExcludeOStimScenes{ true };        // Skip actors in OStim scenes (requires OStim NG)
         bool ExcludeDead{ true };               // Skip dead actors
+        bool AllowRecentlyDead{ false };        // Allow feeding on recently dead actors
+        float MaxDeadHours{ 1.0f };             // Maximum hours since death to allow feeding
         std::vector<std::string> IncludeKeywords;  // Only feed if has any of these keywords
         std::vector<std::string> ExcludeKeywords;  // Never feed if has any of these keywords
     } Filtering;
