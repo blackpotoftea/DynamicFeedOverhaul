@@ -102,6 +102,8 @@ public:
     struct {
         bool EnableRandomSelection{ true };     // Enable random animation from available list
         int HungryThreshold{ 3 };               // Hunger stage >= this uses hungry animations (1-4)
+        bool EnableTimeSlowdown{ true };        // Enable time slowdown when paired feed starts
+        float TimeSlowdownMultiplier{ 0.6f };   // Time multiplier during feed (0.4 = 40% speed)
     } Animation;
 
     // Integration settings

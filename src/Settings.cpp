@@ -161,6 +161,8 @@ void Settings::LoadINI() {
     // Animation
     Animation.EnableRandomSelection = ini.GetBoolValue("Animation", "EnableRandomSelection", Animation.EnableRandomSelection);
     Animation.HungryThreshold = static_cast<int>(ini.GetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold));
+    Animation.EnableTimeSlowdown = ini.GetBoolValue("Animation", "EnableTimeSlowdown", Animation.EnableTimeSlowdown);
+    Animation.TimeSlowdownMultiplier = static_cast<float>(ini.GetDoubleValue("Animation", "TimeSlowdownMultiplier", Animation.TimeSlowdownMultiplier));
 
     // Integration
     Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
@@ -188,8 +190,8 @@ void Settings::LoadINI() {
         Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
-    SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}",
-        Animation.EnableRandomSelection, Animation.HungryThreshold);
+    SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}",
+        Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier);
     SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableBetterVampires={}",
         Integration.EnableSacrosanct, Integration.EnableBetterVampires);
 }
@@ -331,6 +333,10 @@ void Settings::SaveINI() {
         "; Enable random animation selection from available FeedType lists");
     ini.SetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold,
         "; Hunger stage >= this uses hungry animations (1=sated, 2=peckish, 3=hungry, 4=starving)");
+    ini.SetBoolValue("Animation", "EnableTimeSlowdown", Animation.EnableTimeSlowdown,
+        "; Enable time slowdown effect when paired feed animation starts");
+    ini.SetDoubleValue("Animation", "TimeSlowdownMultiplier", Animation.TimeSlowdownMultiplier,
+        "; Time multiplier during feed (0.4 = 40% speed, 1.0 = normal speed)");
 
     // Integration
     ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,

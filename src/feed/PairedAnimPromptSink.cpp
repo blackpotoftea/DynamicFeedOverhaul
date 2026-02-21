@@ -29,11 +29,30 @@ namespace FeedAnimState {
     void MarkFeedStarted() {
         feedState.store(State::Active, std::memory_order_release);
         SKSE::log::debug("Feed animation started - skipping paired animation exclusion");
+
+        // Apply time slowdown if enabled and player is in combat
+        auto* settings = Settings::GetSingleton();
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        bool isCombat = player && player->IsInCombat();
+
+        if (settings->Animation.EnableTimeSlowdown && isCombat) {
+            auto* timer = RE::BSTimer::GetSingleton();
+            if (timer) {
+                timer->SetGlobalTimeMultiplier(settings->Animation.TimeSlowdownMultiplier, true);
+                SKSE::log::info("Combat feed time slowdown applied: {}x", settings->Animation.TimeSlowdownMultiplier);
+            }
+        }
     }
 
     void MarkFeedEnded() {
         feedState.store(State::Ended, std::memory_order_release);
         SKSE::log::info("Feed animation ended");
+
+        // Always reset time multiplier to normal (safe even if not slowed)
+        auto* timer = RE::BSTimer::GetSingleton();
+        if (timer) {
+            timer->SetGlobalTimeMultiplier(1.0f, true);
+        }
 
         // Clear kill move flag (was set to prevent Quick Loot etc. during animation)
         if (auto* player = RE::PlayerCharacter::GetSingleton()) {

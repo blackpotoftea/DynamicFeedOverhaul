@@ -63,7 +63,6 @@ namespace AnimUtil {
         SKSE::GetTaskInterface()->AddTask([actorHandle, animation, playbackSpeed] {
             auto actorRef = actorHandle.get();
             if (auto* a = actorRef.get()) {
-                a->SetGraphVariableFloat("OStimSpeed", playbackSpeed);
                 a->NotifyAnimationGraph(animation);
             }
         });
@@ -280,7 +279,6 @@ namespace AnimUtil {
                     RE::PlayerCharacter::GetSingleton()->SetAIDriven(false);
                     RE::PlayerControls::GetSingleton()->activateHandler->disabled = false;
 
-                    a->SetGraphVariableFloat("OStimSpeed", 1.0f);
                     a->SetGraphVariableBool("bHumanoidFootIKDisable", false);
                     a->SetGraphVariableBool("bHeadTrackSpine", true);
                     a->SetGraphVariableBool("bHeadTracking", true);
@@ -294,7 +292,6 @@ namespace AnimUtil {
             SKSE::GetTaskInterface()->AddTask([actorHandle] {
                 auto actorRef = actorHandle.get();
                 if (auto* a = actorRef.get()) {
-                    a->SetGraphVariableFloat("OStimSpeed", 1.0f);
                     a->SetGraphVariableBool("bHumanoidFootIKDisable", false);
                     a->SetGraphVariableBool("bHeadTrackSpine", true);
                     a->SetGraphVariableBool("bHeadTracking", true);
