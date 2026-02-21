@@ -903,4 +903,43 @@ namespace AnimUtil {
                                         const_cast<RE::TESObjectREFR*>(victim->As<RE::TESObjectREFR>()));
         return cond(params);
     }
+
+    // Set or clear the kill move flag on an actor
+    // This blocks Quick Loot and other activation during paired animations
+    void SetInKillMove(RE::Actor* actor, bool inKillMove) {
+        if (!actor) return;
+
+        if (inKillMove) {
+            actor->GetActorRuntimeData().boolFlags.set(RE::Actor::BOOL_FLAGS::kIsInKillMove);
+        } else {
+            actor->GetActorRuntimeData().boolFlags.reset(RE::Actor::BOOL_FLAGS::kIsInKillMove);
+        }
+        SKSE::log::debug("SetInKillMove: {} = {}", actor->GetName(), inKillMove);
+    }
+
+    // Check if actor is currently in a kill move
+    bool IsInKillMove(RE::Actor* actor) {
+        if (!actor) return false;
+        return actor->GetActorRuntimeData().boolFlags.all(RE::Actor::BOOL_FLAGS::kIsInKillMove);
+    }
+
+    // Check if actor is jumping
+    bool IsJumping(RE::Actor* actor) {
+        if (!actor) return false;
+        bool res = false;
+        actor->GetGraphVariableBool("bInJumpState", res);
+        return res && actor->IsInMidair();
+    }
+
+    // Check if actor is riding a mount
+    bool IsRiding(RE::Actor* actor) {
+        if (!actor) return false;
+        return actor->AsActorState()->actorState1.sitSleepState == RE::SIT_SLEEP_STATE::kRidingMount;
+    }
+
+    // Check if actor is swimming
+    bool IsSwimming(RE::Actor* actor) {
+        if (!actor) return false;
+        return actor->AsActorState()->actorState1.swimming;
+    }
 }

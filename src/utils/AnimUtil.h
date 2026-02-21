@@ -134,4 +134,13 @@ namespace AnimUtil {
 
     // Check if attacker's attack should kill victim (uses game's ShouldAttackKill condition)
     bool ShouldAttackKill(const RE::Actor* attacker, const RE::Actor* victim);
+
+    // Kill move flag management (blocks Quick Loot and other activation during paired animations)
+    void SetInKillMove(RE::Actor* actor, bool inKillMove);
+    bool IsInKillMove(RE::Actor* actor);
+
+    // Actor state checks
+    bool IsJumping(RE::Actor* actor);
+    bool IsRiding(RE::Actor* actor);
+    bool IsSwimming(RE::Actor* actor);
 }

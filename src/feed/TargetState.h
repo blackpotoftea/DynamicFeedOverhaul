@@ -146,6 +146,14 @@ namespace TargetState {
         return actorState->IsBleedingOut();
     }
 
+    // Check if actor is staggered
+    inline bool IsStaggered(RE::Actor* actor) {
+        if (!actor) return false;
+        auto actorState = actor->AsActorState();
+        if (!actorState) return false;
+        return actorState->actorState2.staggered;
+    }
+
     // Check if actor is conscious and able to witness (not sleeping, unconscious, or bleeding out)
     inline bool IsConsciousAndAware(RE::Actor* actor) {
         if (!actor) return false;

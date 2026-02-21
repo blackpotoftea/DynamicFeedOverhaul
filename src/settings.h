@@ -56,6 +56,7 @@ public:
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)
         bool EnableLethalFeed{ false };      // Enable hold-to-kill feature for non-combat targets
         float LethalHoldDuration{ 5.0f };    // Seconds to hold button for lethal feed
+        bool ExcludeEssentialFromLethal{ true };  // Don't show kill prompt for Essential actors
         bool EnableRotation{ true };         // Rotate player/target to face each other before feed
     } NonCombat;
 
@@ -65,6 +66,7 @@ public:
         bool IgnoreHungerCheck{ true };  // Allow combat feeding even when not hungry
         bool RequireLowHealth{ false };
         float LowHealthThreshold{ 0.25f };
+        bool AllowStaggered{ true };     // Allow feeding on staggered targets (bypasses health check)
         bool EnableWitnessDetection{ true };     // Stop feed if witnessed by NPCs
         float WitnessDetectionRadius{ 1500.0f }; // Detection radius in units (~1500 = reasonable distance)
         float WitnessCheckInterval{ 0.5f };      // How often to check for witnesses during feed (seconds)

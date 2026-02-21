@@ -35,6 +35,11 @@ namespace FeedAnimState {
         feedState.store(State::Ended, std::memory_order_release);
         SKSE::log::info("Feed animation ended");
 
+        // Clear kill move flag (was set to prevent Quick Loot etc. during animation)
+        if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+            AnimUtil::SetInKillMove(player, false);
+        }
+
         // Clear the active feed target
         PairedAnimPromptSink::GetSingleton()->activeFeedTargetHandle_.reset();
 
@@ -312,6 +317,9 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (!player) return;
 
+    // Mark player as in kill move to prevent Quick Loot and other mods from interfering
+    AnimUtil::SetInKillMove(player, true);
+
     auto* settings = Settings::GetSingleton();
     auto furnitureRef = TargetState::GetFurnitureReference(feedTarget);
 
@@ -511,8 +519,16 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
         // Check if target is NOT in combat and lethal feed is enabled
         bool targetInCombat = target->IsInCombat();
         bool playerInCombat = player && player->IsInCombat();
+        bool isEssential = TargetState::IsEssentialOrProtected(target);
 
-        if (!targetInCombat && !playerInCombat && settings->NonCombat.EnableLethalFeed) {
+        // Show kill prompt only if: not in combat, lethal feed enabled, and not excluded Essential actor
+        bool canShowLethalPrompt = !targetInCombat && !playerInCombat && settings->NonCombat.EnableLethalFeed;
+        if (canShowLethalPrompt && settings->NonCombat.ExcludeEssentialFromLethal && isEssential) {
+            canShowLethalPrompt = false;
+            SKSE::log::info("SetTarget: Excluding Essential actor {} from lethal prompt", target->GetName());
+        }
+
+        if (canShowLethalPrompt) {
             // Use HOLD prompt for non-combat (lethal feed)
             promptType = SkyPromptAPI::PromptType::kHold;
             promptText = "Feed (Hold to Kill)";
@@ -521,8 +537,8 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
             SKSE::log::info("SetTarget: Using kHold prompt (lethal feed enabled) - target: {}, duration: {}s",
                 target->GetName(), progressValue);
         } else {
-            SKSE::log::info("SetTarget: Using kSinglePress prompt - target: {}, targetInCombat: {}, playerInCombat: {}",
-                target->GetName(), targetInCombat, playerInCombat);
+            SKSE::log::info("SetTarget: Using kSinglePress prompt - target: {}, targetInCombat: {}, playerInCombat: {}, isEssential: {}",
+                target->GetName(), targetInCombat, playerInCombat, isEssential);
         }
 
         prompts_[0] = SkyPromptAPI::Prompt(
@@ -623,6 +639,30 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
             SKSE::log::debug("IsValidFeedTarget: false - player not facing target");
             return false;
         }
+    }
+
+    // 0.8. Check if player is swimming or riding
+    if (AnimUtil::IsSwimming(player)) {
+        SKSE::log::debug("IsValidFeedTarget: false - player is swimming");
+        return false;
+    }
+    if (AnimUtil::IsRiding(player)) {
+        SKSE::log::debug("IsValidFeedTarget: false - player is riding a mount");
+        return false;
+    }
+    if (AnimUtil::IsJumping(player)) {
+        SKSE::log::debug("IsValidFeedTarget: false - player is jumping");
+        return false;
+    }
+
+    // 0.9. Check if target is swimming or riding
+    if (AnimUtil::IsSwimming(target)) {
+        SKSE::log::debug("IsValidFeedTarget: false - target {} is swimming", target->GetName());
+        return false;
+    }
+    if (AnimUtil::IsRiding(target)) {
+        SKSE::log::debug("IsValidFeedTarget: false - target {} is riding a mount", target->GetName());
+        return false;
     }
 
     // 1. Check Player Status (Vampire/Werewolf, Hunger, Settings)

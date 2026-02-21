@@ -113,6 +113,12 @@ namespace FeedFiltering {
             return true;
         }
 
+        // Allow feeding on staggered targets in combat (bypasses health check)
+        if (settings->Combat.AllowStaggered && TargetState::IsStaggered(actor)) {
+            SKSE::log::debug("Combat path: {} - allowed (target is staggered)", actor->GetName());
+            return false;
+        }
+
         // Check if low health is required
         if (settings->Combat.RequireLowHealth) {
             auto* avOwner = actor->AsActorValueOwner();
