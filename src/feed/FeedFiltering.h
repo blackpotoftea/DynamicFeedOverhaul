@@ -54,19 +54,6 @@ namespace FeedFiltering {
             }
         }
 
-        // Level check
-        if (settings->Filtering.EnableLevelCheck && player) {
-            int playerLevel = player->GetLevel();
-            int targetLevel = actor->GetLevel();
-            int levelDiff = targetLevel - playerLevel;
-
-            if (levelDiff > settings->Filtering.MaxLevelDifference) {
-                SKSE::log::debug("Excluded: {} - level {} is {} above player level {} (max diff: {})",
-                    actor->GetName(), targetLevel, levelDiff, playerLevel, settings->Filtering.MaxLevelDifference);
-                return true;
-            }
-        }
-
         // Exclude keywords check (if has any excluded keyword, exclude)
         for (const auto& kw : settings->Filtering.ExcludeKeywords) {
             if (FormUtils::HasKeywordByEditorID(actor, kw)) {
@@ -143,6 +130,20 @@ namespace FeedFiltering {
         if (!actor) return true;
 
         auto* settings = Settings::GetSingleton();
+        auto* player = RE::PlayerCharacter::GetSingleton();
+
+        // Level check (only applies outside combat)
+        if (settings->Filtering.EnableLevelCheck && player) {
+            int playerLevel = player->GetLevel();
+            int targetLevel = actor->GetLevel();
+            int levelDiff = targetLevel - playerLevel;
+
+            if (levelDiff > settings->Filtering.MaxLevelDifference) {
+                SKSE::log::debug("NonCombat: {} - excluded (level {} is {} above player level {}, max diff: {})",
+                    actor->GetName(), targetLevel, levelDiff, playerLevel, settings->Filtering.MaxLevelDifference);
+                return true;
+            }
+        }
 
         bool isSitting = TargetState::IsSitting(actor);
         bool isSleeping = TargetState::IsSleeping(actor);

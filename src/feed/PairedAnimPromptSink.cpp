@@ -535,29 +535,38 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
         float progressValue = 0.0f;
         uint32_t textColor = 0xFFFFFFFF;  // White (AABBGGRR format)
 
-        // Check if target is NOT in combat and lethal feed is enabled
-        bool targetInCombat = target->IsInCombat();
-        bool playerInCombat = player && player->IsInCombat();
-        bool isEssential = TargetState::IsEssentialOrProtected(target);
+        // Check if target is dead - use different prompt for corpses
+        bool targetIsDead = target->IsDead();
 
-        // Show kill prompt only if: not in combat, lethal feed enabled, and not excluded Essential actor
-        bool canShowLethalPrompt = !targetInCombat && !playerInCombat && settings->NonCombat.EnableLethalFeed;
-        if (canShowLethalPrompt && settings->NonCombat.ExcludeEssentialFromLethal && isEssential) {
-            canShowLethalPrompt = false;
-            SKSE::log::info("SetTarget: Excluding Essential actor {} from lethal prompt", target->GetName());
-        }
-
-        if (canShowLethalPrompt) {
-            // Use HOLD prompt for non-combat (lethal feed)
-            promptType = SkyPromptAPI::PromptType::kHold;
-            promptText = "Feed (Hold to Kill)";
-            progressValue = settings->NonCombat.LethalHoldDuration;
-            textColor = 0xFF5555FF;  // Red warning color for lethal option
-            SKSE::log::info("SetTarget: Using kHold prompt (lethal feed enabled) - target: {}, duration: {}s",
-                target->GetName(), progressValue);
+        if (targetIsDead) {
+            // Dead targets get simple "Drain Corpse" prompt (no hold-to-kill option)
+            promptText = "Drain Corpse";
+            SKSE::log::info("SetTarget: Using corpse prompt - target: {}", target->GetName());
         } else {
-            SKSE::log::info("SetTarget: Using kSinglePress prompt - target: {}, targetInCombat: {}, playerInCombat: {}, isEssential: {}",
-                target->GetName(), targetInCombat, playerInCombat, isEssential);
+            // Check if target is NOT in combat and lethal feed is enabled
+            bool targetInCombat = target->IsInCombat();
+            bool playerInCombat = player && player->IsInCombat();
+            bool isEssential = TargetState::IsEssentialOrProtected(target);
+
+            // Show kill prompt only if: not in combat, lethal feed enabled, and not excluded Essential actor
+            bool canShowLethalPrompt = !targetInCombat && !playerInCombat && settings->NonCombat.EnableLethalFeed;
+            if (canShowLethalPrompt && settings->NonCombat.ExcludeEssentialFromLethal && isEssential) {
+                canShowLethalPrompt = false;
+                SKSE::log::info("SetTarget: Excluding Essential actor {} from lethal prompt", target->GetName());
+            }
+
+            if (canShowLethalPrompt) {
+                // Use HOLD prompt for non-combat (lethal feed)
+                promptType = SkyPromptAPI::PromptType::kHold;
+                promptText = "Feed (Hold to Kill)";
+                progressValue = settings->NonCombat.LethalHoldDuration;
+                textColor = 0xFF5555FF;  // Red warning color for lethal option
+                SKSE::log::info("SetTarget: Using kHold prompt (lethal feed enabled) - target: {}, duration: {}s",
+                    target->GetName(), progressValue);
+            } else {
+                SKSE::log::info("SetTarget: Using kSinglePress prompt - target: {}, targetInCombat: {}, playerInCombat: {}, isEssential: {}",
+                    target->GetName(), targetInCombat, playerInCombat, isEssential);
+            }
         }
 
         prompts_[0] = SkyPromptAPI::Prompt(

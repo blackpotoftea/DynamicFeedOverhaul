@@ -519,6 +519,12 @@ namespace AnimUtil {
         bool isWerewolf = TargetState::IsWerewolf(player);
         bool isVampireLord = TargetState::IsVampireLord(player);
 
+        // Always log vampire stage for debugging (vampires and vampire lords)
+        if (isVampire || isVampireLord) {
+            int vampireStage = PapyrusCall::GetVampireStage();
+            SKSE::log::info("CanPlayerFeed: vampireStage={}, isVampireLord={}", vampireStage, isVampireLord);
+        }
+
         if (isVampire && !isVampireLord && !isWerewolf && settings->General.CheckHungerStage) {
             // Combat targets can bypass hunger check if IgnoreHungerCheck is enabled
             if (targetInCombat && settings->Combat.IgnoreHungerCheck) {
