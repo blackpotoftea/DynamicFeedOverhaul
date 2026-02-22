@@ -648,9 +648,16 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
         return false;
     }
 
-    // 0.6. Check if player has weapon/magic drawn OR is in combat (if required by settings)
+    // 0.6. Check prompt display conditions
     auto* settings = Settings::GetSingleton();
-    if (settings->PromptDisplay.RequireWeaponDrawn) {
+
+    // ShowWhenSneaking: If enabled and player is sneaking, always show prompt
+    if (settings->PromptDisplay.ShowWhenSneaking && player->IsSneaking()) {
+        SKSE::log::debug("IsValidFeedTarget: sneaking bypass - showing prompt");
+        // Skip weapon/combat checks, continue to other validations
+    }
+    // RequireWeaponDrawn: If enabled, require weapon drawn OR in combat
+    else if (settings->PromptDisplay.RequireWeaponDrawn) {
         auto* playerState = player->AsActorState();
         bool weaponDrawn = playerState && playerState->IsWeaponDrawn();
         bool playerInCombat = player->IsInCombat();

@@ -12,7 +12,6 @@ namespace FeedFiltering {
         if (!actor) return true;
 
         auto* settings = Settings::GetSingleton();
-        auto* player = RE::PlayerCharacter::GetSingleton();
 
         // Dead check - skip dead actors unless AllowRecentlyDead is enabled
         if (actor->IsDead()) {
@@ -39,14 +38,16 @@ namespace FeedFiltering {
                 SKSE::log::debug("Allowed: {} - recently dead ({:.2f}h/{:.2f}h, {}/{} feeds)",
                     actor->GetName(), hoursSinceDeath, settings->Filtering.MaxDeadHours,
                     AnimUtil::GetDeadFeedCount(actor), settings->Filtering.MaxDeadFeeds);
-                // Continue to other checks - don't exclude
+                // Dead targets that pass the above checks skip all other filters
+                // (no level check, no scene check, no keyword restrictions)
+                return false;
             } else if (settings->Filtering.ExcludeDead) {
                 SKSE::log::debug("Excluded: {} - actor is dead", actor->GetName());
                 return true;
             }
         }
 
-        // Scene check - skip actors in dialogues/scripted events
+        // Scene check - skip actors in dialogues/scripted events (living only)
         if (settings->Filtering.ExcludeInScene) {
             if (actor->GetCurrentScene() != nullptr) {
                 SKSE::log::debug("Excluded: {} - currently in a scene", actor->GetName());
@@ -129,10 +130,17 @@ namespace FeedFiltering {
     inline bool IsExcludedNonCombat(RE::Actor* actor) {
         if (!actor) return true;
 
+        // Dead actors skip all non-combat restrictions (level, posture, etc.)
+        // They were already validated in IsExcludedByFilters for death time and feed limits
+        if (actor->IsDead()) {
+            SKSE::log::debug("NonCombat: {} - skipping checks (dead)", actor->GetName());
+            return false;
+        }
+
         auto* settings = Settings::GetSingleton();
         auto* player = RE::PlayerCharacter::GetSingleton();
 
-        // Level check (only applies outside combat)
+        // Level check (only applies outside combat, living targets only)
         if (settings->Filtering.EnableLevelCheck && player) {
             int playerLevel = player->GetLevel();
             int targetLevel = actor->GetLevel();

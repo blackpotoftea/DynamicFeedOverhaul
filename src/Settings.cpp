@@ -105,6 +105,7 @@ void Settings::LoadINI() {
 
     // PromptDisplay
     PromptDisplay.RequireWeaponDrawn = ini.GetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn);
+    PromptDisplay.ShowWhenSneaking = ini.GetBoolValue("PromptDisplay", "ShowWhenSneaking", PromptDisplay.ShowWhenSneaking);
     PromptDisplay.RequirePlayerFacing = ini.GetBoolValue("PromptDisplay", "RequirePlayerFacing", PromptDisplay.RequirePlayerFacing);
     PromptDisplay.FacingAngleThreshold = static_cast<float>(ini.GetDoubleValue("PromptDisplay", "FacingAngleThreshold", PromptDisplay.FacingAngleThreshold));
 
@@ -173,8 +174,8 @@ void Settings::LoadINI() {
         General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
         General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelaySeconds);
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}", Input.FeedKey, Input.FeedGamepadKey);
-    SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
-        PromptDisplay.RequireWeaponDrawn, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
+    SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
+        PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
     SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
@@ -235,6 +236,8 @@ void Settings::SaveINI() {
     // PromptDisplay
     ini.SetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn,
         "; Only show feed prompt when weapon/magic is drawn or player is in combat");
+    ini.SetBoolValue("PromptDisplay", "ShowWhenSneaking", PromptDisplay.ShowWhenSneaking,
+        "; Show feed prompt when player is sneaking (enables stealth takedowns via vampire feed)");
     ini.SetBoolValue("PromptDisplay", "RequirePlayerFacing", PromptDisplay.RequirePlayerFacing,
         "; Only show feed prompt when player is facing the target");
     ini.SetDoubleValue("PromptDisplay", "FacingAngleThreshold", PromptDisplay.FacingAngleThreshold,

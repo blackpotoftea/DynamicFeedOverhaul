@@ -279,12 +279,14 @@ namespace AnimUtil {
                     RE::PlayerCharacter::GetSingleton()->SetAIDriven(false);
                     RE::PlayerControls::GetSingleton()->activateHandler->disabled = false;
 
-                    a->SetGraphVariableBool("bHumanoidFootIKDisable", false);
-                    a->SetGraphVariableBool("bHeadTrackSpine", true);
-                    a->SetGraphVariableBool("bHeadTracking", true);
-                    a->SetGraphVariableBool("tdmHeadtrackingBehavior", true);
-
-                    a->NotifyAnimationGraph("IdleForceDefaultState");
+                    // Safety: only access graph if 3D is loaded
+                    if (a->Is3DLoaded()) {
+                        a->SetGraphVariableBool("bHumanoidFootIKDisable", false);
+                        a->SetGraphVariableBool("bHeadTrackSpine", true);
+                        a->SetGraphVariableBool("bHeadTracking", true);
+                        a->SetGraphVariableBool("tdmHeadtrackingBehavior", true);
+                        a->NotifyAnimationGraph("IdleForceDefaultState");
+                    }
                 }
             });
         } else {
@@ -292,6 +294,9 @@ namespace AnimUtil {
             SKSE::GetTaskInterface()->AddTask([actorHandle] {
                 auto actorRef = actorHandle.get();
                 if (auto* a = actorRef.get()) {
+                    // Safety: only access graph if 3D is loaded
+                    if (!a->Is3DLoaded()) return;
+
                     a->SetGraphVariableBool("bHumanoidFootIKDisable", false);
                     a->SetGraphVariableBool("bHeadTrackSpine", true);
                     a->SetGraphVariableBool("bHeadTracking", true);
@@ -545,6 +550,11 @@ namespace AnimUtil {
     // Animation selection and state checking (moved from PairedAnimPromptSink)
     bool IsInPairedAnimation(RE::Actor* actor) {
         if (!actor) return false;
+
+        // Safety: check if actor has valid 3D before accessing animation graph
+        // This prevents crashes when NPC is being unloaded or has corrupted animation state
+        if (!actor->Is3DLoaded()) return false;
+
         bool result = false;
         actor->GetGraphVariableBool("bIsSynced", result);
         if (result) return true;
@@ -654,6 +664,12 @@ namespace AnimUtil {
     void SetFeedGraphVars(RE::Actor* actor, int feedType) {
         if (!actor) return;
 
+        // Safety: check if actor has valid 3D before accessing animation graph
+        if (!actor->Is3DLoaded()) {
+            SKSE::log::warn("SetFeedGraphVars: {} has no 3D loaded, skipping", actor->GetName());
+            return;
+        }
+
         constexpr auto IsSkyPromptFeeding = "IsSkyPromptFeeding";
         constexpr auto SkyPromptFeedType = "SkyPromptFeedType";
 
@@ -669,6 +685,12 @@ namespace AnimUtil {
 
     void ClearFeedGraphVars(RE::Actor* actor) {
         if (!actor) return;
+
+        // Safety: check if actor has valid 3D before accessing animation graph
+        if (!actor->Is3DLoaded()) {
+            SKSE::log::debug("ClearFeedGraphVars: {} has no 3D loaded, skipping", actor->GetName());
+            return;
+        }
 
         constexpr auto IsSkyPromptFeeding = "IsSkyPromptFeeding";
         constexpr auto SkyPromptFeedType = "SkyPromptFeedType";
@@ -929,6 +951,10 @@ namespace AnimUtil {
     // Check if actor is jumping
     bool IsJumping(RE::Actor* actor) {
         if (!actor) return false;
+
+        // Safety: check if actor has valid 3D before accessing animation graph
+        if (!actor->Is3DLoaded()) return false;
+
         bool res = false;
         actor->GetGraphVariableBool("bInJumpState", res);
         return res && actor->IsInMidair();
