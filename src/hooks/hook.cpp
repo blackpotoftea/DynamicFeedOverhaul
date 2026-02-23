@@ -29,21 +29,15 @@ namespace {
                     sink->witnessCheckTimer_ += a_delta;
                     if (sink->witnessCheckTimer_ > settings->Combat.WitnessCheckInterval) {
                         sink->witnessCheckTimer_ = 0.0f;
-                        auto targetHandle = sink->activeFeedTargetHandle_;
-                        auto ref = targetHandle.get();
-                        if (ref) {
-                            // Use NiPointer to keep target alive during check
-                            RE::NiPointer<RE::Actor> target(ref->As<RE::Actor>());
-                            if (target) {
-                                if (settings->Combat.WitnessDebugLogging) {
-                                    SKSE::log::info("[PlayerUpdateHook] Calling witness check for active feed");
-                                }
-                                WitnessDetection::PerformWitnessCheck(a_this, target.get());
-                            } else {
-                                SKSE::log::warn("[PlayerUpdateHook] Feed active but target actor is null");
+                        // Use thread-safe accessor
+                        auto target = sink->GetActiveFeedTarget();
+                        if (target) {
+                            if (settings->Combat.WitnessDebugLogging) {
+                                SKSE::log::info("[PlayerUpdateHook] Calling witness check for active feed");
                             }
+                            WitnessDetection::PerformWitnessCheck(a_this, target.get());
                         } else {
-                            SKSE::log::warn("[PlayerUpdateHook] Feed active but target ref is null");
+                            SKSE::log::warn("[PlayerUpdateHook] Feed active but target is null");
                         }
                     }
                 } else {

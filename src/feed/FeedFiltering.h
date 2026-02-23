@@ -141,14 +141,14 @@ namespace FeedFiltering {
         auto* player = RE::PlayerCharacter::GetSingleton();
 
         // Level check (only applies outside combat, living targets only)
-        if (settings->Filtering.EnableLevelCheck && player) {
+        if (settings->NonCombat.EnableLevelCheck && player) {
             int playerLevel = player->GetLevel();
             int targetLevel = actor->GetLevel();
             int levelDiff = targetLevel - playerLevel;
 
-            if (levelDiff > settings->Filtering.MaxLevelDifference) {
+            if (levelDiff > settings->NonCombat.MaxLevelDifference) {
                 SKSE::log::debug("NonCombat: {} - excluded (level {} is {} above player level {}, max diff: {})",
-                    actor->GetName(), targetLevel, levelDiff, playerLevel, settings->Filtering.MaxLevelDifference);
+                    actor->GetName(), targetLevel, levelDiff, playerLevel, settings->NonCombat.MaxLevelDifference);
                 return true;
             }
         }

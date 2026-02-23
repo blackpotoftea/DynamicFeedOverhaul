@@ -126,6 +126,8 @@ void Settings::LoadINI() {
     NonCombat.LethalHoldDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "LethalHoldDuration", NonCombat.LethalHoldDuration));
     NonCombat.ExcludeEssentialFromLethal = ini.GetBoolValue("NonCombat", "ExcludeEssentialFromLethal", NonCombat.ExcludeEssentialFromLethal);
     NonCombat.EnableRotation = ini.GetBoolValue("NonCombat", "EnableRotation", NonCombat.EnableRotation);
+    NonCombat.EnableLevelCheck = ini.GetBoolValue("NonCombat", "EnableLevelCheck", NonCombat.EnableLevelCheck);
+    NonCombat.MaxLevelDifference = static_cast<int>(ini.GetLongValue("NonCombat", "MaxLevelDifference", NonCombat.MaxLevelDifference));
 
     // Combat
     Combat.Enabled = ini.GetBoolValue("Combat", "Enabled", Combat.Enabled);
@@ -139,8 +141,6 @@ void Settings::LoadINI() {
     Combat.WitnessDebugLogging = ini.GetBoolValue("Combat", "WitnessDebugLogging", Combat.WitnessDebugLogging);
 
     // Filtering
-    Filtering.EnableLevelCheck = ini.GetBoolValue("Filtering", "EnableLevelCheck", Filtering.EnableLevelCheck);
-    Filtering.MaxLevelDifference = static_cast<int>(ini.GetLongValue("Filtering", "MaxLevelDifference", Filtering.MaxLevelDifference));
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
     Filtering.ExcludeOStimScenes = ini.GetBoolValue("Filtering", "ExcludeOStimScenes", Filtering.ExcludeOStimScenes);
     Filtering.ExcludeDead = ini.GetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead);
@@ -176,10 +176,11 @@ void Settings::LoadINI() {
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}", Input.FeedKey, Input.FeedGamepadKey);
     SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
         PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
-    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}",
+    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, EnableLevelCheck={}, MaxLevelDiff={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
-        NonCombat.UseTwoSingleAnimations, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal);
+        NonCombat.UseTwoSingleAnimations, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
+        NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
     if (NonCombat.UseTwoSingleAnimations) {
         SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
             NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
@@ -187,8 +188,8 @@ void Settings::LoadINI() {
     SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging);
-    SKSE::log::info("  [Filtering] EnableLevelCheck={}, MaxLevelDiff={}, ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
-        Filtering.EnableLevelCheck, Filtering.MaxLevelDifference, Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
+    SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
+        Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}",
@@ -274,6 +275,10 @@ void Settings::SaveINI() {
         "; Seconds to hold button for lethal feed (default 5.0)");
     ini.SetBoolValue("NonCombat", "EnableRotation", NonCombat.EnableRotation,
         "; Rotate player and target to face each other before feed animation");
+    ini.SetBoolValue("NonCombat", "EnableLevelCheck", NonCombat.EnableLevelCheck,
+        "; Exclude targets above player level + MaxLevelDifference (non-combat only)");
+    ini.SetLongValue("NonCombat", "MaxLevelDifference", NonCombat.MaxLevelDifference,
+        "; Max levels target can be above player for non-combat feeding");
 
     // Combat
     ini.SetBoolValue("Combat", "Enabled", Combat.Enabled,
@@ -294,10 +299,6 @@ void Settings::SaveINI() {
         "; Enable verbose witness detection debug logging (can be very spammy)");
 
     // Filtering
-    ini.SetBoolValue("Filtering", "EnableLevelCheck", Filtering.EnableLevelCheck,
-        "; Exclude targets above player level + MaxLevelDifference");
-    ini.SetLongValue("Filtering", "MaxLevelDifference", Filtering.MaxLevelDifference,
-        "; Max levels target can be above player (ignored if EnableLevelCheck=false)");
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,
         "; Exclude targets currently in a scene (dialogues, scripted events)");
     ini.SetBoolValue("Filtering", "ExcludeOStimScenes", Filtering.ExcludeOStimScenes,

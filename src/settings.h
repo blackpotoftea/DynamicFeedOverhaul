@@ -59,6 +59,8 @@ public:
         float LethalHoldDuration{ 5.0f };    // Seconds to hold button for lethal feed
         bool ExcludeEssentialFromLethal{ true };  // Don't show kill prompt for Essential actors
         bool EnableRotation{ true };         // Rotate player/target to face each other before feed
+        bool EnableLevelCheck{ false };      // Exclude targets above player level (non-combat only)
+        int MaxLevelDifference{ 10 };        // Max levels above player to allow feeding
     } NonCombat;
 
     // Combat feeding settings
@@ -76,8 +78,6 @@ public:
 
     // Target filtering settings
     struct {
-        bool EnableLevelCheck{ false };
-        int MaxLevelDifference{ 10 };           // Max levels above player
         bool ExcludeInScene{ true };            // Skip actors in scenes (dialogues, scripted events)
         bool ExcludeOStimScenes{ true };        // Skip actors in OStim scenes (requires OStim NG)
         bool ExcludeDead{ true };               // Skip dead actors

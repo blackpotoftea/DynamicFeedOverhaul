@@ -59,8 +59,8 @@ namespace FeedAnimState {
             AnimUtil::SetInKillMove(player, false);
         }
 
-        // Clear the active feed target
-        PairedAnimPromptSink::GetSingleton()->activeFeedTargetHandle_.reset();
+        // Clear the active feed target (thread-safe)
+        PairedAnimPromptSink::GetSingleton()->SetActiveFeedTarget(nullptr);
 
         CustomFeed::OnComplete();
         // disable as require more refactor
@@ -205,6 +205,10 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
         static_cast<int>(event.prompt.type),
         event.prompt.text);
 
+    // Get non-const singleton - ProcessEvent is const due to API contract,
+    // but we need to modify state. Using singleton access is the proper pattern here.
+    auto* self = GetSingleton();
+
     switch (event.type) {
     case SkyPromptAPI::PromptEventType::kDown:
         // Button pressed - just log, don't act yet (wait for kUp or kAccepted)
@@ -214,8 +218,8 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
         // Button released - for kHold prompts this means quick press (normal feed)
         if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
             SKSE::log::info("kUp on kHold prompt - button released early, executing normal feed (non-lethal)");
-            isLethalFeedInProgress_ = false;
-            HandleFeedAccepted();
+            self->isLethalFeedInProgress_ = false;
+            self->HandleFeedAccepted();
         } else {
             SKSE::log::debug("kUp on kSinglePress prompt - ignoring");
         }
@@ -225,14 +229,14 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
         // For kSinglePress: normal single press
         if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
             SKSE::log::info("kAccepted on kHold prompt - hold completed, executing lethal feed");
-            isLethalFeedInProgress_ = true;
+            self->isLethalFeedInProgress_ = true;
         } else {
             SKSE::log::info("kAccepted on kSinglePress prompt - executing normal feed");
         }
-        HandleFeedAccepted();
+        self->HandleFeedAccepted();
         break;
     case SkyPromptAPI::PromptEventType::kTimingOut:
-        HandleTimingOut();
+        self->HandleTimingOut();
         break;
     default:
         break;
@@ -316,19 +320,18 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
 }
 
 // We have 2 animation systems Vannila Idle and OAR which we set via GraphVariable
-// We need both select idle -> set correct graph variable to macht OAR animations
-void PairedAnimPromptSink::HandleFeedAccepted() const {
+// We need both select idle -> set correct graph variable to match OAR animations
+void PairedAnimPromptSink::HandleFeedAccepted() {
     auto feedTargetPtr = GetTarget();
     if (!feedTargetPtr) return;
 
     // Safe to use raw pointer now - NiPointer keeps it alive for entire function scope
     RE::Actor* feedTarget = feedTargetPtr.get();
 
-    // Store the feed target for witness detection
-    const_cast<PairedAnimPromptSink*>(this)->activeFeedTargetHandle_ = feedTarget->GetHandle();
+    // Store the feed target for witness detection (thread-safe)
+    SetActiveFeedTarget(feedTarget);
 
-    // Use const_cast to call non-const method HidePrompt()
-    const_cast<PairedAnimPromptSink*>(this)->HidePrompt();
+    HidePrompt();
 
     FeedAnimState::MarkFeedStarted();
     AnimEventSink::Register();
@@ -478,7 +481,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() const {
     }
 }
 
-void PairedAnimPromptSink::HandleTimingOut() const {
+void PairedAnimPromptSink::HandleTimingOut() {
     if (!GetTarget() || g_clientID.load(std::memory_order_acquire) == 0) return;
 
     auto* player = RE::PlayerCharacter::GetSingleton();
@@ -487,18 +490,16 @@ void PairedAnimPromptSink::HandleTimingOut() const {
         return;
     }
 
-    // Use const_cast to call non-const method ShowPrompt()
-    // Note: ShowPrompt calls SendPrompt which refreshes the prompt
     auto targetPtr = GetTarget();
     if (targetPtr) {
         // Validate target before refreshing
         if (!IsValidFeedTarget(targetPtr.get())) {
             SKSE::log::debug("Prompt timing out - target invalid, removing prompt");
-            const_cast<PairedAnimPromptSink*>(this)->HidePrompt();
+            HidePrompt();
             return;
         }
 
-        const_cast<PairedAnimPromptSink*>(this)->ShowPrompt(targetPtr.get());
+        ShowPrompt(targetPtr.get());
         SKSE::log::debug("Prompt timing out - refreshed");
     }
 }
@@ -512,6 +513,25 @@ void PairedAnimPromptSink::SetTargetHandle(const RE::ObjectRefHandle& handle) {
 RE::ObjectRefHandle PairedAnimPromptSink::GetTargetHandle() const {
     std::lock_guard<std::mutex> lock(targetMutex_);
     return currentTargetHandle_;
+}
+
+// Thread-safe wrapper methods for activeFeedTargetHandle_
+void PairedAnimPromptSink::SetActiveFeedTarget(RE::Actor* target) {
+    std::lock_guard<std::mutex> lock(targetMutex_);
+    if (target) {
+        activeFeedTargetHandle_ = target->GetHandle();
+    } else {
+        activeFeedTargetHandle_.reset();
+    }
+}
+
+RE::NiPointer<RE::Actor> PairedAnimPromptSink::GetActiveFeedTarget() const {
+    std::lock_guard<std::mutex> lock(targetMutex_);
+    auto ref = activeFeedTargetHandle_.get();
+    if (!ref) {
+        return nullptr;
+    }
+    return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
 }
 
 void PairedAnimPromptSink::SetTarget(RE::Actor* target) {

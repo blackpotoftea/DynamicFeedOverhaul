@@ -57,7 +57,9 @@ public:
     void RefreshPrompt();
 
     // Target being fed on during active feed (accessed by witness detection hook)
-    mutable RE::ObjectRefHandle activeFeedTargetHandle_;
+    // Thread-safe access via GetActiveFeedTarget() / SetActiveFeedTarget()
+    RE::NiPointer<RE::Actor> GetActiveFeedTarget() const;
+    void SetActiveFeedTarget(RE::Actor* target);
 
     // Timers for periodic checks (updated from PlayerUpdateHook)
     float periodicCheckTimer_ = 0.0f;
@@ -74,8 +76,8 @@ private:
 
     static void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal = false, bool hasOARAnimation = false);
 
-    void HandleFeedAccepted() const;
-    void HandleTimingOut() const;
+    void HandleFeedAccepted();
+    void HandleTimingOut();
 
     // Thread-safe wrapper methods for currentTargetHandle_
     void SetTargetHandle(const RE::ObjectRefHandle& handle);
@@ -86,9 +88,10 @@ private:
 
     std::array<std::pair<RE::INPUT_DEVICE, SkyPromptAPI::ButtonID>, 2> feedButtons_;
 
-    std::array<SkyPromptAPI::Prompt, 1> prompts_;
+    mutable std::array<SkyPromptAPI::Prompt, 1> prompts_;  // Mutable: modified in const SetTarget during ProcessEvent
     mutable RE::ObjectRefHandle currentTargetHandle_;
-    mutable std::mutex targetMutex_;
+    mutable RE::ObjectRefHandle activeFeedTargetHandle_;
+    mutable std::mutex targetMutex_;  // Protects currentTargetHandle_ and activeFeedTargetHandle_
     RE::ObjectRefHandle lastCrosshairActor_;
     mutable bool isLethalFeedInProgress_{false};  // Mutable: transient state for event processing
 
