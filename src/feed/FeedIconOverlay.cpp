@@ -319,9 +319,9 @@ void FeedIconOverlay::RenderOverlay() {
     // Validate target via handle
     auto target = _state.target.get();
     if (!target) {
-        // Target is gone (deleted, unloaded, etc.)
         SKSE::log::debug("RenderOverlay: target is invalid, stopping");
-        StopIcon();
+        _state.active.store(false);
+        _state.feeding.store(false);
         return;
     }
 
