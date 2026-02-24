@@ -3,6 +3,7 @@
 #include "feed/TargetState.h"
 #include "utils/FormUtils.h"
 #include "utils/AnimUtil.h"
+#include "integration/PoiseIntegration.h"
 
 // Feed target filtering/exclusion logic
 namespace FeedFiltering {
@@ -103,6 +104,28 @@ namespace FeedFiltering {
 
         // Allow feeding on staggered targets in combat (bypasses health check)
         if (settings->Combat.AllowStaggered && TargetState::IsStaggered(actor)) {
+            // Check level requirements for stagger feeding (unless poise mod bypasses it)
+            bool poiseBypassesLevel = settings->Integration.PoiseIgnoresLevelCheck && PoiseIntegration::IsAvailable();
+
+            if (!poiseBypassesLevel && settings->Combat.StaggerRequireLowerLevel) {
+                auto* player = RE::PlayerCharacter::GetSingleton();
+                if (player) {
+                    int playerLevel = player->GetLevel();
+                    int targetLevel = actor->GetLevel();
+                    int maxAllowedLevel = playerLevel - settings->Combat.StaggerMaxLevelDifference;
+
+                    // Target must be lower level than player by at least StaggerMaxLevelDifference
+                    // e.g., player level 20, StaggerMaxLevelDifference 10 -> target must be level 10 or lower
+                    if (targetLevel > maxAllowedLevel) {
+                        SKSE::log::debug("Combat path: {} - excluded (staggered but level {} > max allowed {}, player {} - diff {})",
+                            actor->GetName(), targetLevel, maxAllowedLevel, playerLevel, settings->Combat.StaggerMaxLevelDifference);
+                        return true;
+                    }
+                }
+            } else if (poiseBypassesLevel) {
+                SKSE::log::debug("Combat path: {} - stagger level check bypassed (poise mod detected)", actor->GetName());
+            }
+
             SKSE::log::debug("Combat path: {} - allowed (target is staggered)", actor->GetName());
             return false;
         }

@@ -6,6 +6,7 @@
 #include "SKSEMCP/SKSEMenuFramework.hpp"
 #include "feed/FeedIconOverlay.h"
 #include "integration/OStimIntegration.h"
+#include "integration/PoiseIntegration.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
 
@@ -29,6 +30,12 @@ void OnDataLoaded()
         SKSE::log::info("OStim NG integration initialized successfully");
     } else {
         SKSE::log::info("OStim NG not detected - scene exclusion will be skipped");
+    }
+
+    if (PoiseIntegration::Initialize()) {
+        SKSE::log::info("Poise mod integration initialized successfully");
+    } else {
+        SKSE::log::info("Poise mod not detected - using vanilla stagger behavior");
     }
 
     if (SKSEMenuFramework::IsInstalled()) {

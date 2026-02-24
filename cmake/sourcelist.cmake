@@ -9,6 +9,7 @@ set(sources ${sources}
     src/feed/WitnessDetection.cpp
     src/utils/AnimUtil.cpp
     src/integration/OStimIntegration.cpp
+    src/integration/PoiseIntegration.cpp
     src/utils/MenuCheck.cpp
     src/feed/TargetState.cpp
     src/feed/AnimationRegistry.cpp

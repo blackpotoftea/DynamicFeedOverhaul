@@ -70,6 +70,8 @@ public:
         bool RequireLowHealth{ false };
         float LowHealthThreshold{ 0.25f };
         bool AllowStaggered{ true };     // Allow feeding on staggered targets (bypasses health check)
+        bool StaggerRequireLowerLevel{ true };   // Stagger feeding requires target to be lower level than player
+        int StaggerMaxLevelDifference{ 10 };     // Target must be (playerLevel - this) or lower (e.g. player 20, diff 10 = target max 10)
         bool EnableWitnessDetection{ true };     // Stop feed if witnessed by NPCs
         float WitnessDetectionRadius{ 1500.0f }; // Detection radius in units (~1500 = reasonable distance)
         float WitnessCheckInterval{ 0.5f };      // How often to check for witnesses during feed (seconds)
@@ -111,6 +113,7 @@ public:
     struct {
         bool EnableSacrosanct{ true };          // Enable Sacrosanct integration
         bool EnableBetterVampires{ true };      // Enable Better Vampires integration
+        bool PoiseIgnoresLevelCheck{ true };    // When poise mod detected, ignore level requirements
     } Integration;
 
     void LoadINI();

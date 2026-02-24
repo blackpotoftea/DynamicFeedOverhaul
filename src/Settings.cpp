@@ -135,6 +135,8 @@ void Settings::LoadINI() {
     Combat.RequireLowHealth = ini.GetBoolValue("Combat", "RequireLowHealth", Combat.RequireLowHealth);
     Combat.LowHealthThreshold = static_cast<float>(ini.GetDoubleValue("Combat", "LowHealthThreshold", Combat.LowHealthThreshold));
     Combat.AllowStaggered = ini.GetBoolValue("Combat", "AllowStaggered", Combat.AllowStaggered);
+    Combat.StaggerRequireLowerLevel = ini.GetBoolValue("Combat", "StaggerRequireLowerLevel", Combat.StaggerRequireLowerLevel);
+    Combat.StaggerMaxLevelDifference = static_cast<int>(ini.GetLongValue("Combat", "StaggerMaxLevelDifference", Combat.StaggerMaxLevelDifference));
     Combat.EnableWitnessDetection = ini.GetBoolValue("Combat", "EnableWitnessDetection", Combat.EnableWitnessDetection);
     Combat.WitnessDetectionRadius = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessDetectionRadius", Combat.WitnessDetectionRadius));
     Combat.WitnessCheckInterval = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessCheckInterval", Combat.WitnessCheckInterval));
@@ -168,6 +170,7 @@ void Settings::LoadINI() {
     // Integration
     Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
     Integration.EnableBetterVampires = ini.GetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires);
+    Integration.PoiseIgnoresLevelCheck = ini.GetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
@@ -185,8 +188,9 @@ void Settings::LoadINI() {
         SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
             NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
     }
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}",
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
+        Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging);
     SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
@@ -194,8 +198,8 @@ void Settings::LoadINI() {
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableBetterVampires={}",
-        Integration.EnableSacrosanct, Integration.EnableBetterVampires);
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}",
+        Integration.EnableSacrosanct, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck);
 }
 
 void Settings::SaveINI() {
@@ -289,6 +293,12 @@ void Settings::SaveINI() {
         "; Require target to be below health threshold for combat feeding");
     ini.SetDoubleValue("Combat", "LowHealthThreshold", Combat.LowHealthThreshold,
         "; Health percentage threshold (0.0-1.0) for combat feeding");
+    ini.SetBoolValue("Combat", "AllowStaggered", Combat.AllowStaggered,
+        "; Allow feeding on staggered targets (bypasses health check)");
+    ini.SetBoolValue("Combat", "StaggerRequireLowerLevel", Combat.StaggerRequireLowerLevel,
+        "; Stagger feeding requires target to be lower level than player (ignored if poise mod detected)");
+    ini.SetLongValue("Combat", "StaggerMaxLevelDifference", Combat.StaggerMaxLevelDifference,
+        "; Target must be (playerLevel - this) or lower. E.g. player 20, diff 10 = target max level 10");
     ini.SetBoolValue("Combat", "EnableWitnessDetection", Combat.EnableWitnessDetection,
         "; Stop feed if witnessed by nearby NPCs who detect the player");
     ini.SetDoubleValue("Combat", "WitnessDetectionRadius", Combat.WitnessDetectionRadius,
@@ -347,6 +357,8 @@ void Settings::SaveINI() {
         "; Enable Sacrosanct vampire overhaul integration (auto-detects mod)");
     ini.SetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires,
         "; Enable Better Vampires integration (auto-detects mod)");
+    ini.SetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck,
+        "; When poise mod (ChocolatePoise/loki_POISE) is detected, ignore level requirements for feeding");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

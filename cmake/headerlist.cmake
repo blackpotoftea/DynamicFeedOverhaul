@@ -10,6 +10,7 @@ set(headers ${headers}
     src/feed/WitnessDetection.h
     src/papyrus/PapyrusCall.h
     src/integration/OStimIntegration.h
+    src/integration/PoiseIntegration.h
     src/utils/MenuCheck.h
     src/feed/AnimationRegistry.h
 )
