@@ -619,11 +619,11 @@ namespace AnimUtil {
             if (TargetState::IsWerewolf(player)) {
                 SKSE::log::debug("Player is Werewolf - using werewolf feed");
                 // Werewolf feeding usually works on standing targets or forces them
-                return CustomFeed::Idles::WEREWOLF_STANDING_FRONT;
+                return Idles::WEREWOLF_STANDING_FRONT;
             }
             if (TargetState::IsVampireLord(player)) {
                 SKSE::log::debug("Player is Vampire Lord - using VL feed");
-                return isBehind ? CustomFeed::Idles::VAMPIRELORD_STANDING_BACK : CustomFeed::Idles::VAMPIRELORD_STANDING_FRONT;
+                return isBehind ? Idles::VAMPIRELORD_STANDING_BACK : Idles::VAMPIRELORD_STANDING_FRONT;
             }
         }
 
@@ -632,7 +632,7 @@ namespace AnimUtil {
             outIsPairedAnim = false;
             bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
             SKSE::log::debug("Dead target - using bedroll {} side (solo idle)", isLeft ? "left" : "right");
-            return isLeft ? CustomFeed::Idles::VAMPIRE_BEDROLL_LEFT : CustomFeed::Idles::VAMPIRE_BEDROLL_RIGHT;
+            return isLeft ? Idles::VAMPIRE_BEDROLL_LEFT : Idles::VAMPIRE_BEDROLL_RIGHT;
         }
 
         if (targetState == AnimUtil::kSleeping && furnitureRef) {
@@ -642,10 +642,10 @@ namespace AnimUtil {
 
             if (isBedroll) {
                 SKSE::log::debug("Bedroll {} side (solo idle)", isLeft ? "left" : "right");
-                return isLeft ? CustomFeed::Idles::VAMPIRE_BEDROLL_LEFT : CustomFeed::Idles::VAMPIRE_BEDROLL_RIGHT;
+                return isLeft ? Idles::VAMPIRE_BEDROLL_LEFT : Idles::VAMPIRE_BEDROLL_RIGHT;
             } else {
                 SKSE::log::debug("Bed {} side (solo idle)", isLeft ? "left" : "right");
-                return isLeft ? CustomFeed::Idles::VAMPIRE_BED_LEFT : CustomFeed::Idles::VAMPIRE_BED_RIGHT;
+                return isLeft ? Idles::VAMPIRE_BED_LEFT : Idles::VAMPIRE_BED_RIGHT;
             }
         }
 
@@ -653,10 +653,10 @@ namespace AnimUtil {
 
         if (targetState == AnimUtil::kSitting) {
             SKSE::log::debug("Sitting {} feed", posStr);
-            return isBehind ? CustomFeed::Idles::VAMPIRE_SITTING_BACK : CustomFeed::Idles::VAMPIRE_SITTING_FRONT;
+            return isBehind ? Idles::VAMPIRE_SITTING_BACK : Idles::VAMPIRE_SITTING_FRONT;
         } else {
             SKSE::log::debug("{} {} feed", targetState == AnimUtil::kCombat ? "Combat" : "Standing", posStr);
-            return isBehind ? CustomFeed::Idles::VAMPIRE_STANDING_BACK : CustomFeed::Idles::VAMPIRE_STANDING_FRONT;
+            return isBehind ? Idles::VAMPIRE_STANDING_BACK : Idles::VAMPIRE_STANDING_FRONT;
         }
     }
 
