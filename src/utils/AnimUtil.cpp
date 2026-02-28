@@ -654,8 +654,11 @@ namespace AnimUtil {
         if (targetState == AnimUtil::kSitting) {
             SKSE::log::debug("Sitting {} feed", posStr);
             return isBehind ? Idles::VAMPIRE_SITTING_BACK : Idles::VAMPIRE_SITTING_FRONT;
+        } else if (targetState == AnimUtil::kCombat) {
+            SKSE::log::debug("Combat {} feed (kill move)", posStr);
+            return isBehind ? Idles::BACK_SNEAK_KM_A : Idles::FRONT_KM_A;
         } else {
-            SKSE::log::debug("{} {} feed", targetState == AnimUtil::kCombat ? "Combat" : "Standing", posStr);
+            SKSE::log::debug("Standing {} feed", posStr);
             return isBehind ? Idles::VAMPIRE_STANDING_BACK : Idles::VAMPIRE_STANDING_FRONT;
         }
     }

@@ -143,12 +143,12 @@ namespace CustomFeed {
                 process->StopCurrentIdle(player, true);
             }
 
-            // Restore weapon/magic drawn state if it was drawn before feeding
-            if (wasWeaponDrawn_) {
-                SKSE::log::info("[CustomFeed] ForceStop: Restoring weapon drawn state");
-                AnimUtil::redrawWeapon(player);
-                wasWeaponDrawn_ = false;
-            }
+            // // Restore weapon/magic drawn state if it was drawn before feeding
+            // if (wasWeaponDrawn_) {
+            //     SKSE::log::info("[CustomFeed] ForceStop: Restoring weapon drawn state");
+            //     AnimUtil::redrawWeapon(player);
+            //     wasWeaponDrawn_ = false;
+            // }
         }
         // Safely retrieve target actor via handle (returns smart pointer)
         if (auto targetPtr = GetFeedTarget()) {
@@ -178,12 +178,12 @@ namespace CustomFeed {
             }
         }
 
-        // Restore weapon/magic drawn state if it was drawn before feeding
-        if (player && wasWeaponDrawn_) {
-            SKSE::log::info("[CustomFeed] OnComplete: Restoring weapon drawn state");
-            AnimUtil::redrawWeapon(player);
-            wasWeaponDrawn_ = false;  // Reset the flag
-        }
+        // // Restore weapon/magic drawn state if it was drawn before feeding
+        // if (player && wasWeaponDrawn_) {
+        //     SKSE::log::info("[CustomFeed] OnComplete: Restoring weapon drawn state");
+        //     AnimUtil::redrawWeapon(player);
+        //     wasWeaponDrawn_ = false;  // Reset the flag
+        // }
 
         ClearFeedTarget();
     }

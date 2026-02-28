@@ -24,7 +24,7 @@ public:
         bool DebugAnimationCycle{ false }; // Debug: cycle through all animations sequentially
         float AnimationTimeout{ 15.0f }; // Timeout for animation events in seconds
         float PeriodicCheckInterval{ 1.0f }; // Interval for periodic checks
-        float PromptDelaySeconds{ 0.2f }; // Delay before showing prompt when targeting new NPC
+        float PromptDelayIdleSeconds{ 0.2f }; // Delay before showing prompt when targeting new NPC (non-combat)
     } General;
 
     // Input settings
@@ -76,6 +76,7 @@ public:
         float WitnessDetectionRadius{ 1500.0f }; // Detection radius in units (~1500 = reasonable distance)
         float WitnessCheckInterval{ 0.5f };      // How often to check for witnesses during feed (seconds)
         bool WitnessDebugLogging{ false };       // Enable verbose witness detection logging
+        float PromptDelayCombatSeconds{ 0.0f };  // Delay before showing prompt in combat (default 0 for immediate)
     } Combat;
 
     // Target filtering settings

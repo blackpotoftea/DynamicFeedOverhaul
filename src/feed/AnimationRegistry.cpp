@@ -75,7 +75,7 @@ namespace Feed {
                             if (value.contains("feedType")) def.feedTypeID = value["feedType"].get<int>();
 
                             animations_.push_back(def);
-                            SKSE::log::debug("Loaded animation: {}", def.eventName);
+                            SKSE::log::debug("Loaded animation: {} (feedType: {})", def.eventName, def.feedTypeID);
                         }
                     } catch (const json::parse_error& e) {
                         SKSE::log::error("Failed to parse JSON {}: {}", filename, e.what());

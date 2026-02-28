@@ -93,6 +93,7 @@ namespace Hooks {
             ui->AddEventSink(MenuOpenCloseHandler::GetSingleton());
             SKSE::log::info("MenuOpenCloseHandler registered");
         }
+
     }
     
     //

@@ -20,8 +20,10 @@ namespace AnimUtil {
     // Idle EditorIDs
     namespace Idles {
         // Standing
-        inline constexpr const char* VAMPIRE_STANDING_FRONT = "IdleVampireStandingFront";
-        inline constexpr const char* VAMPIRE_STANDING_BACK = "IdleVampireStandingBack";
+        inline constexpr const char* VAMPIRE_STANDING_FRONT = "pa_1HMKillMoveShortA";
+        inline constexpr const char* VAMPIRE_STANDING_BACK = "pa_1HMSneakKillBackA";
+        // inline constexpr const char* VAMPIRE_STANDING_FRONT = "IdleVampireStandingFront";
+        // inline constexpr const char* VAMPIRE_STANDING_BACK = "IdleVampireStandingBack";
         // Bed
         inline constexpr const char* VAMPIRE_BED_LEFT = "VampireFeedingBedLeft_Loose";
         inline constexpr const char* VAMPIRE_BED_RIGHT = "VampireFeedingBedRight_Loose";

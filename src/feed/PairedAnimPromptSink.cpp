@@ -338,7 +338,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (!player) return;
-
+    
     // Mark player as in kill move to prevent Quick Loot and other mods from interfering
     AnimUtil::SetInKillMove(player, true);
 
@@ -791,7 +791,9 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
     if (isValidTarget && newTarget) {
         auto newTargetHandle = newTarget->GetHandle();
         auto settings = Settings::GetSingleton();
-        float delaySeconds = settings->General.PromptDelaySeconds;
+        // Use combat-specific delay (default 0) if target is in combat, otherwise general delay
+        bool targetInCombat = newTarget->IsInCombat();
+        float delaySeconds = targetInCombat ? settings->Combat.PromptDelayCombatSeconds : settings->General.PromptDelayIdleSeconds;
 
         // Feed just ended - show prompt immediately (no delay)
         if (feedJustEnded) {

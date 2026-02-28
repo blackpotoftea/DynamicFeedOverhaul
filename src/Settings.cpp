@@ -97,7 +97,7 @@ void Settings::LoadINI() {
     General.DebugAnimationCycle = ini.GetBoolValue("General", "DebugAnimationCycle", General.DebugAnimationCycle);
     General.AnimationTimeout = static_cast<float>(ini.GetDoubleValue("General", "AnimationTimeout", General.AnimationTimeout));
     General.PeriodicCheckInterval = static_cast<float>(ini.GetDoubleValue("General", "PeriodicCheckInterval", General.PeriodicCheckInterval));
-    General.PromptDelaySeconds = static_cast<float>(ini.GetDoubleValue("General", "PromptDelaySeconds", General.PromptDelaySeconds));
+    General.PromptDelayIdleSeconds = static_cast<float>(ini.GetDoubleValue("General", "PromptDelayIdleSeconds", General.PromptDelayIdleSeconds));
 
     // Input
     Input.FeedKey = static_cast<int>(ini.GetLongValue("Input", "FeedKey", Input.FeedKey));
@@ -141,6 +141,7 @@ void Settings::LoadINI() {
     Combat.WitnessDetectionRadius = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessDetectionRadius", Combat.WitnessDetectionRadius));
     Combat.WitnessCheckInterval = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessCheckInterval", Combat.WitnessCheckInterval));
     Combat.WitnessDebugLogging = ini.GetBoolValue("Combat", "WitnessDebugLogging", Combat.WitnessDebugLogging);
+    Combat.PromptDelayCombatSeconds = static_cast<float>(ini.GetDoubleValue("Combat", "PromptDelayCombatSeconds", Combat.PromptDelayCombatSeconds));
 
     // Filtering
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
@@ -175,7 +176,7 @@ void Settings::LoadINI() {
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
         General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
-        General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelaySeconds);
+        General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelayIdleSeconds);
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}", Input.FeedKey, Input.FeedGamepadKey);
     SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
         PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
@@ -188,10 +189,10 @@ void Settings::LoadINI() {
         SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
             NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
     }
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}",
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
-        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging);
+        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds);
     SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
@@ -229,8 +230,8 @@ void Settings::SaveINI() {
         "; Timeout for animation events in seconds (default 15.0)");
     ini.SetDoubleValue("General", "PeriodicCheckInterval", General.PeriodicCheckInterval,
         "; Interval in seconds for periodic validity checks (default 1.0)");
-    ini.SetDoubleValue("General", "PromptDelaySeconds", General.PromptDelaySeconds,
-        "; Delay in seconds before showing prompt when targeting a new NPC (default 0.2)");
+    ini.SetDoubleValue("General", "PromptDelayIdleSeconds", General.PromptDelayIdleSeconds,
+        "; Delay in seconds before showing prompt when targeting a new NPC outside combat (default 0.2)");
 
     // Input
     ini.SetLongValue("Input", "FeedKey", Input.FeedKey,
@@ -307,6 +308,8 @@ void Settings::SaveINI() {
         "; How often to check for witnesses during active feed in seconds (default 0.5)");
     ini.SetBoolValue("Combat", "WitnessDebugLogging", Combat.WitnessDebugLogging,
         "; Enable verbose witness detection debug logging (can be very spammy)");
+    ini.SetDoubleValue("Combat", "PromptDelayCombatSeconds", Combat.PromptDelayCombatSeconds,
+        "; Delay in seconds before showing prompt in combat (default 0 for immediate response)");
 
     // Filtering
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,
