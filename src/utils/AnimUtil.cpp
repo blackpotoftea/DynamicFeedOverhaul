@@ -16,6 +16,18 @@ namespace {
         float        f;
         RE::TESForm* form;
     };
+
+    // Native paired idle function - bypasses some engine checks
+    // a5 (true) = Force play - bypass checks that might prevent the idle (like weapon state checks)
+    // a6 (false) = Don't reset action state - prevents triggering weapon sheathing/state transitions
+    inline bool _playPairedIdle(RE::AIProcess* proc, RE::Actor* attacker, RE::DEFAULT_OBJECT smth,
+                                RE::TESIdleForm* idle, bool forcePlay, bool resetActionState, RE::TESObjectREFR* target)
+    {
+        SKSE::log::info("[AnimUtil::playIdle] using custom playIdle");
+        using func_t = decltype(&_playPairedIdle);
+        REL::Relocation<func_t> func{RELOCATION_ID(38290, 39256)};
+        return func(proc, attacker, smth, idle, forcePlay, resetActionState, target);
+    }
 }
 
 namespace AnimUtil {
@@ -155,12 +167,15 @@ namespace AnimUtil {
                 return;
             }
 
-            bool success = process->PlayIdle(a, idle, t);
+            // Use native paired idle function with:
+            // - forcePlay=true: bypass weapon state checks
+            // - resetActionState=false: prevent weapon sheathing/state transitions
+            bool success = _playPairedIdle(process, a, RE::DEFAULT_OBJECT::kActionIdle, idle, true, false, t);
             if (success) {
                 SKSE::log::info("[AnimUtil::playIdle] SUCCESS: Idle {:X} started on {} (target: {})",
                     idleFormID, actorName, targetName);
             } else {
-                SKSE::log::error("[AnimUtil::playIdle] FAILED: PlayIdle returned false for {} (idle: {:X})",
+                SKSE::log::error("[AnimUtil::playIdle] FAILED: _playPairedIdle returned false for {} (idle: {:X})",
                     actorName, idleFormID);
             }
         });
