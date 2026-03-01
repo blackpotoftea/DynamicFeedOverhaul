@@ -118,7 +118,8 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
             SKSE::log::debug("Animation event sink unregistered (deferred)");
         });
     } else {
-         // SKSE::log::debug("[AnimEvent] {}", tag.c_str());
+         // Log all events during feed to discover weapon-related events
+         SKSE::log::debug("[AnimEvent] {}", tag.c_str());
     }
 
     return RE::BSEventNotifyControl::kContinue;

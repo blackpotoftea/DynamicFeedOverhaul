@@ -335,16 +335,6 @@ namespace AnimUtil {
 
         auto actorHandle = actor->CreateRefHandle();
 
-        // // Schedule the weapon draw after a short delay
-        // SKSE::GetTaskInterface()->AddTask([actorHandle] {
-        //     auto actorRef = actorHandle.get();
-        //     if (auto* a = actorRef.get()) {
-        //         // Send weaponDraw event to animation graph to redraw weapon/magic
-        //         a->NotifyAnimationGraph("weaponDraw");
-        //         SKSE::log::info("[AnimUtil::redrawWeapon] Sent weaponDraw event to {}", a->GetName());
-        //     }
-        // });
-
         SKSE::GetTaskInterface()->AddTask([actorHandle] {
             auto actorRef = actorHandle.get();
             if (auto* a = actorRef.get()) {
