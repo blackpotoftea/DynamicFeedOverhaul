@@ -169,8 +169,10 @@ namespace AnimUtil {
 
             // Use native paired idle function with:
             // - forcePlay=true: bypass weapon state checks
-            // - resetActionState=false: prevent weapon sheathing/state transitions
-            bool success = _playPairedIdle(process, a, RE::DEFAULT_OBJECT::kActionIdle, idle, true, false, t);
+            // - resetActionState=false: prevent weapon sheathing/state transition
+             
+            bool success = process->PlayIdle(a, idle, t);
+            // bool success = _playPairedIdle(process, a, RE::DEFAULT_OBJECT::kActionIdle, idle, true, false, t);
             if (success) {
                 SKSE::log::info("[AnimUtil::playIdle] SUCCESS: Idle {:X} started on {} (target: {})",
                     idleFormID, actorName, targetName);
