@@ -7,7 +7,7 @@
 5. Refacto garph variable to be called DPA_
 6. Check comon issue pointer and memory  - done
 7. FormId cache for where it make sense - done
-
+8 Migrate to https://github.com/alandtse/CommonLibVR/tree/ng?tab=readme-ov-file
 https://gitlab.com/jpstewart/commonlibsse-sample-plugin
 
 
@@ -23,3 +23,6 @@ set PlayerIsWerewolf to 1
 
 vampirelod
 player.addspell DLC1VampireChange
+
+
+
