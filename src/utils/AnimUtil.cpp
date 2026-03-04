@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_set>
+#include <unordered_map>
 #include <bit>
 
 namespace {
@@ -980,5 +981,539 @@ namespace AnimUtil {
     bool IsSwimming(RE::Actor* actor) {
         if (!actor) return false;
         return actor->AsActorState()->actorState1.swimming;
+    }
+
+    // =====================================================================
+    // Idle Graph System Implementation
+    // =====================================================================
+
+    // Build context from actors - pre-computes all derived state for condition evaluation
+    IdleSelectionContext BuildIdleContext(RE::Actor* subject, RE::Actor* target) {
+        IdleSelectionContext ctx;
+        ctx.subject = subject;
+        ctx.target = target;
+
+        if (!subject) return ctx;
+
+        // Combat and movement state
+        ctx.isInCombat = subject->IsInCombat();
+        ctx.isSneaking = subject->IsSneaking();
+
+        // Weapon state
+        auto* actorState = subject->AsActorState();
+        if (actorState) {
+            ctx.hasWeaponDrawn = actorState->IsWeaponDrawn();
+        }
+
+        // Get equipped weapon type
+        ctx.weaponType = GetEquippedWeaponType(subject, true);
+        ctx.hasTwoHandedWeapon = IsTwoHandedWeapon(ctx.weaponType);
+        ctx.hasBow = (ctx.weaponType == RE::WEAPON_TYPE::kBow || ctx.weaponType == RE::WEAPON_TYPE::kCrossbow);
+
+        // Check for shield in left hand
+        auto* leftEquip = subject->GetEquippedObject(true);  // true = left hand
+        if (leftEquip) {
+            ctx.hasShield = leftEquip->IsArmor();
+        }
+
+        // Check for magic
+        auto* rightSpell = subject->GetActorRuntimeData().selectedSpells[RE::Actor::SlotTypes::kRightHand];
+        auto* leftSpell = subject->GetActorRuntimeData().selectedSpells[RE::Actor::SlotTypes::kLeftHand];
+        ctx.hasMagic = (rightSpell != nullptr || leftSpell != nullptr);
+
+        // Target-relative calculations
+        if (target) {
+            ctx.angleToTarget = GetAngleBetween(subject, target);
+            ctx.distanceToTarget = subject->GetPosition().GetDistance(target->GetPosition());
+            ctx.isBehindTarget = GetClosestDirection(target, subject);
+        }
+
+        return ctx;
+    }
+
+    // Cache of parent->children relationships (built once on first use)
+    static std::unordered_map<RE::FormID, std::vector<RE::TESIdleForm*>> g_idleChildrenCache;
+    static bool g_idleCacheBuilt = false;
+
+    // Build the idle children cache by scanning all idles and checking their parentIdle
+    static void BuildIdleChildrenCache() {
+        if (g_idleCacheBuilt) return;
+
+        SKSE::log::info("[IdleGraph] Building idle children cache from parentIdle relationships...");
+
+        auto* dataHandler = RE::TESDataHandler::GetSingleton();
+        if (!dataHandler) {
+            SKSE::log::error("[IdleGraph] TESDataHandler not available for cache building");
+            return;
+        }
+
+        // Scan all idle forms in game
+        int totalIdles = 0;
+        int idlesWithParent = 0;
+
+        // We need to iterate through all forms and find TESIdleForm
+        // TESIdleForm form type is 78 (kIdleMarker in some versions)
+        for (auto& formPair : dataHandler->formArrays) {
+            // Skip if null
+        }
+
+        // Alternative: Use LookupByEditorID to find known roots and traverse from there
+        // For now, let's try iterating all forms
+        const auto& idleArray = dataHandler->GetFormArray<RE::TESIdleForm>();
+        SKSE::log::info("[IdleGraph] Form array contains {} TESIdleForm entries", idleArray.size());
+
+        for (auto* idle : idleArray) {
+            if (!idle) continue;
+            totalIdles++;
+
+            auto* parent = idle->parentIdle;
+            if (parent) {
+                idlesWithParent++;
+                g_idleChildrenCache[parent->GetFormID()].push_back(idle);
+            }
+        }
+
+        SKSE::log::info("[IdleGraph] Cache built: {} total idles, {} have parents, {} unique parents",
+            totalIdles, idlesWithParent, g_idleChildrenCache.size());
+
+        g_idleCacheBuilt = true;
+    }
+
+    // Retrieve all child idles from a parent idle form
+    // Uses parentIdle relationships (like xEdit shows) rather than childIdles array
+    std::vector<RE::TESIdleForm*> GetChildIdles(RE::TESIdleForm* parentIdle) {
+        std::vector<RE::TESIdleForm*> children;
+
+        if (!parentIdle) return children;
+
+        const char* parentEditorID = parentIdle->GetFormEditorID();
+        std::string parentName = parentEditorID ? parentEditorID : "<unnamed>";
+
+        // The childIdles array contains ALL descendants, not just immediate children
+        // We need to filter to only include idles whose parentIdle == this idle
+        auto* childArray = parentIdle->childIdles;
+        if (childArray && childArray->size() > 0) {
+            RE::FormID parentFormID = parentIdle->GetFormID();
+
+            // DEBUG: Log what we find for specific idles
+            bool isDebugIdle = (parentName.find("DragonRoot") != std::string::npos ||
+                               parentName.find("1HMDragon") != std::string::npos);
+
+            if (isDebugIdle) {
+                SKSE::log::info("[DEBUG] GetChildIdles for '{}' (FormID: {:08X}), childArray size: {}",
+                    parentName, parentFormID, childArray->size());
+            }
+
+            for (std::uint32_t i = 0; i < childArray->size(); ++i) {
+                auto* form = (*childArray)[i];
+                if (auto* childIdle = form ? form->As<RE::TESIdleForm>() : nullptr) {
+                    const char* childEditorID = childIdle->GetFormEditorID();
+                    std::string childName = childEditorID ? childEditorID : "<unnamed>";
+
+                    RE::FormID childParentFormID = childIdle->parentIdle ? childIdle->parentIdle->GetFormID() : 0;
+                    const char* childParentEditorID = childIdle->parentIdle ? childIdle->parentIdle->GetFormEditorID() : nullptr;
+                    std::string childParentName = childParentEditorID ? childParentEditorID : "<none>";
+
+                    if (isDebugIdle) {
+                        SKSE::log::info("[DEBUG]   Child[{}]: '{}' -> parentIdle='{}' ({:08X}) {}",
+                            i, childName, childParentName, childParentFormID,
+                            childParentFormID == parentFormID ? "MATCH" : "NO MATCH");
+                    }
+
+                    // Only include if this idle's parentIdle points back to our parent
+                    if (childIdle->parentIdle && childIdle->parentIdle->GetFormID() == parentFormID) {
+                        children.push_back(childIdle);
+                    }
+                }
+            }
+            return children;
+        }
+
+        // Fallback: Use our parentIdle-based cache
+        BuildIdleChildrenCache();
+
+        auto it = g_idleChildrenCache.find(parentIdle->GetFormID());
+        if (it != g_idleChildrenCache.end()) {
+            children = it->second;
+        }
+
+        return children;
+    }
+
+    // Build a graph of idles starting from a root idle (recursive)
+    IdleNode BuildIdleGraph(RE::TESIdleForm* rootIdle, int maxDepth) {
+        IdleNode node;
+
+        if (!rootIdle || maxDepth <= 0) return node;
+
+        node.idle = rootIdle;
+        node.editorID = rootIdle->GetFormEditorID() ? rootIdle->GetFormEditorID() : "";
+        node.hasConditions = (rootIdle->conditions.head != nullptr);
+
+        SKSE::log::debug("[IdleGraph] Building node: '{}' (hasConditions={}, depth={})",
+            node.editorID, node.hasConditions, maxDepth);
+
+        // Recursively build children
+        auto childIdles = GetChildIdles(rootIdle);
+        for (auto* childIdle : childIdles) {
+            auto childNode = BuildIdleGraph(childIdle, maxDepth - 1);
+            if (childNode.idle) {
+                node.children.push_back(std::move(childNode));
+            }
+        }
+
+        return node;
+    }
+
+    // Build graph from EditorID
+    IdleNode BuildIdleGraphFromEditorID(const char* rootEditorID, int maxDepth) {
+        if (!rootEditorID) return {};
+
+        auto* rootIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(rootEditorID);
+        if (!rootIdle) {
+            SKSE::log::warn("[IdleGraph] Root idle '{}' not found", rootEditorID);
+            return {};
+        }
+
+        return BuildIdleGraph(rootIdle, maxDepth);
+    }
+
+    // Evaluate if an idle's conditions pass for the given context
+    bool EvaluateIdleConditions(RE::TESIdleForm* idle, const IdleSelectionContext& context) {
+        if (!idle) return false;
+
+        // No conditions = always passes
+        if (!idle->conditions.head) {
+            SKSE::log::debug("[IdleGraph] EvaluateConditions: '{}' has no conditions (auto-pass)",
+                idle->GetFormEditorID() ? idle->GetFormEditorID() : "unknown");
+            return true;
+        }
+
+        if (!context.subject) {
+            SKSE::log::warn("[IdleGraph] EvaluateConditions: no subject in context");
+            return false;
+        }
+
+        // Use vanilla condition evaluation
+        // TESCondition::operator() takes (actionRef, targetRef)
+        auto* subjectRef = context.subject->As<RE::TESObjectREFR>();
+        auto* targetRef = context.target ? context.target->As<RE::TESObjectREFR>() : nullptr;
+
+        bool result = idle->conditions(subjectRef, targetRef);
+
+        SKSE::log::debug("[IdleGraph] EvaluateConditions: '{}' = {}",
+            idle->GetFormEditorID() ? idle->GetFormEditorID() : "unknown",
+            result ? "PASS" : "FAIL");
+
+        return result;
+    }
+
+    // Internal helper for recursive selection
+    static void SelectIdleRecursive(const IdleNode& node, const IdleSelectionContext& context,
+                                    IdleSelectionResult& result, std::vector<std::string>& currentPath) {
+        if (!node.idle) return;
+
+        // Evaluate this node's conditions
+        if (!EvaluateIdleConditions(node.idle, context)) {
+            return;  // Conditions failed, don't continue down this branch
+        }
+
+        // Conditions passed - add to path
+        currentPath.push_back(node.editorID);
+
+        // This node is a valid candidate
+        // We prefer deeper nodes (more specific), so always update result when we find a valid node
+        result.selectedIdle = node.idle;
+        result.editorID = node.editorID;
+        result.success = true;
+        result.selectionPath = currentPath;
+
+        // Try to find an even more specific child
+        for (const auto& child : node.children) {
+            SelectIdleRecursive(child, context, result, currentPath);
+        }
+
+        currentPath.pop_back();
+    }
+
+    // Select the best idle from a graph based on conditions
+    IdleSelectionResult SelectIdleFromGraph(const IdleNode& root, const IdleSelectionContext& context) {
+        IdleSelectionResult result;
+        result.success = false;
+
+        if (!root.idle) {
+            result.failureReason = "Invalid root node";
+            return result;
+        }
+
+        std::vector<std::string> currentPath;
+        SelectIdleRecursive(root, context, result, currentPath);
+
+        if (result.success) {
+            SKSE::log::info("[IdleGraph] Selected idle: '{}' via path: {}",
+                result.editorID,
+                [&]() {
+                    std::string path;
+                    for (size_t i = 0; i < result.selectionPath.size(); ++i) {
+                        if (i > 0) path += " -> ";
+                        path += result.selectionPath[i];
+                    }
+                    return path;
+                }());
+        } else {
+            result.failureReason = "No idle matched conditions";
+            SKSE::log::warn("[IdleGraph] No idle selected from graph rooted at '{}'", root.editorID);
+        }
+
+        return result;
+    }
+
+    // Convenience: Build graph and select in one call
+    IdleSelectionResult SelectIdleFromRoot(RE::TESIdleForm* rootIdle, const IdleSelectionContext& context) {
+        auto graph = BuildIdleGraph(rootIdle);
+        return SelectIdleFromGraph(graph, context);
+    }
+
+    IdleSelectionResult SelectIdleFromRootEditorID(const char* rootEditorID, const IdleSelectionContext& context) {
+        auto graph = BuildIdleGraphFromEditorID(rootEditorID);
+        return SelectIdleFromGraph(graph, context);
+    }
+
+    // =====================================================================
+    // Weapon Type Utilities Implementation
+    // =====================================================================
+
+    RE::WEAPON_TYPE GetEquippedWeaponType(RE::Actor* actor, bool rightHand) {
+        if (!actor) return RE::WEAPON_TYPE::kHandToHandMelee;
+
+        auto* equipped = actor->GetEquippedObject(!rightHand);  // GetEquippedObject: true = left, false = right
+        if (!equipped) return RE::WEAPON_TYPE::kHandToHandMelee;
+
+        auto* weapon = equipped->As<RE::TESObjectWEAP>();
+        if (!weapon) return RE::WEAPON_TYPE::kHandToHandMelee;
+
+        return weapon->GetWeaponType();
+    }
+
+    bool IsOneHandedWeapon(RE::WEAPON_TYPE type) {
+        switch (type) {
+            case RE::WEAPON_TYPE::kOneHandSword:
+            case RE::WEAPON_TYPE::kOneHandDagger:
+            case RE::WEAPON_TYPE::kOneHandAxe:
+            case RE::WEAPON_TYPE::kOneHandMace:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool IsTwoHandedWeapon(RE::WEAPON_TYPE type) {
+        switch (type) {
+            case RE::WEAPON_TYPE::kTwoHandSword:
+            case RE::WEAPON_TYPE::kTwoHandAxe:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool IsRangedWeapon(RE::WEAPON_TYPE type) {
+        switch (type) {
+            case RE::WEAPON_TYPE::kBow:
+            case RE::WEAPON_TYPE::kCrossbow:
+            case RE::WEAPON_TYPE::kStaff:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    float GetAttackAngle(RE::Actor* attacker, RE::Actor* target) {
+        if (!attacker || !target) return 0.0f;
+
+        // Get the angle from attacker to target
+        float angleToTarget = GetAngleBetween(attacker, target);
+
+        // Get attacker's facing direction
+        float attackerHeading = attacker->GetAngleZ();
+
+        // Calculate the attack angle (difference between facing and target direction)
+        float attackAngle = normalizeAngle(angleToTarget - attackerHeading);
+
+        return attackAngle;
+    }
+
+    // =====================================================================
+    // Debug / Logging Utilities Implementation
+    // =====================================================================
+
+    // Log the idle graph structure to SKSE log
+    // Prints nodes with conditions, highlighting HasKeyword(ActorTypeNPC) conditions
+    void LogIdleGraph(const IdleNode& node, int indent) {
+        if (!node.idle) return;
+
+        // Check if this node has ActorTypeNPC keyword condition
+        bool hasActorTypeNPC = false;
+        if (node.hasConditions) {
+            auto* condItem = node.idle->conditions.head;
+            while (condItem) {
+                auto funcID = condItem->data.functionData.function.underlying();
+                // HasKeyword = 448
+                if (funcID == 448) {
+                    // Check if the keyword parameter is ActorTypeNPC
+                    auto* param = reinterpret_cast<RE::TESForm*>(condItem->data.functionData.params[0]);
+                    if (param) {
+                        const char* editorID = param->GetFormEditorID();
+                        if (editorID && std::string(editorID).find("ActorTypeNPC") != std::string::npos) {
+                            hasActorTypeNPC = true;
+                            break;
+                        }
+                    }
+                }
+                condItem = condItem->next;
+            }
+        }
+
+        bool hasChildren = !node.children.empty();
+
+        // Print nodes that have children OR have ActorTypeNPC condition
+        if (!hasChildren && !hasActorTypeNPC) {
+            // Still recurse children even if we don't print this node
+            for (const auto& child : node.children) {
+                LogIdleGraph(child, indent + 1);
+            }
+            return;
+        }
+
+        std::string indentStr(indent * 2, ' ');
+        std::string condStr = node.hasConditions ? " [HAS CONDITIONS]" : "";
+        std::string npcStr = hasActorTypeNPC ? " *** ActorTypeNPC ***" : "";
+
+        SKSE::log::info("{}[IDLE] '{}' (FormID: {:08X}) Children: {}{}{}",
+            indentStr,
+            node.editorID.empty() ? "<unnamed>" : node.editorID,
+            node.idle->GetFormID(),
+            node.children.size(),
+            condStr,
+            npcStr);
+
+        // If this has ActorTypeNPC, print all condition details
+        if (hasActorTypeNPC) {
+            auto* condItem = node.idle->conditions.head;
+            int condIndex = 0;
+            while (condItem) {
+                auto funcID = condItem->data.functionData.function.underlying();
+                auto opCode = static_cast<int>(condItem->data.flags.opCode);
+                float compValue = condItem->data.comparisonValue.f;
+                bool isOR = condItem->data.flags.isOR;
+
+                std::string paramStr;
+                auto* param = reinterpret_cast<RE::TESForm*>(condItem->data.functionData.params[0]);
+                if (param) {
+                    const char* paramEditorID = param->GetFormEditorID();
+                    paramStr = paramEditorID ? paramEditorID : "<no editorID>";
+                }
+
+                SKSE::log::info("{}  Cond[{}]: FuncID={}, Param='{}', Op={}, Value={:.2f}, {}",
+                    indentStr, condIndex, funcID, paramStr, opCode, compValue,
+                    isOR ? "OR" : "AND");
+
+                condItem = condItem->next;
+                condIndex++;
+            }
+        }
+
+        // List child names for quick reference
+        if (hasChildren) {
+            std::string childNames;
+            for (size_t i = 0; i < node.children.size(); ++i) {
+                if (i > 0) childNames += ", ";
+                childNames += node.children[i].editorID.empty() ? "<unnamed>" : node.children[i].editorID;
+            }
+            SKSE::log::info("{}  -> Children: [{}]", indentStr, childNames);
+        }
+
+        // Recursively log children
+        for (const auto& child : node.children) {
+            LogIdleGraph(child, indent + 1);
+        }
+    }
+
+    // Log all idles in the game matching a prefix
+    void LogIdlesByPrefix(const char* prefix) {
+        if (!prefix) return;
+
+        SKSE::log::info("=== Searching for idles with prefix '{}' ===", prefix);
+
+        auto* dataHandler = RE::TESDataHandler::GetSingleton();
+        if (!dataHandler) {
+            SKSE::log::error("TESDataHandler not available");
+            return;
+        }
+
+        int count = 0;
+        std::string prefixLower(prefix);
+        std::transform(prefixLower.begin(), prefixLower.end(), prefixLower.begin(), ::tolower);
+
+        // Iterate all TESIdleForm records
+        for (auto* form : dataHandler->GetFormArray<RE::TESIdleForm>()) {
+            if (!form) continue;
+
+            const char* editorID = form->GetFormEditorID();
+            if (!editorID) continue;
+
+            std::string editorIDLower(editorID);
+            std::transform(editorIDLower.begin(), editorIDLower.end(), editorIDLower.begin(), ::tolower);
+
+            if (editorIDLower.find(prefixLower) != std::string::npos) {
+                bool hasConditions = (form->conditions.head != nullptr);
+                bool hasParent = (form->parentIdle != nullptr);
+                bool hasChildren = (form->childIdles && form->childIdles->size() > 0);
+
+                SKSE::log::info("[IDLE] '{}' (FormID: {:08X}) - Parent:{} Children:{} Conditions:{}",
+                    editorID,
+                    form->GetFormID(),
+                    hasParent ? "Yes" : "No",
+                    hasChildren ? std::to_string(form->childIdles->size()) : "0",
+                    hasConditions ? "Yes" : "No");
+
+                count++;
+            }
+        }
+
+        SKSE::log::info("=== Found {} idles matching '{}' ===", count, prefix);
+    }
+
+    // Helper to count total nodes in graph
+    static int CountIdleNodes(const IdleNode& node) {
+        int count = node.idle ? 1 : 0;
+        for (const auto& child : node.children) {
+            count += CountIdleNodes(child);
+        }
+        return count;
+    }
+
+    // Dump complete idle hierarchy starting from an EditorID
+    void DumpIdleHierarchy(const char* rootEditorID, int maxDepth) {
+        if (!rootEditorID) return;
+
+        SKSE::log::info("======================================================");
+        SKSE::log::info("IDLE HIERARCHY DUMP: '{}' (maxDepth={})", rootEditorID, maxDepth);
+        SKSE::log::info("======================================================");
+
+        auto graph = BuildIdleGraphFromEditorID(rootEditorID, maxDepth);
+        if (!graph.idle) {
+            SKSE::log::error("Could not find or build graph for '{}'", rootEditorID);
+            return;
+        }
+
+        int totalNodes = CountIdleNodes(graph);
+        SKSE::log::info("Total nodes in graph: {}", totalNodes);
+
+        LogIdleGraph(graph);
+
+        SKSE::log::info("======================================================");
+        SKSE::log::info("END HIERARCHY DUMP ({} nodes)", totalNodes);
+        SKSE::log::info("======================================================");
     }
 }

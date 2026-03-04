@@ -9,6 +9,7 @@
 #include "integration/PoiseIntegration.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
+#include "utils/AnimUtil.h"
 
 std::atomic<SkyPromptAPI::ClientID> g_clientID{0};
 
@@ -37,6 +38,14 @@ void OnDataLoaded()
     } else {
         SKSE::log::info("Poise mod not detected - using vanilla stagger behavior");
     }
+
+    // Debug: Log idle graph data at startup to verify accessibility
+    SKSE::log::info("=== Idle Graph System Startup Verification ===");
+
+    // Dump NonMountedCombatRightPower to find nodes with ActorTypeNPC condition
+    AnimUtil::DumpIdleHierarchy("NonMountedCombatRightPower", 20);
+
+    SKSE::log::info("=== End Idle Graph Startup Verification ===");
 
     if (SKSEMenuFramework::IsInstalled()) {
         SKSE::log::info("SKSEMenuFramework detected, registering icon overlay as HUD element");
