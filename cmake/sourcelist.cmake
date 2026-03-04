@@ -8,6 +8,7 @@ set(sources ${sources}
     src/feed/CustomFeed.cpp
     src/feed/WitnessDetection.cpp
     src/utils/AnimUtil.cpp
+    src/utils/IdleParser.cpp
     src/integration/OStimIntegration.cpp
     src/integration/PoiseIntegration.cpp
     src/utils/MenuCheck.cpp

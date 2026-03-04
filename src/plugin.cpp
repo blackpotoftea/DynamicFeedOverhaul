@@ -10,6 +10,7 @@
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
 #include "utils/AnimUtil.h"
+#include "utils/IdleParser.h"
 
 std::atomic<SkyPromptAPI::ClientID> g_clientID{0};
 
@@ -43,7 +44,7 @@ void OnDataLoaded()
     SKSE::log::info("=== Idle Graph System Startup Verification ===");
 
     // Dump NonMountedCombatRightPower to find nodes with ActorTypeNPC condition
-    AnimUtil::DumpIdleHierarchy("NonMountedCombatRightPower", 20);
+    IdleParser::DumpIdleHierarchy("NonMountedCombatRightPower", 20);
 
     SKSE::log::info("=== End Idle Graph Startup Verification ===");
 

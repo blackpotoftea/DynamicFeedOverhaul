@@ -3,6 +3,7 @@ set(headers ${headers}
     src/Settings.h
     src/utils/log.h
     src/utils/AnimUtil.h
+    src/utils/IdleParser.h
     src/hooks/hook.h
     src/feed/TargetState.h
     src/feed/PairedAnimPromptSink.h

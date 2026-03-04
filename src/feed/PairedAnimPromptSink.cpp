@@ -11,6 +11,7 @@
 #include "utils/MenuCheck.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/AnimUtil.h"
+#include "utils/IdleParser.h"
 #include "feed/WitnessDetection.h"
 #include <thread>
 
@@ -813,7 +814,7 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
             // Debug: Find and log which kill move would match for this target
             auto* player = RE::PlayerCharacter::GetSingleton();
             if (player) {
-                AnimUtil::DebugFindKillMove(player, newTarget);
+                IdleParser::DebugFindKillMove(player, newTarget);
             }
         }
         // Same pending target - check if delay has elapsed
