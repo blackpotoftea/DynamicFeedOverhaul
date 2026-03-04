@@ -809,6 +809,12 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
             pendingTargetTime_ = std::chrono::steady_clock::now();
             SKSE::log::debug("New target detected: {} - waiting {:.2f}s before showing prompt",
                 newTarget->GetName(), delaySeconds);
+
+            // Debug: Find and log which kill move would match for this target
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (player) {
+                AnimUtil::DebugFindKillMove(player, newTarget);
+            }
         }
         // Same pending target - check if delay has elapsed
         else if (pendingTarget_ == newTargetHandle) {

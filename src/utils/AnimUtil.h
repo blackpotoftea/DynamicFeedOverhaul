@@ -283,4 +283,8 @@ namespace AnimUtil {
 
     // Dump complete idle hierarchy starting from an EditorID
     void DumpIdleHierarchy(const char* rootEditorID, int maxDepth = 20);
+
+    // Debug: Find and log the kill move that would match for player vs target
+    // Evaluates conditions from NonMountedCombatRightPower tree and logs the result
+    void DebugFindKillMove(RE::Actor* player, RE::Actor* target);
 }
