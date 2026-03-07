@@ -82,6 +82,24 @@ namespace IdleParser {
     IdleSelectionResult SelectIdleFromRootEditorID(const char* rootEditorID, const IdleSelectionContext& context);
 
     // =====================================================================
+    // Condition Bypass Utilities
+    // =====================================================================
+    // Temporarily clear conditions on an idle and all its parent idles
+    // This allows PlayIdle to succeed without condition checks
+    // MUST call RestoreIdleConditions after playing to restore original state
+    // NOTE: These must be called on game thread (inside SKSE task)
+
+    // Clear conditions on idle and all parents (saves state internally)
+    void ClearIdleConditions(RE::TESIdleForm* idle);
+
+    // Restore previously cleared conditions
+    void RestoreIdleConditions();
+
+    // Play idle with conditions bypassed (handles clear/restore automatically)
+    // This queues the play to game thread with proper condition management
+    void PlayIdleBypassConditions(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target = nullptr);
+
+    // =====================================================================
     // Weapon Type Utilities
     // =====================================================================
 
@@ -113,6 +131,9 @@ namespace IdleParser {
 
     // Dump complete idle hierarchy starting from an EditorID
     void DumpIdleHierarchy(const char* rootEditorID, int maxDepth = 20);
+
+    // Log all conditions of a specific idle by EditorID
+    void LogIdleConditions(const char* idleEditorID);
 
     // Debug: Find and log the kill move that would match for player vs target
     // Evaluates conditions from NonMountedCombatRightPower tree and logs the result

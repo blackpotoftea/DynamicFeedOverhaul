@@ -7,9 +7,6 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-// Forward include for idle parsing functionality
-#include "utils/IdleParser.h"
-
 namespace AnimUtil {
     // Target state constants for feed type calculation
     // These represent base values multiplied by 10 in OAR graph variable conditions

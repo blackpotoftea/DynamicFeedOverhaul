@@ -473,10 +473,65 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         bool isPairedAnim = true;
         const char* idleEditorID = AnimUtil::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim);
 
+        // Use IdleParser to find kill move when:
+        // 1. Combat feed (target in combat), OR
+        // 2. Lethal feed (player held button) with weapon drawn
+        // Only for standing targets (sitting/sleeping use different animations)
+        bool weaponDrawn = player->AsActorState() && player->AsActorState()->IsWeaponDrawn();
+        bool useKillMove = settings->Combat.UseIdleManager &&
+                          (targetState == AnimUtil::kStanding || targetState == AnimUtil::kCombat) &&
+                          (targetState == AnimUtil::kCombat || (isLethal && weaponDrawn));
+
+        RE::TESIdleForm* killMoveIdle = nullptr;
+
+        if (useKillMove) {
+            SKSE::log::info("[KillMove] Attempting IdleParser selection (combat={}, lethal={}, weaponDrawn={})",
+                targetState == AnimUtil::kCombat, isLethal, weaponDrawn);
+
+            auto idleContext = IdleParser::BuildIdleContext(player, feedTarget);
+
+            SKSE::log::info("[KillMove] Player weapon type: {}", static_cast<int>(idleContext.weaponType));
+
+            // Start from NonMountedCombatRightPower to include both front and back kill moves
+            // VL_KillmovesRoot -> VL_KillmovesBackRoot contains back kill moves
+            // VL_KillmovesRoot -> KillMoveNPCRoot contains front kill moves
+            auto graph = IdleParser::BuildIdleGraphFromEditorID("NonMountedCombatRightPower", 20);
+            auto result = IdleParser::SelectIdleFromGraph(graph, idleContext, true);  // verbose=true for debugging
+
+            if (result.success && result.selectedIdle) {
+                SKSE::log::info("[KillMove] Selected: '{}' (FormID: {:08X})",
+                    result.editorID, result.selectedIdle->GetFormID());
+
+                killMoveIdle = result.selectedIdle;
+                idleEditorID = result.selectedIdle->GetFormEditorID();
+                isPairedAnim = true;
+            } else {
+                SKSE::log::warn("[KillMove] Selection failed: {} - using default", result.failureReason);
+            }
+        }
+
         AnimUtil::SetFeedGraphVars(player, feedType);
         AnimUtil::SetFeedGraphVars(feedTarget, feedType);
 
-        ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
+        // Use PlayIdleBypassConditions for kill moves (bypasses parent conditions)
+        if (killMoveIdle) {
+            SKSE::log::info("[KillMove] Playing '{}' with condition bypass", idleEditorID);
+            IdleParser::PlayIdleBypassConditions(player, killMoveIdle, feedTarget);
+
+            // Send events and handle integration (same as ExecuteFeed)
+            PapyrusCall::SendOnVampireFeedEvent(feedTarget);
+            PapyrusCall::SendDAO_VampireFeedEvent(player, feedTarget);
+
+            if (!TargetState::IsWerewolf(player)) {
+                auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
+                if (vampireQuest) {
+                    PapyrusCall::CallVampireFeed(vampireQuest, feedTarget, isLethal);
+                }
+            }
+        } else {
+            // tEMPORAY DISABLED
+            //ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
+        }
 
         // Reset lethal flag after use
         isLethalFeedInProgress_ = false;

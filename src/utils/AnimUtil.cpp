@@ -1,5 +1,4 @@
 #include "utils/AnimUtil.h"
-#include "utils/IdleParser.h"
 #include "feed/TargetState.h"
 #include "feed/CustomFeed.h"
 #include "Settings.h"

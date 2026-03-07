@@ -9,6 +9,9 @@ namespace IdleParser {
     static std::unordered_map<RE::FormID, std::vector<RE::TESIdleForm*>> g_idleChildrenCache;
     static bool g_idleCacheBuilt = false;
 
+    // Cache of built idle graphs by root EditorID (built once per root)
+    static std::unordered_map<std::string, IdleNode> g_idleGraphCache;
+
     // Build the idle children cache by scanning all idles and checking their parentIdle
     static void BuildIdleChildrenCache() {
         if (g_idleCacheBuilt) return;
@@ -151,6 +154,7 @@ namespace IdleParser {
     }
 
     // Build a graph of idles starting from a root idle (recursive)
+    // Note: Use BuildIdleGraphFromEditorID for caching
     IdleNode BuildIdleGraph(RE::TESIdleForm* rootIdle, int maxDepth) {
         IdleNode node;
 
@@ -159,9 +163,6 @@ namespace IdleParser {
         node.idle = rootIdle;
         node.editorID = rootIdle->GetFormEditorID() ? rootIdle->GetFormEditorID() : "";
         node.hasConditions = (rootIdle->conditions.head != nullptr);
-
-        SKSE::log::debug("[IdleParser] Building node: '{}' (hasConditions={}, depth={})",
-            node.editorID, node.hasConditions, maxDepth);
 
         // Recursively build children
         auto childIdles = GetChildIdles(rootIdle);
@@ -175,17 +176,242 @@ namespace IdleParser {
         return node;
     }
 
-    // Build graph from EditorID
+    // Build graph from EditorID (cached - only builds once per root)
     IdleNode BuildIdleGraphFromEditorID(const char* rootEditorID, int maxDepth) {
         if (!rootEditorID) return {};
 
+        std::string key(rootEditorID);
+
+        // Check cache first
+        auto it = g_idleGraphCache.find(key);
+        if (it != g_idleGraphCache.end()) {
+            SKSE::log::debug("[IdleParser] Using cached graph for '{}'", rootEditorID);
+            return it->second;
+        }
+
+        // Build and cache
         auto* rootIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(rootEditorID);
         if (!rootIdle) {
             SKSE::log::warn("[IdleParser] Root idle '{}' not found", rootEditorID);
             return {};
         }
 
-        return BuildIdleGraph(rootIdle, maxDepth);
+        SKSE::log::info("[IdleParser] Building and caching graph for '{}'", rootEditorID);
+        auto graph = BuildIdleGraph(rootIdle, maxDepth);
+        g_idleGraphCache[key] = graph;
+
+        return graph;
+    }
+
+    // Check if an idle has GetRandomPercent or GetPercentChance conditions
+    // These are unreliable for forced playback and should be skipped
+    static bool HasRandomCondition(RE::TESIdleForm* idle) {
+        if (!idle || !idle->conditions.head) return false;
+
+        auto* condItem = idle->conditions.head;
+        while (condItem) {
+            auto funcID = condItem->data.functionData.function.underlying();
+            // GetRandomPercent = 125, GetPercentChance = 125 (same function)
+            if (funcID == 125) {
+                return true;
+            }
+            condItem = condItem->next;
+        }
+        return false;
+    }
+
+    // Check if a condition function is a "combat state" condition that we should bypass
+    // These are conditions that require active combat/attack states that we can't fake
+    // NOTE: We only bypass combat state conditions, NOT keyword/race/type checks
+    static bool IsBypassableCondition(int funcID) {
+        switch (funcID) {
+            case 122: // IsAttacking
+            case 123: // GetPowerAttacking
+            case 310: // GetAttackState
+            case 280: // GetInCombat
+            case 367: // GetCombatState
+            case 437: // IsInKillMove
+            case 230: // GetWantBlocking
+            case 127: // IsBlocking
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // Check if a branch/idle EditorID is for a specific creature type (not humanoid NPC)
+    // Returns true if this should be skipped for humanoid NPCs
+    // NOTE: Currently unused - vanilla keyword conditions handle this, but kept for future use
+    [[maybe_unused]]
+    static bool IsCreatureSpecificIdle(const std::string& editorID) {
+        // Dragon kill moves
+        if (editorID.find("Dragon") != std::string::npos) {
+            return true;
+        }
+        // Giant kill moves
+        if (editorID.find("Giant") != std::string::npos) {
+            return true;
+        }
+        // Troll kill moves
+        if (editorID.find("Troll") != std::string::npos) {
+            return true;
+        }
+        // Falmer kill moves
+        if (editorID.find("Falmer") != std::string::npos) {
+            return true;
+        }
+        // Hagraven kill moves
+        if (editorID.find("Hagraven") != std::string::npos) {
+            return true;
+        }
+        // Draugr - might want these for undead NPCs, but skip for living humanoids
+        if (editorID.find("Draugr") != std::string::npos) {
+            return true;
+        }
+        // Spider kill moves
+        if (editorID.find("Spider") != std::string::npos) {
+            return true;
+        }
+        // Bear, wolf, sabrecat, etc.
+        if (editorID.find("Bear") != std::string::npos ||
+            editorID.find("Wolf") != std::string::npos ||
+            editorID.find("Sabrecat") != std::string::npos ||
+            editorID.find("SabreCat") != std::string::npos) {
+            return true;
+        }
+        return false;
+    }
+
+    // Check if a branch EditorID implies a specific weapon type requirement
+    // Returns the required weapon type category, or -1 if no requirement
+    // 0 = Hand to hand, 1 = 1H melee, 2 = 2H melee, 3 = Bow/Crossbow
+    static int GetBranchWeaponRequirement(const std::string& editorID) {
+        // 2-handed weapon branches
+        if (editorID.find("2HM") != std::string::npos ||
+            editorID.find("2HW") != std::string::npos ||
+            editorID.find("2Hm") != std::string::npos ||
+            editorID.find("TwoHand") != std::string::npos) {
+            return 2;  // 2H melee required
+        }
+
+        // 1-handed weapon branches
+        if (editorID.find("1HM") != std::string::npos ||
+            editorID.find("1Hm") != std::string::npos ||
+            editorID.find("Sword") != std::string::npos ||
+            editorID.find("Dagger") != std::string::npos ||
+            editorID.find("Mace") != std::string::npos ||
+            editorID.find("Axe1H") != std::string::npos) {
+            return 1;  // 1H melee required
+        }
+
+        // Bow branches
+        if (editorID.find("Bow") != std::string::npos) {
+            return 3;  // Bow required
+        }
+
+        // Hand to hand
+        if (editorID.find("H2H") != std::string::npos ||
+            editorID.find("HandToHand") != std::string::npos) {
+            return 0;  // Hand to hand
+        }
+
+        return -1;  // No specific requirement
+    }
+
+    // Check if context weapon matches branch requirement
+    static bool WeaponMatchesBranch(const IdleSelectionContext& context, int branchRequirement) {
+        if (branchRequirement < 0) return true;  // No requirement
+
+        int weaponCategory = -1;
+
+        switch (context.weaponType) {
+            case RE::WEAPON_TYPE::kHandToHandMelee:
+                weaponCategory = 0;
+                break;
+            case RE::WEAPON_TYPE::kOneHandSword:
+            case RE::WEAPON_TYPE::kOneHandDagger:
+            case RE::WEAPON_TYPE::kOneHandAxe:
+            case RE::WEAPON_TYPE::kOneHandMace:
+                weaponCategory = 1;
+                break;
+            case RE::WEAPON_TYPE::kTwoHandSword:
+            case RE::WEAPON_TYPE::kTwoHandAxe:
+                weaponCategory = 2;
+                break;
+            case RE::WEAPON_TYPE::kBow:
+            case RE::WEAPON_TYPE::kCrossbow:
+                weaponCategory = 3;
+                break;
+            default:
+                return true;  // Unknown, allow
+        }
+
+        return weaponCategory == branchRequirement;
+    }
+
+    // Evaluate conditions for branch node traversal
+    // Returns true if we should traverse into this branch
+    // - Bypasses combat state conditions (GetPowerAttacking, etc.)
+    // - Evaluates keyword/race conditions using vanilla evaluation (ActorTypeNPC, etc.)
+    // - Evaluates weapon conditions (GetEquippedItemType, etc.)
+    static bool EvaluateBranchConditions(RE::TESIdleForm* idle, const IdleSelectionContext& context, bool verbose = false) {
+        if (!idle) return false;
+
+        // No conditions = always passes
+        if (!idle->conditions.head) return true;
+
+        if (!context.subject) return false;
+
+        const char* idleName = idle->GetFormEditorID() ? idle->GetFormEditorID() : "unknown";
+
+        auto* subjectRef = context.subject->As<RE::TESObjectREFR>();
+        auto* targetRef = context.target ? context.target->As<RE::TESObjectREFR>() : nullptr;
+
+        // Log all conditions on this branch for debugging
+        if (verbose) {
+            SKSE::log::info("[IdleSelect] Branch '{}' conditions:", idleName);
+            auto* debugItem = idle->conditions.head;
+            while (debugItem) {
+                auto debugFuncID = debugItem->data.functionData.function.underlying();
+                float debugComp = debugItem->data.comparisonValue.f;
+                SKSE::log::info("  - {} (funcID={}) cmp {} (opCode={})",
+                    GetConditionFunctionName(debugFuncID), debugFuncID,
+                    debugComp, static_cast<int>(debugItem->data.flags.opCode));
+                debugItem = debugItem->next;
+            }
+        }
+
+        // First pass: check if we have any non-bypassable conditions
+        // If ALL conditions are bypassable, we can traverse
+        bool hasNonBypassable = false;
+        auto* checkItem = idle->conditions.head;
+        while (checkItem) {
+            auto funcID = checkItem->data.functionData.function.underlying();
+            if (!IsBypassableCondition(funcID)) {
+                hasNonBypassable = true;
+                break;
+            }
+            checkItem = checkItem->next;
+        }
+
+        // If all conditions are bypassable (combat state only), allow traversal
+        if (!hasNonBypassable) {
+            if (verbose) {
+                SKSE::log::info("[IdleSelect] Branch '{}' - all conditions bypassable, allowing traversal", idleName);
+            }
+            return true;
+        }
+
+        // We have non-bypassable conditions - use vanilla evaluation
+        // This properly evaluates keyword checks like ActorTypeNPC, ActorTypeDragon, etc.
+        bool result = idle->conditions(subjectRef, targetRef);
+
+        if (verbose) {
+            SKSE::log::info("[IdleSelect] Branch '{}' - vanilla eval = {} (has keyword/weapon conditions)",
+                idleName, result ? "PASS" : "FAIL");
+        }
+
+        return result;
     }
 
     // Evaluate if an idle's conditions pass for the given context
@@ -226,19 +452,48 @@ namespace IdleParser {
                                     int& globalBestDepth, bool verbose = false) {
         if (!node.idle) return 0;
 
-        // Evaluate this node's conditions
-        if (!EvaluateIdleConditions(node.idle, context)) {
+        bool isLeafNode = node.children.empty();
+
+        // First check: heuristic weapon type filtering based on EditorID
+        // This catches branches like "KillMove2HMRoot" that require 2H weapons
+        int branchWeaponReq = GetBranchWeaponRequirement(node.editorID);
+        if (branchWeaponReq >= 0 && !WeaponMatchesBranch(context, branchWeaponReq)) {
             if (verbose) {
-                SKSE::log::info("[IdleSelect] REJECTED: '{}' - conditions failed", node.editorID);
+                SKSE::log::info("[IdleSelect] WEAPON MISMATCH: '{}' - requires weapon category {} but player has {}",
+                    node.editorID, branchWeaponReq, static_cast<int>(context.weaponType));
             }
-            return 0;  // Conditions failed, don't continue down this branch
+            return 0;  // Wrong weapon type for this branch
         }
 
-        // Conditions passed - add to path
+        // For LEAF nodes: evaluate ALL conditions (vanilla evaluation)
+        // For BRANCH nodes: bypass combat conditions but still check weapon requirements
+        if (isLeafNode) {
+            if (!EvaluateIdleConditions(node.idle, context)) {
+                if (verbose) {
+                    SKSE::log::info("[IdleSelect] REJECTED: '{}' - conditions failed", node.editorID);
+                }
+                return 0;  // Conditions failed for leaf node
+            }
+        } else {
+            // Branch node: check weapon conditions but bypass combat state conditions
+            if (!EvaluateBranchConditions(node.idle, context, verbose)) {
+                if (verbose) {
+                    SKSE::log::info("[IdleSelect] BRANCH BLOCKED: '{}' - weapon/other conditions failed",
+                        node.editorID);
+                }
+                return 0;  // Don't traverse into wrong weapon type branches
+            }
+            if (verbose) {
+                SKSE::log::info("[IdleSelect] BRANCH: '{}' - traversing (weapon conditions OK, {} children)",
+                    node.editorID, node.children.size());
+            }
+        }
+
+        // Add to path
         currentPath.push_back(node.editorID);
         int currentDepth = static_cast<int>(currentPath.size());
 
-        if (verbose) {
+        if (verbose && isLeafNode) {
             SKSE::log::info("[IdleSelect] PASSED: '{}' (depth {})", node.editorID, currentDepth);
         }
 
@@ -253,18 +508,27 @@ namespace IdleParser {
             }
         }
 
-        // Only update result if this is a leaf node (no valid children passed)
+        // Only update result if this is a leaf node (no children)
         // AND it's deeper than the global best we've found across ALL branches
-        if (deepestInBranch == currentDepth && currentDepth > globalBestDepth) {
-            // This is a leaf node (no valid children) and it's deeper than any previous best
-            result.selectedIdle = node.idle;
-            result.editorID = node.editorID;
-            result.success = true;
-            result.selectionPath = currentPath;
-            globalBestDepth = currentDepth;  // Update global best
+        // AND it doesn't have random conditions (unreliable for forced playback)
+        if (isLeafNode && deepestInBranch == currentDepth && currentDepth > globalBestDepth) {
+            // Check if this idle has random conditions - skip if so
+            if (HasRandomCondition(node.idle)) {
+                if (verbose) {
+                    SKSE::log::info("[IdleSelect] SKIPPED: '{}' - has random condition (unreliable)", node.editorID);
+                }
+                // Don't update result, continue searching
+            } else {
+                // This is a leaf node and it's deeper than any previous best
+                result.selectedIdle = node.idle;
+                result.editorID = node.editorID;
+                result.success = true;
+                result.selectionPath = currentPath;
+                globalBestDepth = currentDepth;  // Update global best
 
-            if (verbose) {
-                SKSE::log::info("[IdleSelect] CANDIDATE: '{}' at depth {} (new global best)", node.editorID, currentDepth);
+                if (verbose) {
+                    SKSE::log::info("[IdleSelect] CANDIDATE: '{}' at depth {} (new global best)", node.editorID, currentDepth);
+                }
             }
         }
 
@@ -314,6 +578,136 @@ namespace IdleParser {
     IdleSelectionResult SelectIdleFromRootEditorID(const char* rootEditorID, const IdleSelectionContext& context) {
         auto graph = BuildIdleGraphFromEditorID(rootEditorID);
         return SelectIdleFromGraph(graph, context);
+    }
+
+    // =====================================================================
+    // Condition Bypass Utilities Implementation
+    // =====================================================================
+
+    // Storage for saved condition heads (idle FormID -> original condition head)
+    static std::vector<std::pair<RE::TESIdleForm*, RE::TESConditionItem*>> g_savedConditions;
+
+    void ClearIdleConditions(RE::TESIdleForm* idle) {
+        if (!idle) return;
+
+        // Clear any previously saved conditions (safety)
+        g_savedConditions.clear();
+
+        // Walk up the parent chain and clear conditions on each
+        auto* current = idle;
+        while (current) {
+            // Save original condition head
+            g_savedConditions.push_back({current, current->conditions.head});
+
+            const char* editorID = current->GetFormEditorID();
+            SKSE::log::debug("[IdleParser] Clearing conditions on '{}' (had: {})",
+                editorID ? editorID : "unknown",
+                current->conditions.head ? "yes" : "no");
+
+            // Clear conditions
+            current->conditions.head = nullptr;
+
+            // Move to parent
+            current = current->parentIdle;
+        }
+
+        SKSE::log::info("[IdleParser] Cleared conditions on {} idles in parent chain",
+            g_savedConditions.size());
+    }
+
+    void RestoreIdleConditions() {
+        if (g_savedConditions.empty()) {
+            SKSE::log::warn("[IdleParser] RestoreIdleConditions called but nothing to restore");
+            return;
+        }
+
+        // Restore all saved conditions
+        for (auto& [idle, head] : g_savedConditions) {
+            if (idle) {
+                idle->conditions.head = head;
+
+                const char* editorID = idle->GetFormEditorID();
+                SKSE::log::debug("[IdleParser] Restored conditions on '{}'",
+                    editorID ? editorID : "unknown");
+            }
+        }
+
+        SKSE::log::info("[IdleParser] Restored conditions on {} idles", g_savedConditions.size());
+        g_savedConditions.clear();
+    }
+
+    void PlayIdleBypassConditions(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target) {
+        if (!actor || !idle) {
+            SKSE::log::warn("[IdleParser::PlayIdleBypassConditions] Invalid input");
+            return;
+        }
+
+        auto actorHandle = actor->CreateRefHandle();
+        auto idleFormID = idle->GetFormID();
+        auto targetHandle = target ? target->CreateRefHandle() : RE::ObjectRefHandle();
+        auto actorName = actor->GetName() ? std::string(actor->GetName()) : std::string("unknown");
+        auto targetName = target ? std::string(target->GetName()) : std::string("none");
+
+        SKSE::log::info("[IdleParser] Queuing idle {:X} with condition bypass for {} (target: {})",
+            idleFormID, actorName, targetName);
+
+        SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, targetHandle, actorName, targetName] {
+            // Resolve handles
+            auto refPtr = actorHandle.get();
+            if (!refPtr) {
+                SKSE::log::error("[IdleParser] Actor handle invalid");
+                return;
+            }
+
+            auto* a = refPtr->As<RE::Actor>();
+            if (!a) {
+                SKSE::log::error("[IdleParser] Object is not an Actor");
+                return;
+            }
+
+            auto* idleForm = RE::TESForm::LookupByID<RE::TESIdleForm>(idleFormID);
+            if (!idleForm) {
+                SKSE::log::error("[IdleParser] Idle form {:X} not found", idleFormID);
+                return;
+            }
+
+            RE::TESObjectREFR* t = nullptr;
+            RE::Actor* targetActor = nullptr;
+            if (targetHandle) {
+                auto targetRefPtr = targetHandle.get();
+                if (targetRefPtr) {
+                    t = targetRefPtr.get();
+                    targetActor = t->As<RE::Actor>();
+                }
+            }
+
+            // Preprocess for paired animations
+            if (targetActor) {
+                AnimUtil::PrepareActorForPairedIdle(a);
+                AnimUtil::PrepareActorForPairedIdle(targetActor);
+            }
+
+            auto* process = a->GetActorRuntimeData().currentProcess;
+            if (!process) {
+                SKSE::log::error("[IdleParser] No process for actor");
+                return;
+            }
+
+            // Clear conditions on idle and all parents
+            ClearIdleConditions(idleForm);
+
+            // Play the idle
+            bool success = process->PlayIdle(a, idleForm, t);
+
+            // Restore conditions immediately after PlayIdle call
+            RestoreIdleConditions();
+
+            if (success) {
+                SKSE::log::info("[IdleParser] SUCCESS: Idle {:X} started with bypassed conditions", idleFormID);
+            } else {
+                SKSE::log::error("[IdleParser] FAILED: PlayIdle returned false (idle: {:X})", idleFormID);
+            }
+        });
     }
 
     // =====================================================================
@@ -708,6 +1102,101 @@ namespace IdleParser {
         SKSE::log::info("======================================================");
         SKSE::log::info("END HIERARCHY DUMP ({} nodes)", totalNodes);
         SKSE::log::info("======================================================");
+    }
+
+    // Log all conditions of a specific idle by EditorID
+    void LogIdleConditions(const char* idleEditorID) {
+        if (!idleEditorID) return;
+
+        auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(idleEditorID);
+        if (!idle) {
+            SKSE::log::warn("[LogIdleConditions] Idle '{}' not found", idleEditorID);
+            return;
+        }
+
+        SKSE::log::info("=== CONDITIONS FOR IDLE '{}' (FormID: {:08X}) ===", idleEditorID, idle->GetFormID());
+
+        if (!idle->conditions.head) {
+            SKSE::log::info("  (No conditions - always passes)");
+            SKSE::log::info("=== END CONDITIONS ===");
+            return;
+        }
+
+        auto* condItem = idle->conditions.head;
+        int condIndex = 0;
+        while (condItem) {
+            auto funcID = condItem->data.functionData.function.underlying();
+            auto opCode = static_cast<int>(condItem->data.flags.opCode);
+            float compValue = condItem->data.comparisonValue.f;
+            bool isOR = condItem->data.flags.isOR;
+
+            // Get "Run On" target
+            auto runOn = condItem->data.object.get();
+            const char* runOnStr = "Subject";
+            switch (runOn) {
+                case RE::CONDITIONITEMOBJECT::kSelf: runOnStr = "Subject"; break;
+                case RE::CONDITIONITEMOBJECT::kTarget: runOnStr = "Target"; break;
+                case RE::CONDITIONITEMOBJECT::kRef: runOnStr = "Reference"; break;
+                case RE::CONDITIONITEMOBJECT::kCombatTarget: runOnStr = "CombatTarget"; break;
+                case RE::CONDITIONITEMOBJECT::kLinkedRef: runOnStr = "LinkedRef"; break;
+                case RE::CONDITIONITEMOBJECT::kQuestAlias: runOnStr = "QuestAlias"; break;
+                case RE::CONDITIONITEMOBJECT::kPackData: runOnStr = "PackData"; break;
+                case RE::CONDITIONITEMOBJECT::kEventData: runOnStr = "EventData"; break;
+                default: runOnStr = "Unknown"; break;
+            }
+
+            const char* funcName = GetConditionFunctionName(funcID);
+            std::string funcStr = funcName ? funcName : fmt::format("Func_{}", funcID);
+
+            // Get parameters
+            std::string paramStr;
+            for (int paramIdx = 0; paramIdx < 2; ++paramIdx) {
+                void* rawParam = condItem->data.functionData.params[paramIdx];
+                if (!rawParam) continue;
+
+                auto ptrVal = reinterpret_cast<uintptr_t>(rawParam);
+                if (ptrVal > 0x10000) {
+                    auto* formParam = static_cast<RE::TESForm*>(rawParam);
+                    if (formParam && RE::TESForm::LookupByID(formParam->GetFormID()) == formParam) {
+                        const char* editorID = formParam->GetFormEditorID();
+                        if (!paramStr.empty()) paramStr += ", ";
+                        if (editorID && editorID[0] != '\0') {
+                            paramStr += editorID;
+                        } else {
+                            paramStr += fmt::format("{:08X}", formParam->GetFormID());
+                        }
+                    }
+                } else if (ptrVal > 0 && ptrVal <= 0x10000) {
+                    if (!paramStr.empty()) paramStr += ", ";
+                    paramStr += fmt::format("{}", ptrVal);
+                }
+            }
+
+            const char* opStr = "??";
+            switch (opCode) {
+                case 0: opStr = "=="; break;
+                case 1: opStr = "!="; break;
+                case 2: opStr = ">"; break;
+                case 3: opStr = ">="; break;
+                case 4: opStr = "<"; break;
+                case 5: opStr = "<="; break;
+            }
+
+            if (!paramStr.empty()) {
+                SKSE::log::info("  [{}] {}({}) {} {:.0f} [{}] {}",
+                    condIndex, funcStr, paramStr, opStr, compValue, runOnStr,
+                    isOR ? "OR" : "AND");
+            } else {
+                SKSE::log::info("  [{}] {} {} {:.0f} [{}] {}",
+                    condIndex, funcStr, opStr, compValue, runOnStr,
+                    isOR ? "OR" : "AND");
+            }
+
+            condItem = condItem->next;
+            condIndex++;
+        }
+
+        SKSE::log::info("=== END CONDITIONS ===");
     }
 
     // Debug: Find and log the kill move that would match for player vs target

@@ -142,6 +142,7 @@ void Settings::LoadINI() {
     Combat.WitnessCheckInterval = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessCheckInterval", Combat.WitnessCheckInterval));
     Combat.WitnessDebugLogging = ini.GetBoolValue("Combat", "WitnessDebugLogging", Combat.WitnessDebugLogging);
     Combat.PromptDelayCombatSeconds = static_cast<float>(ini.GetDoubleValue("Combat", "PromptDelayCombatSeconds", Combat.PromptDelayCombatSeconds));
+    Combat.UseIdleManager = ini.GetBoolValue("Combat", "UseIdleManager", Combat.UseIdleManager);
 
     // Filtering
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
@@ -189,10 +190,10 @@ void Settings::LoadINI() {
         SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
             NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
     }
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}",
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, UseIdleManager={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
-        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds);
+        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds, Combat.UseIdleManager);
     SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
@@ -310,6 +311,8 @@ void Settings::SaveINI() {
         "; Enable verbose witness detection debug logging (can be very spammy)");
     ini.SetDoubleValue("Combat", "PromptDelayCombatSeconds", Combat.PromptDelayCombatSeconds,
         "; Delay in seconds before showing prompt in combat (default 0 for immediate response)");
+    ini.SetBoolValue("Combat", "UseIdleManager", Combat.UseIdleManager,
+        "; TEMP: Use IdleParser to select kill move animations based on weapon/conditions");
 
     // Filtering
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,

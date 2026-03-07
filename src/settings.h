@@ -77,6 +77,7 @@ public:
         float WitnessCheckInterval{ 0.5f };      // How often to check for witnesses during feed (seconds)
         bool WitnessDebugLogging{ false };       // Enable verbose witness detection logging
         float PromptDelayCombatSeconds{ 0.0f };  // Delay before showing prompt in combat (default 0 for immediate)
+        bool UseIdleManager{ true };             // TEMP: Use IdleParser to select kill move animations
     } Combat;
 
     // Target filtering settings
