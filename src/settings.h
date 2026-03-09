@@ -116,7 +116,7 @@ public:
         bool EnableSacrilege{ true };           // Enable Sacrilege integration
         bool EnableBetterVampires{ true };      // Enable Better Vampires integration
         bool PoiseIgnoresLevelCheck{ true };    // When poise mod detected, ignore level requirements
-        bool DisableSacrosanctInCombat{ true }; // Skip Sacrosanct/Sacrilege Papyrus calls during combat
+        bool EnableSacrosanctInCombat{ true };  // Use C++ integration for Sacrosanct/Sacrilege during combat (bypasses AI-driven state)
     } Integration;
 
     void LoadINI();

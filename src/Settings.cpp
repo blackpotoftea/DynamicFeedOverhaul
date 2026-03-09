@@ -173,7 +173,7 @@ void Settings::LoadINI() {
     Integration.EnableSacrilege = ini.GetBoolValue("Integration", "EnableSacrilege", Integration.EnableSacrilege);
     Integration.EnableBetterVampires = ini.GetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires);
     Integration.PoiseIgnoresLevelCheck = ini.GetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck);
-    Integration.DisableSacrosanctInCombat = ini.GetBoolValue("Integration", "DisableSacrosanctInCombat", Integration.DisableSacrosanctInCombat);
+    Integration.EnableSacrosanctInCombat = ini.GetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
@@ -201,8 +201,8 @@ void Settings::LoadINI() {
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DisableSacrosanctInCombat={}",
-        Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck, Integration.DisableSacrosanctInCombat);
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, EnableSacrosanctInCombat={}",
+        Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck, Integration.EnableSacrosanctInCombat);
 }
 
 void Settings::SaveINI() {
@@ -366,8 +366,8 @@ void Settings::SaveINI() {
         "; Enable Better Vampires integration (auto-detects mod)");
     ini.SetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck,
         "; When poise mod (ChocolatePoise/loki_POISE) is detected, ignore level requirements for feeding");
-    ini.SetBoolValue("Integration", "DisableSacrosanctInCombat", Integration.DisableSacrosanctInCombat,
-        "; Skip Sacrosanct/Sacrilege Papyrus calls during combat (Papyrus is unreliable in combat)");
+    ini.SetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat,
+        "; Use C++ integration for Sacrosanct/Sacrilege during combat (bypasses AI-driven state issues)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

@@ -7,6 +7,7 @@
 #include "feed/FeedIconOverlay.h"
 #include "integration/OStimIntegration.h"
 #include "integration/PoiseIntegration.h"
+#include "integration/SacrosanctIntegration.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
 #include "utils/AnimUtil.h"
@@ -37,6 +38,12 @@ void OnDataLoaded()
         SKSE::log::info("Poise mod integration initialized successfully");
     } else {
         SKSE::log::info("Poise mod not detected - using vanilla stagger behavior");
+    }
+
+    if (SacrosanctIntegration::Initialize()) {
+        SKSE::log::info("Sacrosanct integration initialized - C++ combat feed bypass enabled");
+    } else {
+        SKSE::log::info("Sacrosanct not detected - using vanilla vampire feed system");
     }
 
     if (SKSEMenuFramework::IsInstalled()) {
