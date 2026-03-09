@@ -119,7 +119,7 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
         });
     } else {
          // Log all events during feed to discover weapon-related events
-         SKSE::log::debug("[AnimEvent] {}", tag.c_str());
+        //  SKSE::log::debug("[AnimEvent] {}", tag.c_str());
     }
 
     return RE::BSEventNotifyControl::kContinue;
@@ -791,9 +791,10 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
         }
     }
 
-    // 0.7. Check if player is facing target (camera can rotate independently in 3rd person)
+    // 0.7. Check if player is facing target (skip during combat if RelaxedCombatTargeting enabled)
     if (settings->PromptDisplay.RequirePlayerFacing) {
-        if (!AnimUtil::IsPlayerFacingTarget(player, target, settings->PromptDisplay.FacingAngleThreshold)) {
+        bool skipFacingCheck = settings->PromptDisplay.RelaxedCombatTargeting && player->IsInCombat();
+        if (!skipFacingCheck && !AnimUtil::IsPlayerFacingTarget(player, target, settings->PromptDisplay.FacingAngleThreshold)) {
             SKSE::log::debug("IsValidFeedTarget: false - player not facing target");
             return false;
         }

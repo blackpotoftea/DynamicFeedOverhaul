@@ -1,6 +1,7 @@
 #include "utils/AnimUtil.h"
 #include "feed/TargetState.h"
 #include "feed/CustomFeed.h"
+#include "feed/PairedAnimPromptSink.h"
 #include "Settings.h"
 #include "papyrus/PapyrusCall.h"
 #include <memory>
@@ -156,11 +157,12 @@ namespace AnimUtil {
             }
 
             // Preprocess for paired animations - clear stagger/attack/knockdown states
-            // if (targetActor) {
-            //     SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
-            //     PrepareActorForPairedIdle(a);
-            //     PrepareActorForPairedIdle(targetActor);
-            // }
+            if (targetActor) {
+                SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
+                PrepareActorForPairedIdle(a);
+                PrepareActorForPairedIdle(targetActor);
+                
+            }
 
             auto* process = a->GetActorRuntimeData().currentProcess;
             if (!process) {

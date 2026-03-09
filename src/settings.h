@@ -39,6 +39,7 @@ public:
         bool ShowWhenSneaking{ true };     // Show prompt when sneaking (enables stealth takedowns)
         bool RequirePlayerFacing{ true };  // Only show prompt when player is facing target
         float FacingAngleThreshold{ 90.0f };  // Max angle (degrees) from player heading to target
+        bool RelaxedCombatTargeting{ true };  // Disable facing requirement during combat
     } PromptDisplay;
 
     // Non-combat feeding settings
@@ -85,7 +86,7 @@ public:
         bool ExcludeOStimScenes{ true };        // Skip actors in OStim scenes (requires OStim NG)
         bool ExcludeDead{ true };               // Skip dead actors
         bool AllowRecentlyDead{ false };        // Allow feeding on recently dead actors
-        float MaxDeadHours{ 1.0f };             // Maximum hours since death to allow feeding
+        float MaxDeadHours{ 2.0f };             // Maximum hours since death to allow feeding
         int MaxDeadFeeds{ 1 };                  // Maximum times to feed on a single corpse (0=unlimited)
         std::vector<std::string> IncludeKeywords;  // Only feed if has any of these keywords
         std::vector<std::string> ExcludeKeywords;  // Never feed if has any of these keywords

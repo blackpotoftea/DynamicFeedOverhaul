@@ -31,8 +31,8 @@
  * 10   | Sneak feed alarm + spell         | ✅ DONE - spell done, alarm handled by animation
  * 11   | Lethal kill                      | ✅ DONE - ProcessLethalKill()
  * 12   | Destruction XP (lethal)          | ✅ DONE - AddSkillExperience()
- * 13   | Reset hunger stage               | ✅ DONE - VampireState::ReduceHunger()
- * 14   | Reset feed timer                 | ✅ DONE - VampireState::ResetFeedTimer()
+ * 13   | Reset hunger stage               | ✅ DONE - via PlayerVampireQuest.VampireFeed()
+ * 14   | Reset feed timer                 | ✅ DONE - via PlayerVampireQuest.VampireFeed()
  * 15   | Restore H/M/S (100 + level*20)   | ✅ DONE - RestoreActorValue()
  * 16   | Combat cleanup (controls/AI)     | SKIP - animation system handles
  * 17   | Blood Knight stamina cost        | ✅ DONE - combat feed stamina drain
@@ -75,7 +75,6 @@
  *   - Racial: Dunmer_Ab, Altmer_Ab, Orc_Ab
  *
  * Globals:
- *   - VampireFeedTimer, VampireFeedReady
  *   - XP: LethalFeed_Base, LethalFeed_Level
  *   - Hemomancy: Stage, Steps, StepsToNext, StepsToNext_AddPerStep
  *   - Wassail: Current, NerfAmount
@@ -110,13 +109,8 @@ namespace SacrosanctIntegration {
         // Cached form lookups (populated during Initialize)
         RE::TESQuest* g_sacrosanctQuest = nullptr;
         RE::TESQuest* g_dlc1VampireTurnQuest = nullptr;
-        RE::TESGlobal* g_vampireFeedTimer = nullptr;
-        RE::TESGlobal* g_vampireFeedReady = nullptr;
+        // NOTE: VampireFeedTimer/VampireFeedReady not needed - PlayerVampireQuest.VampireFeed() handles timer
         RE::BGSPerk* g_vampireFeedPerk = nullptr;
-
-        // Sacrosanct-specific forms
-        RE::TESGlobal* g_scsBloodPoints = nullptr;
-        RE::ActorValueInfo* g_scsBloodPointsAV = nullptr;
 
         // Sacrosanct spells and XP globals
         RE::SpellItem* g_scsFeedTargetSpell = nullptr;
@@ -184,6 +178,7 @@ namespace SacrosanctIntegration {
         RE::TESGlobal* g_hemomancyStepsAddPerStep = nullptr;
         RE::BGSListForm* g_hemomancyFormList = nullptr;
         RE::SpellItem* g_hemomancyBaseAbility = nullptr;
+        RE::BGSMessage* g_hemomancyHelpMessage = nullptr;  // SCS_Help_GetHemomancyByFeeding
 
         // Globals - Wassail
         RE::TESGlobal* g_wassailCurrent = nullptr;
@@ -251,17 +246,8 @@ namespace SacrosanctIntegration {
 
         SKSE::log::info("SacrosanctIntegration: Sacrosanct ESP detected, looking up forms...");
 
-        // Cache vanilla vampire forms
-        g_vampireFeedTimer = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedTimer");
-        g_vampireFeedReady = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
+        // Cache vanilla vampire perk (VampireFeedTimer/VampireFeedReady not needed - handled by VampireFeed())
         g_vampireFeedPerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("VampireFeed");
-
-        if (!g_vampireFeedTimer) {
-            SKSE::log::warn("SacrosanctIntegration: VampireFeedTimer global not found");
-        }
-        if (!g_vampireFeedReady) {
-            SKSE::log::warn("SacrosanctIntegration: VampireFeedReady global not found");
-        }
 
         // Cache Sacrosanct quest
         g_sacrosanctQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("SCS_FeedManager_Quest");
@@ -271,13 +257,6 @@ namespace SacrosanctIntegration {
 
         // Cache DLC1 vampire turn quest (for PlayerBitesMe)
         g_dlc1VampireTurnQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("DLC1VampireTurn");
-
-        // Try to find Sacrosanct blood points global/AV
-        // Sacrosanct uses various names for blood magic resources
-        g_scsBloodPoints = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_BloodPoints");
-        if (!g_scsBloodPoints) {
-            g_scsBloodPoints = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_Hemomancy_BloodPoints");
-        }
 
         // Cache feed spell and XP globals
         g_scsFeedTargetSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_Feed_Target");
@@ -345,6 +324,7 @@ namespace SacrosanctIntegration {
         g_hemomancyStepsAddPerStep = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Hemomancy_Global_Stage_StepsToNext_AddPerStep");
         g_hemomancyFormList = RE::TESForm::LookupByEditorID<RE::BGSListForm>("SCS_Mechanics_FormList_HemomancyExpanded");
         g_hemomancyBaseAbility = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Mechanics_Spell_Ab_AddRemoveHemomancySpells");
+        g_hemomancyHelpMessage = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Help_GetHemomancyByFeeding");
 
         // Globals - Wassail
         g_wassailCurrent = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_Mechanics_Global_Wassail_Current");
@@ -395,10 +375,7 @@ namespace SacrosanctIntegration {
 
         g_sacrosanctAvailable = true;
         SKSE::log::info("SacrosanctIntegration: Initialized successfully");
-        SKSE::log::info("  VampireFeedTimer: {}", g_vampireFeedTimer ? "found" : "missing");
-        SKSE::log::info("  VampireFeedReady: {}", g_vampireFeedReady ? "found" : "missing");
         SKSE::log::info("  SCS_FeedManager_Quest: {}", g_sacrosanctQuest ? "found" : "missing");
-        SKSE::log::info("  SCS_BloodPoints: {}", g_scsBloodPoints ? "found" : "missing");
         SKSE::log::info("  SCS_Mechanics_Spell_Feed_Target: {}", g_scsFeedTargetSpell ? "found" : "missing");
         SKSE::log::info("  SCS_XP_LethalFeed_Base: {}", g_scsXPLethalBase ? "found" : "missing");
         SKSE::log::info("  SCS_XP_LethalFeed_Level: {}", g_scsXPLethalLevel ? "found" : "missing");
@@ -461,7 +438,7 @@ namespace SacrosanctIntegration {
 
         void ShowMessage(RE::BGSMessage* message) {
             if (!message) return;
-            // BGSMessage::Show takes 9 float args for substitutions
+            // Simple notification without substitutions
             RE::BSString result;
             message->GetDescription(result, nullptr);
             RE::DebugNotification(result.c_str());
@@ -613,9 +590,15 @@ namespace SacrosanctIntegration {
             if (g_sommelierQuest && !g_sommelierQuest->IsRunning()) {
                 g_sommelierQuest->Start();
                 SKSE::log::info("Helpers: Started Sommelier quest");
+
+                // Show help message tutorial
+                // NOTE: ShowAsHelpMessage not easily callable from C++, using simple notification
+                if (g_hemomancyHelpMessage) {
+                    ShowMessage(g_hemomancyHelpMessage);
+                }
             }
 
-            // First hemomancy spell
+            // First hemomancy spell (stage 0 - add the base ability)
             if (g_hemomancyStage->value == 0.0f && g_hemomancyBaseAbility) {
                 player->AddSpell(g_hemomancyBaseAbility);
             }
@@ -625,9 +608,10 @@ namespace SacrosanctIntegration {
 
             // Check for stage up
             if (g_hemomancySteps->value >= g_hemomancyStepsToNext->value) {
+                // Show stage up message (simplified - Papyrus version uses arg substitution)
                 ShowMessage(g_msgHemomancyStageUp);
 
-                // Add new hemomancy spell
+                // Add new hemomancy spell from formlist
                 int stageIndex = static_cast<int>(g_hemomancyStage->value);
                 if (stageIndex < hemoSize) {
                     auto* newSpell = g_hemomancyFormList->forms[stageIndex]->As<RE::SpellItem>();
@@ -647,10 +631,10 @@ namespace SacrosanctIntegration {
                 }
             }
 
-            // Complete quest if at max
+            // Complete quest if at max (via Papyrus since CompleteQuest is a script function)
             if (g_hemomancyStage->value >= static_cast<float>(hemoSize) && g_sommelierQuest && g_sommelierQuest->IsRunning()) {
-                g_sommelierQuest->Stop();
-                SKSE::log::info("Helpers: Completed Sommelier quest");
+                CallPapyrusMethod(g_sommelierQuest, "Quest", "CompleteQuest");
+                SKSE::log::info("Helpers: Completed Sommelier quest via Papyrus");
             }
         }
 
@@ -904,13 +888,7 @@ namespace SacrosanctIntegration {
             SKSE::log::info("SacrosanctIntegration: Added {:.0f} Destruction XP", xpGain);
         }
 
-        // === STEP 11: Reset hunger stage ===
-        if (!VampireState::ReduceHunger()) {
-            SKSE::log::warn("SacrosanctIntegration::ProcessFeed: Failed to reduce hunger");
-        }
-
-        // === STEP 12: Reset feed timer ===
-        VampireState::ResetFeedTimer();
+        // NOTE: Steps 11-12 (hunger stage + feed timer) are handled by PlayerVampireQuest.VampireFeed() above
 
         // === STEP 13: Restore Health/Magicka/Stamina ===
         float restoreAmount = 100.0f + static_cast<float>(targetLevel) * 20.0f;
@@ -938,6 +916,7 @@ namespace SacrosanctIntegration {
             }
         }
 
+        // TODO: add emabre options for context menu 
         // === STEP 16: Embrace spell (non-lethal embrace) ===
         if (context.isEmbrace && !context.isLethal && g_embraceSpell) {
             Helpers::CastSpell(g_embraceSpell, player, context.target);
@@ -1044,14 +1023,31 @@ namespace SacrosanctIntegration {
     }
 
     namespace VampireState {
+        // NOTE: These functions are utility helpers for standalone vanilla vampire state manipulation.
+        // In ProcessFeed, we use PlayerVampireQuest.VampireFeed() instead, which handles timer/hunger.
+        // These use static local caching since they're standalone utilities.
+
+        static RE::TESGlobal* GetVampireFeedReady() {
+            static RE::TESGlobal* cached = nullptr;
+            if (!cached) {
+                cached = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
+            }
+            return cached;
+        }
+
+        static RE::TESGlobal* GetVampireFeedTimer() {
+            static RE::TESGlobal* cached = nullptr;
+            if (!cached) {
+                cached = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedTimer");
+            }
+            return cached;
+        }
 
         int GetHungerStage() {
-            if (!g_vampireFeedReady) {
-                g_vampireFeedReady = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
-            }
-            if (g_vampireFeedReady) {
+            auto* feedReady = GetVampireFeedReady();
+            if (feedReady) {
                 // VampireFeedReady is 0-3, stage is 1-4
-                return static_cast<int>(g_vampireFeedReady->value) + 1;
+                return static_cast<int>(feedReady->value) + 1;
             }
             return -1;
         }
@@ -1062,17 +1058,15 @@ namespace SacrosanctIntegration {
                 return false;
             }
 
-            if (!g_vampireFeedReady) {
-                g_vampireFeedReady = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
-            }
-            if (!g_vampireFeedReady) {
+            auto* feedReady = GetVampireFeedReady();
+            if (!feedReady) {
                 SKSE::log::error("VampireState::SetHungerStage: VampireFeedReady global not found");
                 return false;
             }
 
             // VampireFeedReady is 0-3, stage is 1-4
             float newValue = static_cast<float>(stage - 1);
-            g_vampireFeedReady->value = newValue;
+            feedReady->value = newValue;
 
             SKSE::log::info("VampireState: Set hunger stage to {} (VampireFeedReady={})", stage, newValue);
             return true;
@@ -1094,10 +1088,8 @@ namespace SacrosanctIntegration {
         }
 
         bool ResetFeedTimer() {
-            if (!g_vampireFeedTimer) {
-                g_vampireFeedTimer = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedTimer");
-            }
-            if (!g_vampireFeedTimer) {
+            auto* feedTimer = GetVampireFeedTimer();
+            if (!feedTimer) {
                 SKSE::log::warn("VampireState::ResetFeedTimer: VampireFeedTimer global not found");
                 return false;
             }
@@ -1110,7 +1102,7 @@ namespace SacrosanctIntegration {
             }
 
             float currentTime = calendar->GetHoursPassed();
-            g_vampireFeedTimer->value = currentTime;
+            feedTimer->value = currentTime;
 
             SKSE::log::info("VampireState: Reset feed timer to {:.2f}", currentTime);
             return true;
@@ -1128,36 +1120,20 @@ namespace SacrosanctIntegration {
         }
 
         bool AddBloodPoints(float amount) {
-            if (!g_scsBloodPoints) {
-                // Try to find it again
-                g_scsBloodPoints = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_BloodPoints");
-                if (!g_scsBloodPoints) {
-                    g_scsBloodPoints = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_Hemomancy_BloodPoints");
-                }
-            }
-
-            if (g_scsBloodPoints) {
-                g_scsBloodPoints->value += amount;
-                SKSE::log::debug("SacrosanctState: Blood points now {:.0f}", g_scsBloodPoints->value);
+            // Sacrosanct uses vanilla DLC1VampireBloodPoints for Vampire Lord progression
+            if (g_dlc1BloodPoints) {
+                g_dlc1BloodPoints->value += amount;
+                SKSE::log::debug("SacrosanctState: DLC1 Blood points now {:.0f}", g_dlc1BloodPoints->value);
                 return true;
             }
-
-            // Fallback: Try actor value on player
-            // Note: ModActorValue takes RE::ActorValue enum, not ActorValueInfo*
-            // Skip this fallback as Sacrosanct uses globals, not actor values
-            // auto* player = RE::PlayerCharacter::GetSingleton();
-            // if (player && g_scsBloodPointsAV) {
-            //     player->AsActorValueOwner()->ModActorValue(g_scsBloodPointsAV, amount);
-            //     return true;
-            // }
-
-            SKSE::log::debug("SacrosanctState: Could not add blood points (no global/AV found)");
+            SKSE::log::debug("SacrosanctState: Could not add blood points (DLC1VampireBloodPoints not found)");
             return false;
         }
 
         float GetBloodPoints() {
-            if (g_scsBloodPoints) {
-                return g_scsBloodPoints->value;
+            // Returns vanilla DLC1 blood points
+            if (g_dlc1BloodPoints) {
+                return g_dlc1BloodPoints->value;
             }
             return 0.0f;
         }

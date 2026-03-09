@@ -108,6 +108,7 @@ void Settings::LoadINI() {
     PromptDisplay.ShowWhenSneaking = ini.GetBoolValue("PromptDisplay", "ShowWhenSneaking", PromptDisplay.ShowWhenSneaking);
     PromptDisplay.RequirePlayerFacing = ini.GetBoolValue("PromptDisplay", "RequirePlayerFacing", PromptDisplay.RequirePlayerFacing);
     PromptDisplay.FacingAngleThreshold = static_cast<float>(ini.GetDoubleValue("PromptDisplay", "FacingAngleThreshold", PromptDisplay.FacingAngleThreshold));
+    PromptDisplay.RelaxedCombatTargeting = ini.GetBoolValue("PromptDisplay", "RelaxedCombatTargeting", PromptDisplay.RelaxedCombatTargeting);
 
     // NonCombat
     NonCombat.AllowStanding = ini.GetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding);
@@ -250,6 +251,8 @@ void Settings::SaveINI() {
         "; Only show feed prompt when player is facing the target");
     ini.SetDoubleValue("PromptDisplay", "FacingAngleThreshold", PromptDisplay.FacingAngleThreshold,
         "; Maximum angle (degrees) from player heading to target (90 = 180 degree cone in front)");
+    ini.SetBoolValue("PromptDisplay", "RelaxedCombatTargeting", PromptDisplay.RelaxedCombatTargeting,
+        "; Disable player facing requirement during combat (easier target selection in combat)");
 
     // NonCombat
     ini.SetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding,
