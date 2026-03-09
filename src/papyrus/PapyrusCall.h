@@ -11,6 +11,7 @@ namespace PapyrusCall {
     enum class VampireIntegration {
         Vanilla,        // Vanilla Skyrim vampire system (default)
         Sacrosanct,     // Sacrosanct - Vampires of Skyrim
+        Sacrilege,      // Sacrilege - Minimalistic Vampires of Skyrim
         BetterVampires  // Better Vampires (or other modded vampire quest)
     };
 
@@ -133,6 +134,11 @@ namespace PapyrusCall {
         return RE::TESForm::LookupByEditorID<RE::TESQuest>("SCS_FeedManager_Quest");
     }
 
+    // Get the Sacrilege FeedManager quest by editor ID
+    inline RE::TESQuest* GetSacrilegeFeedManagerQuest() {
+        return RE::TESForm::LookupByEditorID<RE::TESQuest>("SQL_FeedManager_Quest");
+    }
+
     // Call Sacrosanct ProcessFeed function with full parameters
     // Function signature: ProcessFeed(Actor akTarget, Bool akIsLethal, Bool akIsSleeping,
     //                                 Bool akIsSneakFeed, Bool akIsParalyzed, Bool akIsCombatFeed, Bool akIsEmbrace)
@@ -179,72 +185,52 @@ namespace PapyrusCall {
         return result;
     }
 
-    // Main function: detects signature and calls appropriately
-    inline bool CallVampireFeed(RE::TESQuest* quest, RE::Actor* target, bool isLethal = false) {
-        // Check if Sacrosanct is enabled and quest present
-        auto* settings = Settings::GetSingleton();
-        bool enableSacrosanct = settings && settings->Integration.EnableSacrosanct;
-        auto* sacrosanctQuest = GetSacrosanctFeedManagerQuest();
-        bool hasSacrosanct = enableSacrosanct && sacrosanctQuest != nullptr;
+    // Call Sacrilege ProcessFeed function with full parameters
+    // Function signature: ProcessFeed(Actor akTarget, Bool akIsLethal, Bool akIsSleeping,
+    //                                 Bool akIsSneakFeed, Bool akIsParalyzed, Bool akIsCombatFeed, Bool akIsEmbrace)
+    inline bool CallSacrilegeProcessFeed(RE::TESQuest* quest, RE::Actor* target,
+                                         bool isLethal = false, bool isSleeping = false,
+                                         bool isSneakFeed = false, bool isParalyzed = false,
+                                         bool isCombatFeed = false, bool isEmbrace = false) {
+        if (!quest || !target) return false;
 
-        if (enableSacrosanct && sacrosanctQuest) {
-            SKSE::log::info("Sacrosanct quest detected - using Sacrosanct integration");
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) return false;
+
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(
+            RE::TESQuest::FORMTYPE, quest);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
+
+        auto* args = RE::MakeFunctionArguments(
+            std::move(target),
+            std::move(isLethal),
+            std::move(isSleeping),
+            std::move(isSneakFeed),
+            std::move(isParalyzed),
+            std::move(isCombatFeed),
+            std::move(isEmbrace)
+        );
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
+
+        bool result = vm->DispatchMethodCall(
+            handle,
+            "SQL_FeedManager_Quest",
+            "ProcessFeed",
+            args,
+            callback
+        );
+
+        if (!result) {
+            delete args;
         }
 
-        // Call vanilla/Better Vampires path first
-        bool success = false;
-        int signature = GetVampireFeedSignature(quest);
-
-        switch (signature) {
-            case 1:
-                SKSE::log::debug("Using vanilla VampireFeed() - no args");
-                success = CallVampireFeedNoArgs(quest);
-                break;
-            case 2:
-                SKSE::log::debug("Using modded VampireFeed(Actor) - with target");
-                success = CallVampireFeedWithActor(quest, target);
-                break;
-            default:
-                SKSE::log::error("VampireFeed function not found on quest");
-                break;
-        }
-
-        // Then call Sacrosanct if detected
-        if (hasSacrosanct) {
-            bool isCombatFeed = target->IsInCombat();
-            bool isSleeping = TargetState::IsSleeping(target);
-
-            SKSE::log::debug("Calling Sacrosanct ProcessFeed (combat={}, sleeping={}, lethal={})", isCombatFeed, isSleeping, isLethal);
-            bool sacrosanctResult = CallSacrosanctProcessFeed(sacrosanctQuest, target, isLethal, isSleeping, false, false, isCombatFeed, false);
-            success = success || sacrosanctResult;
-        }
-
-        return success;
+        SKSE::log::debug("CallSacrilegeProcessFeed({}) returned: {}", target->GetName(), result);
+        return result;
     }
 
     // Get the PlayerVampireQuest by editor ID
     inline RE::TESQuest* GetPlayerVampireQuest() {
         return RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerVampireQuest");
-    }
-
-    // Get player vampire hunger stage via VampireFeedReady global
-    // Returns: 0-3 (VampireStatus - 1), or -1 if not found
-    inline int GetVampireHungerStage() {
-        auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
-        if (global) {
-            return static_cast<int>(global->value);
-        }
-        return -1;
-    }
-    
-    // Get actual vampire stage (1-4)
-    // Returns: 1-4 (matching VampireStatus), or -1 if not found
-    inline int GetVampireStage() {
-        int feedReady = GetVampireHungerStage();
-        if (feedReady >= 0) {
-            return feedReady + 1;
-        }
-        return -1;
     }
 
     // Detect which vampire integration is currently active
@@ -256,6 +242,14 @@ namespace PapyrusCall {
             auto* sacrosanctQuest = GetSacrosanctFeedManagerQuest();
             if (sacrosanctQuest) {
                 return VampireIntegration::Sacrosanct;
+            }
+        }
+
+        // Check for Sacrilege
+        if (settings->Integration.EnableSacrilege) {
+            auto* sacrilegeQuest = GetSacrilegeFeedManagerQuest();
+            if (sacrilegeQuest) {
+                return VampireIntegration::Sacrilege;
             }
         }
 
@@ -273,6 +267,82 @@ namespace PapyrusCall {
 
         // Default to Vanilla
         return VampireIntegration::Vanilla;
+    }
+
+    // Main function: uses detected integration to call the appropriate feed function
+    inline bool CallVampireFeed(RE::TESQuest* quest, RE::Actor* target, bool isLethal = false) {
+        VampireIntegration integration = DetectVampireIntegration();
+
+        switch (integration) {
+            case VampireIntegration::Sacrosanct: {
+                // Skip Papyrus call during combat - Papyrus is not designed to work reliably in combat
+                auto* settings = Settings::GetSingleton();
+                if (settings->Integration.DisableSacrosanctInCombat && target->IsInCombat()) {
+                    SKSE::log::info("Sacrosanct: skipping Papyrus call during combat");
+                    return true;
+                }
+
+                auto* sacrosanctQuest = GetSacrosanctFeedManagerQuest();
+                if (!sacrosanctQuest) {
+                    SKSE::log::error("Sacrosanct integration detected but quest not found");
+                    return false;
+                }
+                bool isSleeping = TargetState::IsSleeping(target);
+
+                SKSE::log::info("Using Sacrosanct integration (sleeping={}, lethal={})", isSleeping, isLethal);
+                return CallSacrosanctProcessFeed(sacrosanctQuest, target, isLethal, isSleeping, false, false, false, false);
+            }
+
+            case VampireIntegration::Sacrilege: {
+                // Skip Papyrus call during combat - same limitation as Sacrosanct
+                auto* settings = Settings::GetSingleton();
+                if (settings->Integration.DisableSacrosanctInCombat && target->IsInCombat()) {
+                    SKSE::log::info("Sacrilege: skipping Papyrus call during combat");
+                    return true;
+                }
+
+                auto* sacrilegeQuest = GetSacrilegeFeedManagerQuest();
+                if (!sacrilegeQuest) {
+                    SKSE::log::error("Sacrilege integration detected but quest not found");
+                    return false;
+                }
+                bool isSleeping = TargetState::IsSleeping(target);
+
+                SKSE::log::info("Using Sacrilege integration (sleeping={}, lethal={})", isSleeping, isLethal);
+                return CallSacrilegeProcessFeed(sacrilegeQuest, target, isLethal, isSleeping, false, false, false, false);
+            }
+
+            case VampireIntegration::BetterVampires: {
+                SKSE::log::info("Using Better Vampires integration");
+                return CallVampireFeedWithActor(quest, target);
+            }
+
+            case VampireIntegration::Vanilla:
+            default: {
+                SKSE::log::info("Using Vanilla integration");
+                return CallVampireFeedNoArgs(quest);
+            }
+        }
+    }
+
+    // Get player vampire hunger stage via VampireFeedReady global
+    // Returns: 0-3 (VampireStatus - 1), or -1 if not found
+    inline int GetVampireHungerStage() {
+        auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
+        if (global) {
+            return static_cast<int>(global->value);
+        }
+        return -1;
+    }
+
+    // Get actual vampire stage (1-4)
+    // Returns: 1-4 (matching VampireStatus), or -1 if not found
+    inline int GetVampireStage() {
+        int feedReady = GetVampireHungerStage();
+        if (feedReady >= 0) {
+            return feedReady + 1;
+        }
+        return -1;
     }
 
     // Send OnVampireFeed event to the target actor

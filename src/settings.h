@@ -77,7 +77,6 @@ public:
         float WitnessCheckInterval{ 0.5f };      // How often to check for witnesses during feed (seconds)
         bool WitnessDebugLogging{ false };       // Enable verbose witness detection logging
         float PromptDelayCombatSeconds{ 0.0f };  // Delay before showing prompt in combat (default 0 for immediate)
-        bool UseIdleManager{ true };             // TEMP: Use IdleParser to select kill move animations
     } Combat;
 
     // Target filtering settings
@@ -114,8 +113,10 @@ public:
     // Integration settings
     struct {
         bool EnableSacrosanct{ true };          // Enable Sacrosanct integration
+        bool EnableSacrilege{ true };           // Enable Sacrilege integration
         bool EnableBetterVampires{ true };      // Enable Better Vampires integration
         bool PoiseIgnoresLevelCheck{ true };    // When poise mod detected, ignore level requirements
+        bool DisableSacrosanctInCombat{ true }; // Skip Sacrosanct/Sacrilege Papyrus calls during combat
     } Integration;
 
     void LoadINI();

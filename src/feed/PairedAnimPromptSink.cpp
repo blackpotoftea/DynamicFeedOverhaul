@@ -11,7 +11,6 @@
 #include "utils/MenuCheck.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/AnimUtil.h"
-#include "utils/IdleParser.h"
 #include "feed/WitnessDetection.h"
 #include <thread>
 
@@ -221,6 +220,8 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
         if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
             SKSE::log::info("kUp on kHold prompt - button released early, executing normal feed (non-lethal)");
             self->isLethalFeedInProgress_ = false;
+            // TEST: Use minimal test function instead
+            // self->HandleFeedAcceptedTest();
             self->HandleFeedAccepted();
         } else {
             SKSE::log::debug("kUp on kSinglePress prompt - ignoring");
@@ -235,6 +236,8 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
         } else {
             SKSE::log::info("kAccepted on kSinglePress prompt - executing normal feed");
         }
+        // TEST: Use minimal test function instead
+        // self->HandleFeedAcceptedTest();
         self->HandleFeedAccepted();
         break;
     case SkyPromptAPI::PromptEventType::kTimingOut:
@@ -267,12 +270,18 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
     //     SKSE::log::warn("Two-single feed failed, falling back to paired animation");
     // }
 
+
     SKSE::log::info("Playing feed idle '{}' (paired={}, lethal={})", idleEditorID, isPairedAnim, isLethal);
+    
     if (CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim)) {
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(idleEditorID);
+
+
         PapyrusCall::SendOnVampireFeedEvent(target);
 
         // Send custom DAO_VampireFeed event with attacker and target
-        auto* player = RE::PlayerCharacter::GetSingleton();
         if (player) {
             PapyrusCall::SendDAO_VampireFeedEvent(player, target);
         }
@@ -286,6 +295,8 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
                 SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
             }
         }
+
+
 
         // Integration-specific post-feed handling
         PapyrusCall::VampireIntegration integration = PapyrusCall::DetectVampireIntegration();
@@ -320,6 +331,41 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
         SKSE::log::warn("CustomFeed failed");
     }
 }
+
+// Minimal test function - bare bones kill move playback
+// void PairedAnimPromptSink::HandleFeedAcceptedTest() {
+//     auto feedTargetPtr = GetTarget();
+//     if (!feedTargetPtr) return;
+
+//     RE::Actor* target = feedTargetPtr.get();
+//     auto* player = RE::PlayerCharacter::GetSingleton();
+//     if (!player) return;
+
+//     HidePrompt();
+//     FeedAnimState::MarkFeedStarted();
+//     AnimEventSink::Register();
+
+//     SKSE::log::info("[TEST] Starting kill move test on target: {}", target->GetName());
+
+//     // Lookup the idle directly
+//     // auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("1HMKillMoveRepeatStabDowns");
+//     // auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("1HMKillMoveM");
+//     // auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("KillMoveSneak1HMThroatSlit");
+//     auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("KillMoveBackStab");
+//     if (!idle) {
+//         SKSE::log::error("[TEST] Could not find idle '1HMKillMoveRepeatStabDowns'");
+//         return;
+//     }
+
+
+//     SKSE::log::info("[TEST] Found idle FormID: {:08X}", idle->GetFormID());
+//     AnimUtil::RotateTargetToClosest(target, player);
+//     AnimUtil::RotateAttackerToTarget(player, target);
+//     // Play with condition bypass
+//     IdleParser::PlayIdleBypassConditions(player, idle, target);
+
+//     SKSE::log::info("[TEST] PlayIdleBypassConditions called");
+// }
 
 // We have 2 animation systems Vannila Idle and OAR which we set via GraphVariable
 // We need both select idle -> set correct graph variable to match OAR animations
@@ -471,68 +517,68 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         bool hasOARAnimation = (anim != nullptr && animName != "Default");
 
         bool isPairedAnim = true;
-        const char* idleEditorID = AnimUtil::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim);
+        const char* idleEditorID = AnimUtil::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim, isLethal);
 
         // Use IdleParser to find kill move when:
         // 1. Combat feed (target in combat), OR
         // 2. Lethal feed (player held button) with weapon drawn
         // Only for standing targets (sitting/sleeping use different animations)
-        bool weaponDrawn = player->AsActorState() && player->AsActorState()->IsWeaponDrawn();
-        bool useKillMove = settings->Combat.UseIdleManager &&
-                          (targetState == AnimUtil::kStanding || targetState == AnimUtil::kCombat) &&
-                          (targetState == AnimUtil::kCombat || (isLethal && weaponDrawn));
+        // bool weaponDrawn = player->AsActorState() && player->AsActorState()->IsWeaponDrawn();
+        // bool useKillMove = settings->Combat.UseIdleManager &&
+        //                   (targetState == AnimUtil::kStanding || targetState == AnimUtil::kCombat) &&
+        //                   (targetState == AnimUtil::kCombat || (isLethal && weaponDrawn));
 
-        RE::TESIdleForm* killMoveIdle = nullptr;
+        // RE::TESIdleForm* killMoveIdle = nullptr;
 
-        if (useKillMove) {
-            SKSE::log::info("[KillMove] Attempting IdleParser selection (combat={}, lethal={}, weaponDrawn={})",
-                targetState == AnimUtil::kCombat, isLethal, weaponDrawn);
+        // if (useKillMove) {
+        //     SKSE::log::info("[KillMove] Attempting IdleParser selection (combat={}, lethal={}, weaponDrawn={})",
+        //         targetState == AnimUtil::kCombat, isLethal, weaponDrawn);
 
-            auto idleContext = IdleParser::BuildIdleContext(player, feedTarget);
+        //     auto idleContext = IdleParser::BuildIdleContext(player, feedTarget);
 
-            SKSE::log::info("[KillMove] Player weapon type: {}", static_cast<int>(idleContext.weaponType));
+        //     SKSE::log::info("[KillMove] Player weapon type: {}", static_cast<int>(idleContext.weaponType));
 
-            // Start from NonMountedCombatRightPower to include both front and back kill moves
-            // VL_KillmovesRoot -> VL_KillmovesBackRoot contains back kill moves
-            // VL_KillmovesRoot -> KillMoveNPCRoot contains front kill moves
-            auto graph = IdleParser::BuildIdleGraphFromEditorID("NonMountedCombatRightPower", 20);
-            auto result = IdleParser::SelectIdleFromGraph(graph, idleContext, true);  // verbose=true for debugging
+        //     // Start from NonMountedCombatRightPower to include both front and back kill moves
+        //     // VL_KillmovesRoot -> VL_KillmovesBackRoot contains back kill moves
+        //     // VL_KillmovesRoot -> KillMoveNPCRoot contains front kill moves
+        //     auto graph = IdleParser::BuildIdleGraphFromEditorID("NonMountedCombatRightPower", 20);
+        //     auto result = IdleParser::SelectIdleFromGraph(graph, idleContext, true);  // verbose=true for debugging
 
-            if (result.success && result.selectedIdle) {
-                SKSE::log::info("[KillMove] Selected: '{}' (FormID: {:08X})",
-                    result.editorID, result.selectedIdle->GetFormID());
+        //     if (result.success && result.selectedIdle) {
+        //         SKSE::log::info("[KillMove] Selected: '{}' (FormID: {:08X})",
+        //             result.editorID, result.selectedIdle->GetFormID());
 
-                killMoveIdle = result.selectedIdle;
-                idleEditorID = result.selectedIdle->GetFormEditorID();
-                isPairedAnim = true;
-            } else {
-                SKSE::log::warn("[KillMove] Selection failed: {} - using default", result.failureReason);
-            }
-        }
+        //         killMoveIdle = result.selectedIdle;
+        //         idleEditorID = result.selectedIdle->GetFormEditorID();
+        //         isPairedAnim = true;
+        //     } else {
+        //         SKSE::log::warn("[KillMove] Selection failed: {} - using default", result.failureReason);
+        //     }
+        // }
 
         AnimUtil::SetFeedGraphVars(player, feedType);
         AnimUtil::SetFeedGraphVars(feedTarget, feedType);
 
-        // Use PlayIdleBypassConditions for kill moves (bypasses parent conditions)
-        if (killMoveIdle) {
-            SKSE::log::info("[KillMove] Playing '{}' with condition bypass", idleEditorID);
-            IdleParser::PlayIdleBypassConditions(player, killMoveIdle, feedTarget);
+        // // Use PlayIdleBypassConditions for kill moves (bypasses parent conditions)
+        // if (killMoveIdle) {
+        //     SKSE::log::info("[KillMove] Playing '{}' with condition bypass", idleEditorID);
+        //     IdleParser::PlayIdleBypassConditions(player, killMoveIdle, feedTarget);
 
-            // Send events and handle integration (same as ExecuteFeed)
-            PapyrusCall::SendOnVampireFeedEvent(feedTarget);
-            PapyrusCall::SendDAO_VampireFeedEvent(player, feedTarget);
+        //     // Send events and handle integration (same as ExecuteFeed)
+        //     PapyrusCall::SendOnVampireFeedEvent(feedTarget);
+        //     PapyrusCall::SendDAO_VampireFeedEvent(player, feedTarget);
 
-            if (!TargetState::IsWerewolf(player)) {
-                auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
-                if (vampireQuest) {
-                    PapyrusCall::CallVampireFeed(vampireQuest, feedTarget, isLethal);
-                }
-            }
-        } else {
-            // tEMPORAY DISABLED
-            //ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
-        }
+        //     if (!TargetState::IsWerewolf(player)) {
+        //         auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
+        //         if (vampireQuest) {
+        //             PapyrusCall::CallVampireFeed(vampireQuest, feedTarget, isLethal);
+        //         }
+        //     }
+        // } else {
+        //     ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
+        // }
 
+        ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
         // Reset lethal flag after use
         isLethalFeedInProgress_ = false;
     }
@@ -865,12 +911,6 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
             pendingTargetTime_ = std::chrono::steady_clock::now();
             SKSE::log::debug("New target detected: {} - waiting {:.2f}s before showing prompt",
                 newTarget->GetName(), delaySeconds);
-
-            // Debug: Find and log which kill move would match for this target
-            auto* player = RE::PlayerCharacter::GetSingleton();
-            if (player) {
-                IdleParser::DebugFindKillMove(player, newTarget);
-            }
         }
         // Same pending target - check if delay has elapsed
         else if (pendingTarget_ == newTargetHandle) {

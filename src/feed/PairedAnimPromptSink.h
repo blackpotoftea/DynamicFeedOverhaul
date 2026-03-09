@@ -77,6 +77,7 @@ private:
     static void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal = false, bool hasOARAnimation = false);
 
     void HandleFeedAccepted();
+    void HandleFeedAcceptedTest();  // Minimal test for kill move playback
     void HandleTimingOut();
 
     // Thread-safe wrapper methods for currentTargetHandle_

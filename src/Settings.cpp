@@ -142,7 +142,6 @@ void Settings::LoadINI() {
     Combat.WitnessCheckInterval = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessCheckInterval", Combat.WitnessCheckInterval));
     Combat.WitnessDebugLogging = ini.GetBoolValue("Combat", "WitnessDebugLogging", Combat.WitnessDebugLogging);
     Combat.PromptDelayCombatSeconds = static_cast<float>(ini.GetDoubleValue("Combat", "PromptDelayCombatSeconds", Combat.PromptDelayCombatSeconds));
-    Combat.UseIdleManager = ini.GetBoolValue("Combat", "UseIdleManager", Combat.UseIdleManager);
 
     // Filtering
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
@@ -171,8 +170,10 @@ void Settings::LoadINI() {
 
     // Integration
     Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
+    Integration.EnableSacrilege = ini.GetBoolValue("Integration", "EnableSacrilege", Integration.EnableSacrilege);
     Integration.EnableBetterVampires = ini.GetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires);
     Integration.PoiseIgnoresLevelCheck = ini.GetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck);
+    Integration.DisableSacrosanctInCombat = ini.GetBoolValue("Integration", "DisableSacrosanctInCombat", Integration.DisableSacrosanctInCombat);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
@@ -190,18 +191,18 @@ void Settings::LoadINI() {
         SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
             NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
     }
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, UseIdleManager={}",
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
-        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds, Combat.UseIdleManager);
+        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds);
     SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}",
-        Integration.EnableSacrosanct, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck);
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DisableSacrosanctInCombat={}",
+        Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck, Integration.DisableSacrosanctInCombat);
 }
 
 void Settings::SaveINI() {
@@ -311,8 +312,6 @@ void Settings::SaveINI() {
         "; Enable verbose witness detection debug logging (can be very spammy)");
     ini.SetDoubleValue("Combat", "PromptDelayCombatSeconds", Combat.PromptDelayCombatSeconds,
         "; Delay in seconds before showing prompt in combat (default 0 for immediate response)");
-    ini.SetBoolValue("Combat", "UseIdleManager", Combat.UseIdleManager,
-        "; TEMP: Use IdleParser to select kill move animations based on weapon/conditions");
 
     // Filtering
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,
@@ -361,10 +360,14 @@ void Settings::SaveINI() {
     // Integration
     ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,
         "; Enable Sacrosanct vampire overhaul integration (auto-detects mod)");
+    ini.SetBoolValue("Integration", "EnableSacrilege", Integration.EnableSacrilege,
+        "; Enable Sacrilege vampire overhaul integration (auto-detects mod)");
     ini.SetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires,
         "; Enable Better Vampires integration (auto-detects mod)");
     ini.SetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck,
         "; When poise mod (ChocolatePoise/loki_POISE) is detected, ignore level requirements for feeding");
+    ini.SetBoolValue("Integration", "DisableSacrosanctInCombat", Integration.DisableSacrosanctInCombat,
+        "; Skip Sacrosanct/Sacrilege Papyrus calls during combat (Papyrus is unreliable in combat)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

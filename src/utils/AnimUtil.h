@@ -44,10 +44,10 @@ namespace AnimUtil {
         inline constexpr const char* WEREWOLF_STANDING_FRONT = "WerewolfPairedFeedingWithHuman";
 
         // Combat idle Standing
-        inline constexpr const char* FRONT_KM_A = "1HMKillMoveRepeatStabDowns";
+        inline constexpr const char* FRONT_KM_A = "pa_1HMKillMoveShortA";// "1HMKillMoveRepeatStabDowns"; //pa_1HMKillMoveShortA
 
         // Combat idle back
-        inline constexpr const char* BACK_SNEAK_KM_A = "KillMoveBackStab";
+        inline constexpr const char* BACK_SNEAK_KM_A ="pa_1HMSneakKillBackA"; // "KillMoveBackStab"; //pa_1HMSneakKillBackA
     }
 
     // Lightweight position and alignment structs
@@ -133,7 +133,7 @@ namespace AnimUtil {
     void ApplyHeightAdjustment(RE::Actor* attacker, RE::Actor* target, float minHeightDiff, float maxHeightDiff);
     const char* SelectIdleAnimation(int targetState, RE::Actor* target,
                                     const RE::NiPointer<RE::TESObjectREFR>& furnitureRef, bool isBehind,
-                                    bool& outIsPairedAnim);
+                                    bool& outIsPairedAnim, bool lethal = false);
 
     // Player feed validation (moved from PairedAnimPromptSink)
     bool IsPlayerFeedingRace();  // Check if player race supports feeding (Vampire/Werewolf/VL)

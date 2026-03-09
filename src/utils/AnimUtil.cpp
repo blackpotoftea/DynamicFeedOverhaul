@@ -156,11 +156,11 @@ namespace AnimUtil {
             }
 
             // Preprocess for paired animations - clear stagger/attack/knockdown states
-            if (targetActor) {
-                SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
-                PrepareActorForPairedIdle(a);
-                PrepareActorForPairedIdle(targetActor);
-            }
+            // if (targetActor) {
+            //     SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
+            //     PrepareActorForPairedIdle(a);
+            //     PrepareActorForPairedIdle(targetActor);
+            // }
 
             auto* process = a->GetActorRuntimeData().currentProcess;
             if (!process) {
@@ -168,11 +168,13 @@ namespace AnimUtil {
                 return;
             }
 
-            // Use native paired idle function with:
-            // - forcePlay=true: bypass weapon state checks
-            // - resetActionState=false: prevent weapon sheathing/state transition
-             
+            // Clear conditions on idle and all parents to bypass condition checks
+            // IdleParser::ClearIdleConditions(idle);
+
             bool success = process->PlayIdle(a, idle, t);
+
+            // Restore conditions immediately after PlayIdle call
+            // IdleParser::RestoreIdleConditions();
             // bool success = _playPairedIdle(process, a, RE::DEFAULT_OBJECT::kActionIdle, idle, true, false, t);
             if (success) {
                 SKSE::log::info("[AnimUtil::playIdle] SUCCESS: Idle {:X} started on {} (target: {})",
@@ -618,7 +620,7 @@ namespace AnimUtil {
 
     const char* SelectIdleAnimation(int targetState, RE::Actor* target,
                                            const RE::NiPointer<RE::TESObjectREFR>& furnitureRef, bool isBehind,
-                                           bool& outIsPairedAnim) {
+                                           bool& outIsPairedAnim, bool lethal) {
         outIsPairedAnim = true;
         auto player = RE::PlayerCharacter::GetSingleton();
 
@@ -662,8 +664,8 @@ namespace AnimUtil {
         if (targetState == AnimUtil::kSitting) {
             SKSE::log::debug("Sitting {} feed", posStr);
             return isBehind ? Idles::VAMPIRE_SITTING_BACK : Idles::VAMPIRE_SITTING_FRONT;
-        } else if (targetState == AnimUtil::kCombat) {
-            SKSE::log::debug("Combat {} feed (kill move)", posStr);
+        } else if (targetState == AnimUtil::kCombat || lethal) {
+            SKSE::log::debug("Combat {} feed (kill move, lethal={})", posStr, lethal);
             return isBehind ? Idles::BACK_SNEAK_KM_A : Idles::FRONT_KM_A;
         } else {
             SKSE::log::debug("Standing {} feed", posStr);
