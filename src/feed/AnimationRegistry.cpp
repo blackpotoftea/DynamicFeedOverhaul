@@ -112,11 +112,9 @@ namespace Feed {
             // Combat animations are implicitly lethal (they have kills baked in)
             bool animIsLethal = anim.isLethal || (anim.type == Type::Combat);
 
-            // 1. Lethal filter: In non-combat situations, match lethal preference
-            if (!context.isCombat) {
-                if (context.isLethal && !animIsLethal) continue;  // User wants lethal, anim is not
-                if (!context.isLethal && animIsLethal) continue;  // User wants normal, anim is lethal
-            }
+            // 1. Lethal filter: Always apply (player combat forces isLethal upstream)
+            if (context.isLethal && !animIsLethal) continue;  // User wants lethal, anim is not
+            if (!context.isLethal && animIsLethal) continue;  // User wants normal, anim is lethal
 
             // 2. Combat type filter: Animation type must match combat context
             bool animIsCombat = (anim.type == Type::Combat);

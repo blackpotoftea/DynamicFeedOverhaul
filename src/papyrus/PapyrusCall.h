@@ -271,7 +271,7 @@ namespace PapyrusCall {
     }
 
     // Main function: uses detected integration to call the appropriate feed function
-    inline bool CallVampireFeed(RE::TESQuest* quest, RE::Actor* target, bool isLethal = false) {
+    inline bool CallVampireFeed(RE::TESQuest* quest, RE::Actor* target, bool isLethal = false, bool animationHandlesKill = false) {
         VampireIntegration integration = DetectVampireIntegration();
 
         switch (integration) {
@@ -289,6 +289,7 @@ namespace PapyrusCall {
                     ctx.isLethal = isLethal;
                     ctx.isSleeping = isSleeping;
                     ctx.isCombatFeed = true;
+                    ctx.animationHandlesKill = animationHandlesKill;
 
                     return SacrosanctIntegration::ProcessFeed(ctx);
                 }
@@ -321,6 +322,7 @@ namespace PapyrusCall {
                     ctx.isLethal = isLethal;
                     ctx.isSleeping = isSleeping;
                     ctx.isCombatFeed = true;
+                    ctx.animationHandlesKill = animationHandlesKill;
 
                     return SacrosanctIntegration::ProcessFeed(ctx);
                 }

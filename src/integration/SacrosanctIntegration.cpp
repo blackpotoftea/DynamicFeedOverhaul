@@ -1063,8 +1063,11 @@ namespace SacrosanctIntegration {
         }
 
         // === STEP 9: Lethal kill ===
-        if (context.isLethal && !context.target->IsDead()) {
+        // Skip if animation handles the kill (lethal idle/OAR animation has kill baked in)
+        if (context.isLethal && !context.animationHandlesKill && !context.target->IsDead()) {
             Helpers::ProcessLethalKill(context.target, player);
+        } else if (context.isLethal && context.animationHandlesKill) {
+            SKSE::log::info("SacrosanctIntegration: Skipping kill - animation handles it");
         }
 
         // === STEP 10: Destruction XP for lethal feeds ===

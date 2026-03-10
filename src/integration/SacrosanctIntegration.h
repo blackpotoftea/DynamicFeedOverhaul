@@ -13,6 +13,7 @@ namespace SacrosanctIntegration {
         bool isParalyzed = false;
         bool isCombatFeed = false;
         bool isEmbrace = false;  // Sacrosanct vampire embrace feature
+        bool animationHandlesKill = false;  // If true, skip ProcessLethalKill (animation has kill baked in)
     };
 
     // Initialize Sacrosanct integration (call during kDataLoaded)

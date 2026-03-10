@@ -670,10 +670,12 @@ namespace AnimUtil {
         if (targetState == AnimUtil::kSitting) {
             SKSE::log::debug("Sitting {} feed", posStr);
             return isBehind ? Idles::VAMPIRE_SITTING_BACK : Idles::VAMPIRE_SITTING_FRONT;
-        } else if (targetState == AnimUtil::kCombat || lethal) {
-            SKSE::log::debug("Combat {} feed (kill move, lethal={})", posStr, lethal);
+        } else if (lethal) {
+            // Lethal param now carries correct intent (forced by player combat or user choice)
+            SKSE::log::debug("Lethal {} feed (kill move)", posStr);
             return isBehind ? Idles::BACK_SNEAK_KM_A : Idles::FRONT_KM_A;
         } else {
+            // Standing or Combat (non-lethal) uses normal animations
             SKSE::log::debug("Standing {} feed", posStr);
             return isBehind ? Idles::VAMPIRE_STANDING_BACK : Idles::VAMPIRE_STANDING_FRONT;
         }

@@ -290,7 +290,9 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
         if (player && !TargetState::IsWerewolf(player)) {
             auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
             if (vampireQuest) {
-                PapyrusCall::CallVampireFeed(vampireQuest, target, isLethal);
+                // If lethal, the kill move animation handles the kill - don't double-kill in integration
+                bool animationHandlesKill = isLethal;
+                PapyrusCall::CallVampireFeed(vampireQuest, target, isLethal, animationHandlesKill);
             } else {
                 SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
             }
@@ -401,9 +403,12 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         FeedIconOverlay::GetSingleton()->TriggerFeedAnimation();
     }
 
-    bool isInCombat = false;
+    bool isInCombat = false;  // Target's combat state
     int targetState = AnimUtil::DetermineTargetState(feedTarget, isInCombat);
-    SKSE::log::debug("Target state: {} (combat={})", targetState, isInCombat);
+
+    // Player's combat state forces lethal feed
+    bool playerInCombat = player->IsInCombat();
+    SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
 
     int vampireStage = PapyrusCall::GetVampireStage();
     bool useTwoSingle = settings->NonCombat.UseTwoSingleAnimations && targetState == AnimUtil::kStanding;
@@ -474,12 +479,12 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         Feed::FeedContext context;
         context.player = player;
         context.target = feedTarget;
-        context.isCombat = isInCombat;
+        context.isCombat = playerInCombat;  // Use PLAYER's combat state (forces lethal animations)
         context.isSneaking = player->IsSneaking();
         context.isHungry = (vampireStage >= settings->Animation.HungryThreshold);
         context.targetIsStanding = (targetState == AnimUtil::kStanding);
         context.isBehind = isBehind;
-        context.isLethal = isLethalFeedInProgress_;  // Pass user's lethal feed choice to animation selection
+        context.isLethal = isLethalFeedInProgress_ || playerInCombat;  // User choice OR forced by player combat
 
         const Feed::AnimationDefinition* anim = nullptr;
 
@@ -503,6 +508,12 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         if (isLethalFeedInProgress_) {
             isLethal = true;
             SKSE::log::info("Lethal feed triggered by hold duration");
+        }
+
+        // Force lethal when player is in combat
+        if (playerInCombat) {
+            isLethal = true;
+            SKSE::log::info("Lethal feed forced - player in combat");
         }
 
         if (settings->General.ForceFeedType > 0){
