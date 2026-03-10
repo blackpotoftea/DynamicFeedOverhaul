@@ -329,10 +329,56 @@ namespace SacrilegeIntegration {
         g_dlc1BloodPotion = RE::TESForm::LookupByEditorID<RE::AlchemyItem>("DLC1BloodPotion");
 
         g_available = true;
-        SKSE::log::info("SacrilegeIntegration: Initialized successfully");
-        SKSE::log::info("  SQL_FeedManager_Quest: {}", g_sacrilegeQuest ? "found" : "missing");
-        SKSE::log::info("  FeedSound: {}", g_feedSound ? "found" : "missing");
-        SKSE::log::info("  PlayerVampireQuest: {}", g_playerVampireQuest ? "found" : "missing");
+        SKSE::log::debug("SacrilegeIntegration: Initialized successfully");
+
+        // Globals - Sacrilege specific
+        SKSE::log::debug("  SQL_Mechanics_Global_Flag_BlockFeeding: {}", g_blockFeedingFlag ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_RestoreStatsOnFeed_Base: {}", g_restoreStatsBase ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_RestoreStatsOnFeed_Level: {}", g_restoreStatsLevel ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_XP_Feed_Base: {}", g_xpFeedBase ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_XP_Feed_Level: {}", g_xpFeedLevel ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_XP_Drain_Base: {}", g_xpDrainBase ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_XP_Drain_Level: {}", g_xpDrainLevel ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_Age_Bonus_Feed: {}", g_ageBonusFeed ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_Age_Bonus_Drain: {}", g_ageBonusDrain ? "found" : "missing");
+        SKSE::log::debug("  SQL_Mechanics_Global_BloodPoints_IncrementPerLevel: {}", g_bloodPointsIncrement ? "found" : "missing");
+
+        // DLC1 globals
+        SKSE::log::debug("  DLC1VampireBloodPoints: {}", g_dlc1BloodPoints ? "found" : "missing");
+        SKSE::log::debug("  DLC1VampireNextPerk: {}", g_dlc1NextPerk ? "found" : "missing");
+        SKSE::log::debug("  DLC1VampirePerkPoints: {}", g_dlc1PerkPoints ? "found" : "missing");
+        SKSE::log::debug("  DLC1VampireTotalPerksEarned: {}", g_dlc1TotalPerksEarned ? "found" : "missing");
+        SKSE::log::debug("  DLC1VampireMaxPerks: {}", g_dlc1MaxPerks ? "found" : "missing");
+
+        // Quests
+        SKSE::log::debug("  SQL_FeedManager_Quest: {}", g_sacrilegeQuest ? "found" : "missing");
+        SKSE::log::debug("  PlayerVampireQuest: {}", g_playerVampireQuest ? "found" : "missing");
+        SKSE::log::debug("  DLC1VampireTurn: {}", g_dlc1VampireTurnQuest ? "found" : "missing");
+
+        // Sounds
+        SKSE::log::debug("  SQL_Mechanics_Marker_FeedSound: {}", g_feedSound ? "found" : "missing");
+
+        // Messages
+        SKSE::log::debug("  DLC1BloodPointsMsg: {}", g_dlc1BloodPointsMsg ? "found" : "missing");
+        SKSE::log::debug("  DLC1VampirePerkEarned: {}", g_dlc1PerkEarnedMsg ? "found" : "missing");
+
+        // Perks
+        SKSE::log::debug("  SQL_PerkTree_Perk_VampireLord_Melee_01_FountainOfBlood: {}", g_fountainOfBloodPerk ? "found" : "missing");
+
+        // Spells
+        SKSE::log::debug("  SQL_VampireLord_Power_Spell_VampireLord: {}", g_vampireLordPower ? "found" : "missing");
+        SKSE::log::debug("  SQL_Racial_Spell_Dunmer_Proc: {}", g_dunmerProcSpell ? "found" : "missing");
+
+        // Effects
+        SKSE::log::debug("  SQL_Racial_Effect_Dunmer_Ab: {}", g_dunmerEffect ? "found" : "missing");
+        SKSE::log::debug("  SQL_Racial_Effect_Imperial_Ab: {}", g_imperialEffect ? "found" : "missing");
+
+        // Keywords
+        SKSE::log::debug("  ActorTypeNPC: {}", g_actorTypeNPC ? "found" : "missing");
+
+        // Items
+        SKSE::log::debug("  SQL_Potion_Potion_AdvanceAge: {}", g_advanceAgePotion ? "found" : "missing");
+        SKSE::log::debug("  DLC1BloodPotion: {}", g_dlc1BloodPotion ? "found" : "missing");
 
         return true;
     }

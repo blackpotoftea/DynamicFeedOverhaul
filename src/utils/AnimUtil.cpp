@@ -184,6 +184,10 @@ namespace AnimUtil {
             } else {
                 SKSE::log::error("[AnimUtil::playIdle] FAILED: _playPairedIdle returned false for {} (idle: {:X})",
                     actorName, idleFormID);
+                // Immediately mark feed as ended so timeout resets without waiting 15s
+                // FeedAnimState uses atomics internally so this is thread-safe
+                FeedAnimState::MarkFeedEnded();
+                AnimEventSink::Unregister();
             }
         });
     }

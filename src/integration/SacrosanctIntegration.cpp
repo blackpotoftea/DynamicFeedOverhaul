@@ -124,8 +124,8 @@ namespace SacrosanctIntegration {
         RE::BGSMessage* g_msgStrongBlood = nullptr;
         RE::BGSMessage* g_msgBloodBond = nullptr;
 
-        // Sounds - TESSound contains a BGSSoundDescriptorForm* descriptor
-        RE::TESSound* g_feedSound = nullptr;
+        // Sounds - Sound Markers are BGSSoundDescriptorForm (SNDR)
+        RE::BGSSoundDescriptorForm* g_feedSound = nullptr;
 
         // Quests
         RE::TESQuest* g_playerVampireQuest = nullptr;
@@ -158,8 +158,10 @@ namespace SacrosanctIntegration {
         // Perks
         RE::BGSPerk* g_psychicVampirePerk = nullptr;
         RE::BGSPerk* g_lethalFeedXPPerk = nullptr;
-        RE::BGSPerk* g_bloodBondAbility = nullptr;
-        RE::BGSPerk* g_harvestMoonAbility = nullptr;
+
+        // Spells - Abilities (reward spells)
+        RE::SpellItem* g_bloodBondAbility = nullptr;
+        RE::SpellItem* g_harvestMoonAbility = nullptr;
 
         // Keywords
         RE::BGSKeyword* g_vampireKeyword = nullptr;
@@ -210,8 +212,8 @@ namespace SacrosanctIntegration {
         // Strong Blood spell rewards (indices 0-6)
         RE::SpellItem* g_strongBloodSpells[7] = { nullptr };
 
-        // Strong Blood counter global (tracks how many unique NPCs fed upon)
-        RE::TESGlobal* g_strongBloodCounter = nullptr;
+        // NOTE: StrongBloodCounter is a script-local property on SCS_FeedManager_Quest, not a global
+        // Access via GetScriptPropertyInt/SetScriptPropertyInt helper functions
 
         // Factions - Blood Bond
         RE::TESFaction* g_currentFollowerFaction = nullptr;
@@ -260,8 +262,8 @@ namespace SacrosanctIntegration {
 
         // Cache feed spell and XP globals
         g_scsFeedTargetSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_Feed_Target");
-        g_scsXPLethalBase = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_VampireLord_Global_XP_LethalFeed_Base");
-        g_scsXPLethalLevel = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_VampireLord_Global_XP_LethalFeed_Level");
+        g_scsXPLethalBase = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_Mechanics_Global_XP_LethalFeed_Base");
+        g_scsXPLethalLevel = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_Mechanics_Global_XP_LethalFeed_Level");
 
         // === NEW FORM LOOKUPS FOR FULL PAPYRUS PARITY ===
 
@@ -270,8 +272,8 @@ namespace SacrosanctIntegration {
         g_msgStrongBlood = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_StrongBlood");
         g_msgBloodBond = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_BloodBond");
 
-        // Sounds - Sacrosanct uses TESSound (SOUN) records, not BGSSoundDescriptorForm (SNDR)
-        g_feedSound = RE::TESForm::LookupByEditorID<RE::TESSound>("SCS_Mechanics_Marker_FeedSound");
+        // Sounds - Sacrosanct uses Sound Markers which are BGSSoundDescriptorForm (SNDR)
+        g_feedSound = RE::TESForm::LookupByEditorID<RE::BGSSoundDescriptorForm>("SCS_Mechanics_Marker_FeedSound");
 
         // Quests
         g_playerVampireQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerVampireQuest");
@@ -293,19 +295,19 @@ namespace SacrosanctIntegration {
         g_orcProcLongSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Racial_Spell_OrcNew_Proc_Long");
 
         // Spells - Feed types
-        g_sneakFeedSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_SneakFeed_Target");
-        g_embraceSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_FeedEmbrace_Target");
-        g_psychicVampireSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_PsychicVampire_Target");
+        g_sneakFeedSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_FeedSneak_Target");
+        g_embraceSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_FeedFosterChilde_Target");
+        g_psychicVampireSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_PsychicVampire_Self");
 
         // Spells - Dispel targets
         g_reverseProgressionProc = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Vanilla_Spell_Ab_ReverseProgression_Stage2N_Proc");
         g_bloodIsPowerSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_VampireSpells_Vanilla_Power_Spell_BloodIsPower");
 
         // Perks
-        g_psychicVampirePerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_PsychicVampire_Perk");
-        g_lethalFeedXPPerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_LethalFeedXP");
-        g_bloodBondAbility = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_Abilities_Reward_Spell_BloodBond_Ab");
-        g_harvestMoonAbility = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_Abilities_Reward_Spell_HarvestMoon_Ab");
+        g_psychicVampirePerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_PerkTree_320_Perk_VampireLord_Mortal_PsychicVampire");
+        g_lethalFeedXPPerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_PerkTree_300_Perk_VampireLord_Mortal_WhiteWolf");
+        g_bloodBondAbility = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Reward_Spell_BloodBond_Ab");
+        g_harvestMoonAbility = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Reward_Spell_HarvestMoon_Ab");
 
         // Keywords
         g_vampireKeyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("Vampire");
@@ -322,8 +324,8 @@ namespace SacrosanctIntegration {
         g_hemomancySteps = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Hemomancy_Global_Stage_Steps");
         g_hemomancyStepsToNext = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Hemomancy_Global_Stage_StepsToNext");
         g_hemomancyStepsAddPerStep = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Hemomancy_Global_Stage_StepsToNext_AddPerStep");
-        g_hemomancyFormList = RE::TESForm::LookupByEditorID<RE::BGSListForm>("SCS_Mechanics_FormList_HemomancyExpanded");
-        g_hemomancyBaseAbility = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Mechanics_Spell_Ab_AddRemoveHemomancySpells");
+        g_hemomancyFormList = RE::TESForm::LookupByEditorID<RE::BGSListForm>("SCS_Mechanics_FormList_Hemomancy");
+        g_hemomancyBaseAbility = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_Ab_AddRemoveHemomancySpells");
         g_hemomancyHelpMessage = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Help_GetHemomancyByFeeding");
 
         // Globals - Wassail
@@ -335,7 +337,7 @@ namespace SacrosanctIntegration {
         g_ageBonusFromFeed = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_Mechanics_Global_Age_BonusFromFeed");
 
         // Globals - Lamae's Wrath
-        g_canLamaesWrath = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Vanilla_Power_Message_CanLamaesWrath");
+        g_canLamaesWrath = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Vanilla_Power_Global_CanLamaesPyre");
 
         // Globals - Unique Check
         g_forceUniqueCheck = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_Mechanics_Global_ForceUniqueCheck");
@@ -362,8 +364,7 @@ namespace SacrosanctIntegration {
         g_strongBloodSpells[5] = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_StrongBlood_Spell_05_Ab");
         g_strongBloodSpells[6] = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_StrongBlood_Spell_06_Ab");
 
-        // Strong Blood counter global
-        g_strongBloodCounter = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_Mechanics_Global_StrongBloodCounter");
+        // NOTE: StrongBloodCounter is accessed via script property, not cached here
 
         // Factions - Blood Bond
         g_currentFollowerFaction = RE::TESForm::LookupByEditorID<RE::TESFaction>("CurrentFollowerFaction");
@@ -374,15 +375,140 @@ namespace SacrosanctIntegration {
         g_dlc1BloodPotion = RE::TESForm::LookupByEditorID<RE::AlchemyItem>("DLC1BloodPotion");
 
         g_sacrosanctAvailable = true;
-        SKSE::log::info("SacrosanctIntegration: Initialized successfully");
-        SKSE::log::info("  SCS_FeedManager_Quest: {}", g_sacrosanctQuest ? "found" : "missing");
-        SKSE::log::info("  SCS_Mechanics_Spell_Feed_Target: {}", g_scsFeedTargetSpell ? "found" : "missing");
-        SKSE::log::info("  SCS_XP_LethalFeed_Base: {}", g_scsXPLethalBase ? "found" : "missing");
-        SKSE::log::info("  SCS_XP_LethalFeed_Level: {}", g_scsXPLethalLevel ? "found" : "missing");
-        SKSE::log::info("  FeedSound: {}", g_feedSound ? "found" : "missing");
-        SKSE::log::info("  PlayerVampireQuest: {}", g_playerVampireQuest ? "found" : "missing");
-        SKSE::log::info("  Hemomancy FormList: {}", g_hemomancyFormList ? "found" : "missing");
-        SKSE::log::info("  DLC1BloodPoints: {}", g_dlc1BloodPoints ? "found" : "missing");
+        SKSE::log::debug("SacrosanctIntegration: Initialized successfully");
+
+        // === QUESTS ===
+        SKSE::log::debug("  [Quests]");
+        SKSE::log::debug("    SCS_FeedManager_Quest: {}", g_sacrosanctQuest ? "found" : "missing");
+        SKSE::log::debug("    PlayerVampireQuest: {}", g_playerVampireQuest ? "found" : "missing");
+        SKSE::log::debug("    DLC1VampireTurn: {}", g_dlc1VampireTurnQuest ? "found" : "missing");
+        SKSE::log::debug("    SCS_Main500_Quest: {}", g_scsMain500Quest ? "found" : "missing");
+        SKSE::log::debug("    SCS_Sommelier_Quest: {}", g_sommelierQuest ? "found" : "missing");
+
+        // === SPELLS - CORE ===
+        SKSE::log::debug("  [Spells - Core]");
+        SKSE::log::debug("    SCS_Mechanics_Spell_Feed_Target: {}", g_scsFeedTargetSpell ? "found" : "missing");
+        SKSE::log::debug("    Amaranth: {}", g_amaranthSpell ? "found" : "missing");
+        SKSE::log::debug("    Amaranth_Target: {}", g_amaranthTargetSpell ? "found" : "missing");
+
+        // === SPELLS - RACIAL ===
+        SKSE::log::debug("  [Spells - Racial]");
+        SKSE::log::debug("    Dunmer_Effect: {}", g_dunmerEffect ? "found" : "missing");
+        SKSE::log::debug("    Dunmer_Spell: {}", g_dunmerSpell ? "found" : "missing");
+        SKSE::log::debug("    Altmer_Effect: {}", g_altmerEffect ? "found" : "missing");
+        SKSE::log::debug("    Altmer_Proc: {}", g_altmerProcSpell ? "found" : "missing");
+        SKSE::log::debug("    Altmer_Proc_Long: {}", g_altmerProcLongSpell ? "found" : "missing");
+        SKSE::log::debug("    Orc_Effect: {}", g_orcEffect ? "found" : "missing");
+        SKSE::log::debug("    Orc_Proc: {}", g_orcProcSpell ? "found" : "missing");
+        SKSE::log::debug("    Orc_Proc_Long: {}", g_orcProcLongSpell ? "found" : "missing");
+
+        // === SPELLS - FEED TYPES ===
+        SKSE::log::debug("  [Spells - Feed Types]");
+        SKSE::log::debug("    SneakFeed_Target: {}", g_sneakFeedSpell ? "found" : "missing");
+        SKSE::log::debug("    Embrace_Target: {}", g_embraceSpell ? "found" : "missing");
+        SKSE::log::debug("    PsychicVampire_Target: {}", g_psychicVampireSpell ? "found" : "missing");
+
+        // === SPELLS - DISPEL/PROGRESSION ===
+        SKSE::log::debug("  [Spells - Dispel/Progression]");
+        SKSE::log::debug("    ReverseProgression_Proc: {}", g_reverseProgressionProc ? "found" : "missing");
+        SKSE::log::debug("    BloodIsPower: {}", g_bloodIsPowerSpell ? "found" : "missing");
+        SKSE::log::debug("    KissOfDeath_Ability: {}", g_kissOfDeathAbility ? "found" : "missing");
+
+        // === PERKS ===
+        SKSE::log::debug("  [Perks]");
+        SKSE::log::debug("    VampireFeed (vanilla): {}", g_vampireFeedPerk ? "found" : "missing");
+        SKSE::log::debug("    PsychicVampire_Perk: {}", g_psychicVampirePerk ? "found" : "missing");
+        SKSE::log::debug("    LethalFeedXP: {}", g_lethalFeedXPPerk ? "found" : "missing");
+
+        // === SPELLS - ABILITIES (REWARDS) ===
+        SKSE::log::debug("  [Spells - Abilities]");
+        SKSE::log::debug("    BloodBond_Ab: {}", g_bloodBondAbility ? "found" : "missing");
+        SKSE::log::debug("    HarvestMoon_Ab: {}", g_harvestMoonAbility ? "found" : "missing");
+        SKSE::log::debug("    Hemomancy_BaseAbility: {}", g_hemomancyBaseAbility ? "found" : "missing");
+
+        // === KEYWORDS ===
+        SKSE::log::debug("  [Keywords]");
+        SKSE::log::debug("    Vampire: {}", g_vampireKeyword ? "found" : "missing");
+
+        // === GLOBALS - XP ===
+        SKSE::log::debug("  [Globals - XP]");
+        SKSE::log::debug("    XP_LethalFeed_Base: {}", g_scsXPLethalBase ? "found" : "missing");
+        SKSE::log::debug("    XP_LethalFeed_Level: {}", g_scsXPLethalLevel ? "found" : "missing");
+
+        // === GLOBALS - COMBAT ===
+        SKSE::log::debug("  [Globals - Combat]");
+        SKSE::log::debug("    BloodKnight_Cost: {}", g_bloodKnightCost ? "found" : "missing");
+        SKSE::log::debug("    KissOfDeath_Amount: {}", g_kissOfDeathAmount ? "found" : "missing");
+
+        // === GLOBALS - HEMOMANCY ===
+        SKSE::log::debug("  [Globals - Hemomancy]");
+        SKSE::log::debug("    Hemomancy_Stage: {}", g_hemomancyStage ? "found" : "missing");
+        SKSE::log::debug("    Hemomancy_Steps: {}", g_hemomancySteps ? "found" : "missing");
+        SKSE::log::debug("    Hemomancy_StepsToNext: {}", g_hemomancyStepsToNext ? "found" : "missing");
+        SKSE::log::debug("    Hemomancy_StepsAddPerStep: {}", g_hemomancyStepsAddPerStep ? "found" : "missing");
+
+        // === GLOBALS - WASSAIL ===
+        SKSE::log::debug("  [Globals - Wassail]");
+        SKSE::log::debug("    Wassail_Current: {}", g_wassailCurrent ? "found" : "missing");
+        SKSE::log::debug("    Wassail_NerfAmount: {}", g_wassailNerfAmount ? "found" : "missing");
+
+        // === GLOBALS - AGE ===
+        SKSE::log::debug("  [Globals - Age]");
+        SKSE::log::debug("    Age_BonusFromDrain: {}", g_ageBonusFromDrain ? "found" : "missing");
+        SKSE::log::debug("    Age_BonusFromFeed: {}", g_ageBonusFromFeed ? "found" : "missing");
+
+        // === GLOBALS - MISC ===
+        SKSE::log::debug("  [Globals - Misc]");
+        SKSE::log::debug("    CanLamaesWrath: {}", g_canLamaesWrath ? "found" : "missing");
+        SKSE::log::debug("    ForceUniqueCheck: {}", g_forceUniqueCheck ? "found" : "missing");
+
+        // === GLOBALS - DLC1 VAMPIRE LORD ===
+        SKSE::log::debug("  [Globals - DLC1 Vampire Lord]");
+        SKSE::log::debug("    DLC1BloodPoints: {}", g_dlc1BloodPoints ? "found" : "missing");
+        SKSE::log::debug("    DLC1NextPerk: {}", g_dlc1NextPerk ? "found" : "missing");
+        SKSE::log::debug("    DLC1PerkPoints: {}", g_dlc1PerkPoints ? "found" : "missing");
+        SKSE::log::debug("    DLC1TotalPerksEarned: {}", g_dlc1TotalPerksEarned ? "found" : "missing");
+        SKSE::log::debug("    DLC1MaxPerks: {}", g_dlc1MaxPerks ? "found" : "missing");
+
+        // === MESSAGES ===
+        SKSE::log::debug("  [Messages]");
+        SKSE::log::debug("    HemomancyStageUp: {}", g_msgHemomancyStageUp ? "found" : "missing");
+        SKSE::log::debug("    Hemomancy_HelpMessage: {}", g_hemomancyHelpMessage ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood: {}", g_msgStrongBlood ? "found" : "missing");
+        SKSE::log::debug("    BloodBond: {}", g_msgBloodBond ? "found" : "missing");
+        SKSE::log::debug("    DLC1BloodPointsMsg: {}", g_dlc1BloodPointsMsg ? "found" : "missing");
+        SKSE::log::debug("    DLC1PerkEarnedMsg: {}", g_dlc1PerkEarnedMsg ? "found" : "missing");
+
+        // === SOUNDS ===
+        SKSE::log::debug("  [Sounds]");
+        SKSE::log::debug("    FeedSound: {}", g_feedSound ? "found" : "missing");
+
+        // === FORMLISTS ===
+        SKSE::log::debug("  [FormLists]");
+        SKSE::log::debug("    Hemomancy_FormList: {}", g_hemomancyFormList ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_Track: {}", g_strongBloodTrack ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_Base: {}", g_strongBloodBase ? "found" : "missing");
+
+        // === SPELLS - STRONG BLOOD ===
+        SKSE::log::debug("  [Spells - Strong Blood]");
+        SKSE::log::debug("    StrongBloodCounter: (script property, accessed at runtime)");
+        SKSE::log::debug("    StrongBlood_Spell_00: {}", g_strongBloodSpells[0] ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_Spell_01: {}", g_strongBloodSpells[1] ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_Spell_02: {}", g_strongBloodSpells[2] ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_Spell_03: {}", g_strongBloodSpells[3] ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_Spell_04: {}", g_strongBloodSpells[4] ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_Spell_05: {}", g_strongBloodSpells[5] ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_Spell_06: {}", g_strongBloodSpells[6] ? "found" : "missing");
+
+        // === FACTIONS ===
+        SKSE::log::debug("  [Factions]");
+        SKSE::log::debug("    CurrentFollowerFaction: {}", g_currentFollowerFaction ? "found" : "missing");
+        SKSE::log::debug("    PotentialFollowerFaction: {}", g_potentialFollowerFaction ? "found" : "missing");
+        SKSE::log::debug("    PotentialMarriageFaction: {}", g_potentialMarriageFaction ? "found" : "missing");
+
+        // === ITEMS ===
+        SKSE::log::debug("  [Items]");
+        SKSE::log::debug("    DLC1BloodPotion: {}", g_dlc1BloodPotion ? "found" : "missing");
 
         return true;
     }
@@ -397,6 +523,73 @@ namespace SacrosanctIntegration {
     // === HELPER FUNCTIONS ===
     namespace Helpers {
 
+        // === SCRIPT PROPERTY ACCESS ===
+        // For accessing script-local variables (properties) that are not globals
+
+        bool GetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int& outValue) {
+            if (!quest) return false;
+
+            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+            if (!vm) {
+                SKSE::log::warn("Helpers::GetScriptPropertyInt: VM not available");
+                return false;
+            }
+
+            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
+            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
+                SKSE::log::warn("Helpers::GetScriptPropertyInt: Failed to get handle for quest");
+                return false;
+            }
+
+            RE::BSTSmartPointer<RE::BSScript::Object> object;
+            if (!vm->FindBoundObject(handle, scriptName, object) || !object) {
+                SKSE::log::warn("Helpers::GetScriptPropertyInt: Script '{}' not found on quest", scriptName);
+                return false;
+            }
+
+            auto* property = object->GetProperty(propertyName);
+            if (!property) {
+                SKSE::log::warn("Helpers::GetScriptPropertyInt: Property '{}' not found", propertyName);
+                return false;
+            }
+
+            outValue = property->GetSInt();
+            SKSE::log::debug("Helpers::GetScriptPropertyInt: {}.{} = {}", scriptName, propertyName, outValue);
+            return true;
+        }
+
+        bool SetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int value) {
+            if (!quest) return false;
+
+            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+            if (!vm) {
+                SKSE::log::warn("Helpers::SetScriptPropertyInt: VM not available");
+                return false;
+            }
+
+            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
+            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
+                SKSE::log::warn("Helpers::SetScriptPropertyInt: Failed to get handle for quest");
+                return false;
+            }
+
+            RE::BSTSmartPointer<RE::BSScript::Object> object;
+            if (!vm->FindBoundObject(handle, scriptName, object) || !object) {
+                SKSE::log::warn("Helpers::SetScriptPropertyInt: Script '{}' not found on quest", scriptName);
+                return false;
+            }
+
+            auto* property = object->GetProperty(propertyName);
+            if (!property) {
+                SKSE::log::warn("Helpers::SetScriptPropertyInt: Property '{}' not found", propertyName);
+                return false;
+            }
+
+            property->SetSInt(value);
+            SKSE::log::debug("Helpers::SetScriptPropertyInt: {}.{} = {}", scriptName, propertyName, value);
+            return true;
+        }
+
         void CastSpell(RE::SpellItem* spell, RE::Actor* casterActor, RE::Actor* target) {
             if (!spell || !casterActor) return;
             auto* caster = casterActor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant);
@@ -407,15 +600,8 @@ namespace SacrosanctIntegration {
             }
         }
 
-        void PlaySound(RE::TESSound* sound, RE::Actor* target) {
+        void PlaySound(RE::BGSSoundDescriptorForm* sound, RE::Actor* target) {
             if (!sound || !target) return;
-
-            // TESSound contains a BGSSoundDescriptorForm* descriptor member
-            auto* descriptor = sound->descriptor;
-            if (!descriptor) {
-                SKSE::log::warn("Helpers::PlaySound: TESSound has no descriptor");
-                return;
-            }
 
             auto* audioManager = RE::BSAudioManager::GetSingleton();
             if (!audioManager) {
@@ -424,7 +610,7 @@ namespace SacrosanctIntegration {
             }
 
             RE::BSSoundHandle soundHandle;
-            audioManager->BuildSoundDataFromDescriptor(soundHandle, descriptor);
+            audioManager->BuildSoundDataFromDescriptor(soundHandle, sound);
 
             if (soundHandle.IsValid()) {
                 // SetObjectToFollow takes NiAVObject* (the 3D model root)
@@ -661,10 +847,11 @@ namespace SacrosanctIntegration {
 
             if (!found) return;
 
-            // Get current counter value
+            // Get current counter value from script property
             int counter = 0;
-            if (g_strongBloodCounter) {
-                counter = static_cast<int>(g_strongBloodCounter->value);
+            if (!GetScriptPropertyInt(sacrosanctQuest, "SCS_FeedManager_Quest", "StrongBloodCounter", counter)) {
+                SKSE::log::warn("Helpers: Strong Blood - failed to read StrongBloodCounter property");
+                return;
             }
 
             // Check if we still have spells to grant (0-6)
@@ -688,10 +875,11 @@ namespace SacrosanctIntegration {
             SKSE::log::info("Helpers: Strong Blood - granted spell {} (index {})",
                 rewardSpell->GetName(), counter);
 
-            // Increment counter
-            if (g_strongBloodCounter) {
-                g_strongBloodCounter->value = static_cast<float>(counter + 1);
+            // Increment counter via script property
+            if (SetScriptPropertyInt(sacrosanctQuest, "SCS_FeedManager_Quest", "StrongBloodCounter", counter + 1)) {
                 SKSE::log::info("Helpers: Strong Blood - counter now {}", counter + 1);
+            } else {
+                SKSE::log::warn("Helpers: Strong Blood - failed to update StrongBloodCounter property");
             }
 
             // Remove target from tracking list
