@@ -102,6 +102,8 @@ void Settings::LoadINI() {
     // Input
     Input.FeedKey = static_cast<int>(ini.GetLongValue("Input", "FeedKey", Input.FeedKey));
     Input.FeedGamepadKey = static_cast<int>(ini.GetLongValue("Input", "FeedGamepadKey", Input.FeedGamepadKey));
+    Input.SecondaryKey = static_cast<int>(ini.GetLongValue("Input", "SecondaryKey", Input.SecondaryKey));
+    Input.SecondaryGamepadKey = static_cast<int>(ini.GetLongValue("Input", "SecondaryGamepadKey", Input.SecondaryGamepadKey));
 
     // PromptDisplay
     PromptDisplay.RequireWeaponDrawn = ini.GetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn);
@@ -174,13 +176,15 @@ void Settings::LoadINI() {
     Integration.EnableSacrilege = ini.GetBoolValue("Integration", "EnableSacrilege", Integration.EnableSacrilege);
     Integration.EnableBetterVampires = ini.GetBoolValue("Integration", "EnableBetterVampires", Integration.EnableBetterVampires);
     Integration.PoiseIgnoresLevelCheck = ini.GetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck);
-    Integration.EnableSacrosanctInCombat = ini.GetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat);
+    Integration.DeepSacrosanctIntegration = ini.GetBoolValue("Integration", "DeepSacrosanctIntegration", Integration.DeepSacrosanctIntegration);
+    Integration.DeepSacrilegeIntegration = ini.GetBoolValue("Integration", "DeepSacrilegeIntegration", Integration.DeepSacrilegeIntegration);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
         General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
         General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelayIdleSeconds);
-    SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}", Input.FeedKey, Input.FeedGamepadKey);
+    SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}, SecondaryKey=0x{:X}, SecondaryGamepadKey=0x{:X}",
+        Input.FeedKey, Input.FeedGamepadKey, Input.SecondaryKey, Input.SecondaryGamepadKey);
     SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
         PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
     SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, EnableLevelCheck={}, MaxLevelDiff={}",
@@ -202,8 +206,9 @@ void Settings::LoadINI() {
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, EnableSacrosanctInCombat={}",
-        Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck, Integration.EnableSacrosanctInCombat);
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}",
+        Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck,
+        Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration);
 }
 
 void Settings::SaveINI() {
@@ -238,9 +243,13 @@ void Settings::SaveINI() {
 
     // Input
     ini.SetLongValue("Input", "FeedKey", Input.FeedKey,
-        "; Keyboard key code for feed prompt (default 0x22 = G)");
+        "; Keyboard key code for primary feed prompt (default 0x22 = G)");
     ini.SetLongValue("Input", "FeedGamepadKey", Input.FeedGamepadKey,
-        "; Gamepad key code for feed prompt (default 0x1000 = A)");
+        "; Gamepad key code for primary feed prompt (default 0x1000 = A)");
+    ini.SetLongValue("Input", "SecondaryKey", Input.SecondaryKey,
+        "; Keyboard key code for secondary prompt (default 0x23 = H)");
+    ini.SetLongValue("Input", "SecondaryGamepadKey", Input.SecondaryGamepadKey,
+        "; Gamepad key code for secondary prompt (default 0x2000 = B)");
 
     // PromptDisplay
     ini.SetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn,
@@ -369,8 +378,10 @@ void Settings::SaveINI() {
         "; Enable Better Vampires integration (auto-detects mod)");
     ini.SetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck,
         "; When poise mod (ChocolatePoise/loki_POISE) is detected, ignore level requirements for feeding");
-    ini.SetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat,
-        "; Use C++ integration for Sacrosanct/Sacrilege during combat (bypasses AI-driven state issues)");
+    ini.SetBoolValue("Integration", "DeepSacrosanctIntegration", Integration.DeepSacrosanctIntegration,
+        "; Use C++ to mimic Sacrosanct ProcessFeed for lethal feeds (bypasses Papyrus)");
+    ini.SetBoolValue("Integration", "DeepSacrilegeIntegration", Integration.DeepSacrilegeIntegration,
+        "; Use C++ to mimic Sacrilege ProcessFeed for lethal feeds (bypasses Papyrus)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

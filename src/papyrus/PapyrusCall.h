@@ -2,6 +2,7 @@
 
 #include "../feed/TargetState.h"
 #include "../integration/SacrosanctIntegration.h"
+#include "../integration/SacrilegeIntegration.h"
 
 // Forward declaration to avoid including Settings.h
 class Settings;
@@ -280,28 +281,28 @@ namespace PapyrusCall {
                 bool isCombatFeed = target->IsInCombat();
                 bool isSleeping = TargetState::IsSleeping(target);
 
-                // Use C++ integration for combat feeds (avoids AI-driven state from StartVampireFeed)
-                if (isCombatFeed && settings->Integration.EnableSacrosanctInCombat) {
-                    SKSE::log::info("Sacrosanct: Using C++ integration for combat feed (bypassing Papyrus AI-driven state)");
+                // Deep integration: C++ mimics Sacrosanct ProcessFeed (bypasses Papyrus)
+                if (isLethal && settings->Integration.DeepSacrosanctIntegration && SacrosanctIntegration::IsAvailable()) {
+                    SKSE::log::info("Sacrosanct: Using deep C++ integration for lethal feed");
 
                     SacrosanctIntegration::FeedContext ctx;
                     ctx.target = target;
                     ctx.isLethal = isLethal;
                     ctx.isSleeping = isSleeping;
-                    ctx.isCombatFeed = true;
+                    ctx.isCombatFeed = isCombatFeed;
                     ctx.animationHandlesKill = animationHandlesKill;
 
                     return SacrosanctIntegration::ProcessFeed(ctx);
                 }
 
-                // Non-combat: Use Papyrus ProcessFeed (full Sacrosanct experience)
+                // Papyrus integration
                 auto* sacrosanctQuest = GetSacrosanctFeedManagerQuest();
                 if (!sacrosanctQuest) {
                     SKSE::log::error("Sacrosanct integration detected but quest not found");
                     return false;
                 }
 
-                SKSE::log::info("Using Sacrosanct Papyrus integration (sleeping={}, lethal={}, combat={})",
+                SKSE::log::info("Sacrosanct: Using Papyrus integration (sleeping={}, lethal={}, combat={})",
                     isSleeping, isLethal, isCombatFeed);
                 return CallSacrosanctProcessFeed(sacrosanctQuest, target, isLethal, isSleeping, false, false, isCombatFeed, false);
             }
@@ -311,30 +312,28 @@ namespace PapyrusCall {
                 bool isCombatFeed = target->IsInCombat();
                 bool isSleeping = TargetState::IsSleeping(target);
 
-                // Use C++ integration for combat feeds (avoids AI-driven state from StartVampireFeed)
-                // Sacrilege has the same issue as Sacrosanct
-                if (isCombatFeed && settings->Integration.EnableSacrosanctInCombat) {
-                    SKSE::log::info("Sacrilege: Using C++ integration for combat feed (bypassing Papyrus AI-driven state)");
+                // Deep integration: C++ mimics Sacrilege ProcessFeed (bypasses Papyrus)
+                if (isLethal && settings->Integration.DeepSacrilegeIntegration && SacrilegeIntegration::IsAvailable()) {
+                    SKSE::log::info("Sacrilege: Using deep C++ integration for lethal feed");
 
-                    // Reuse Sacrosanct integration - vanilla globals are the same
-                    SacrosanctIntegration::FeedContext ctx;
+                    SacrilegeIntegration::FeedContext ctx;
                     ctx.target = target;
                     ctx.isLethal = isLethal;
                     ctx.isSleeping = isSleeping;
-                    ctx.isCombatFeed = true;
+                    ctx.isCombatFeed = isCombatFeed;
                     ctx.animationHandlesKill = animationHandlesKill;
 
-                    return SacrosanctIntegration::ProcessFeed(ctx);
+                    return SacrilegeIntegration::ProcessFeed(ctx);
                 }
 
-                // Non-combat: Use Papyrus ProcessFeed (full Sacrilege experience)
+                // Papyrus integration
                 auto* sacrilegeQuest = GetSacrilegeFeedManagerQuest();
                 if (!sacrilegeQuest) {
                     SKSE::log::error("Sacrilege integration detected but quest not found");
                     return false;
                 }
 
-                SKSE::log::info("Using Sacrilege Papyrus integration (sleeping={}, lethal={}, combat={})",
+                SKSE::log::info("Sacrilege: Using Papyrus integration (sleeping={}, lethal={}, combat={})",
                     isSleeping, isLethal, isCombatFeed);
                 return CallSacrilegeProcessFeed(sacrilegeQuest, target, isLethal, isSleeping, false, false, isCombatFeed, false);
             }

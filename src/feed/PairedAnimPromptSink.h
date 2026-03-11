@@ -5,9 +5,21 @@
 #include <chrono>
 #include <array>
 #include <span>
+#include <vector>
+#include <functional>
 
 // Forward declarations
 class Settings;
+
+/// Definition of a prompt that can be shown to the player
+struct PromptDef {
+    std::string text;
+    SkyPromptAPI::PromptType type = SkyPromptAPI::PromptType::kSinglePress;
+    float holdDuration = 0.0f;
+    uint32_t color = 0xFFFFFFFF;  // AABBGGRR
+    int priority = 100;           // Higher = primary button
+    std::function<void(RE::Actor* target, bool holdComplete)> onAccept;
+};
 
 namespace FeedAnimState {
     void MarkFeedStarted();
@@ -36,6 +48,9 @@ private:
 
 class PairedAnimPromptSink : public SkyPromptAPI::PromptSink {
 public:
+    /// Callback type for prompt providers
+    using PromptCallback = std::function<std::vector<PromptDef>(RE::Actor* target)>;
+
     static PairedAnimPromptSink* GetSingleton();
 
     std::span<const SkyPromptAPI::Prompt> GetPrompts() const override;
@@ -46,7 +61,10 @@ public:
 
     static bool IsExcluded(RE::Actor* actor);
     static bool IsValidFeedTarget(RE::Actor* target);
-    
+
+    /// Register a callback that provides prompts for a target
+    void RegisterPromptCallback(PromptCallback callback);
+
     // Helper to update buttons from settings
     void UpdateFeedButtons();
 
@@ -71,12 +89,19 @@ public:
         witnessCheckTimer_ = 0.0f;
     }
 
+    // Called when feed prompt is accepted (used by callbacks)
+    void HandleFeedAccepted();
+
+    // Lethal feed state (set by callbacks before HandleFeedAccepted)
+    mutable bool isLethalFeedInProgress_{false};
+
 private:
     PairedAnimPromptSink();
 
+    void RegisterCorePromptCallback();
+
     static void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal = false, bool hasOARAnimation = false);
 
-    void HandleFeedAccepted();
     void HandleFeedAcceptedTest();  // Minimal test for kill move playback
     void HandleTimingOut();
 
@@ -87,14 +112,21 @@ private:
     void ShowPrompt(RE::Actor* target);
     void HidePrompt();
 
+    // Button bindings per prompt slot (primary, secondary)
     std::array<std::pair<RE::INPUT_DEVICE, SkyPromptAPI::ButtonID>, 2> feedButtons_;
+    std::array<std::pair<RE::INPUT_DEVICE, SkyPromptAPI::ButtonID>, 2> secondaryButtons_;
 
-    mutable std::array<SkyPromptAPI::Prompt, 1> prompts_;  // Mutable: modified in const SetTarget during ProcessEvent
+    // Prompt callbacks from integrations
+    std::vector<PromptCallback> promptCallbacks_;
+
+    // Current prompt definitions and API prompts
+    mutable std::vector<PromptDef> currentPromptDefs_;
+    mutable std::vector<SkyPromptAPI::Prompt> prompts_;
+
     mutable RE::ObjectRefHandle currentTargetHandle_;
     mutable RE::ObjectRefHandle activeFeedTargetHandle_;
     mutable std::mutex targetMutex_;  // Protects currentTargetHandle_ and activeFeedTargetHandle_
     RE::ObjectRefHandle lastCrosshairActor_;
-    mutable bool isLethalFeedInProgress_{false};  // Mutable: transient state for event processing
 
     // Prompt delay tracking - wait before showing prompt on new target
     RE::ObjectRefHandle pendingTarget_;

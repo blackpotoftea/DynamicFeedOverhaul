@@ -13,6 +13,7 @@
 #include "utils/AnimUtil.h"
 #include "feed/WitnessDetection.h"
 #include <thread>
+#include <algorithm>
 
 extern std::atomic<SkyPromptAPI::ClientID> g_clientID;
 
@@ -177,15 +178,96 @@ PairedAnimPromptSink* PairedAnimPromptSink::GetSingleton() {
 
 PairedAnimPromptSink::PairedAnimPromptSink() {
     UpdateFeedButtons();
+    RegisterCorePromptCallback();
+}
+
+void PairedAnimPromptSink::RegisterCorePromptCallback() {
+    RegisterPromptCallback([](RE::Actor* target) -> std::vector<PromptDef> {
+        std::vector<PromptDef> prompts;
+        if (!target) return prompts;
+
+        auto* settings = Settings::GetSingleton();
+        auto* player = RE::PlayerCharacter::GetSingleton();
+
+        bool isDead = target->IsDead();
+        bool targetInCombat = target->IsInCombat();
+        bool playerInCombat = player && player->IsInCombat();
+        bool isEssential = TargetState::IsEssentialOrProtected(target);
+
+        if (isDead) {
+            // Corpse - simple drain
+            prompts.push_back({
+                .text = "Drain Corpse",
+                .type = SkyPromptAPI::PromptType::kSinglePress,
+                .color = 0xFFFFFFFF,
+                .priority = 1000,
+                .onAccept = [](RE::Actor*, bool) {
+                    PairedAnimPromptSink::GetSingleton()->HandleFeedAccepted();
+                }
+            });
+        }
+        else if (playerInCombat || targetInCombat) {
+            // Combat - red color, auto-lethal
+            prompts.push_back({
+                .text = "Feed",
+                .type = SkyPromptAPI::PromptType::kSinglePress,
+                .color = 0xFF5555FF,  // Red
+                .priority = 1000,
+                .onAccept = [](RE::Actor*, bool) {
+                    auto* self = PairedAnimPromptSink::GetSingleton();
+                    self->isLethalFeedInProgress_ = true;
+                    self->HandleFeedAccepted();
+                }
+            });
+        }
+        else {
+            // Non-combat
+            bool canLethal = settings->NonCombat.EnableLethalFeed &&
+                            !(settings->NonCombat.ExcludeEssentialFromLethal && isEssential);
+
+            if (canLethal) {
+                prompts.push_back({
+                    .text = "Feed (Hold to Kill)",
+                    .type = SkyPromptAPI::PromptType::kHold,
+                    .holdDuration = settings->NonCombat.LethalHoldDuration,
+                    .color = 0xFF5555FF,  // Red warning
+                    .priority = 1000,
+                    .onAccept = [](RE::Actor*, bool holdComplete) {
+                        auto* self = PairedAnimPromptSink::GetSingleton();
+                        self->isLethalFeedInProgress_ = holdComplete;
+                        self->HandleFeedAccepted();
+                    }
+                });
+            } else {
+                prompts.push_back({
+                    .text = "Feed",
+                    .type = SkyPromptAPI::PromptType::kSinglePress,
+                    .color = 0xFFFFFFFF,
+                    .priority = 1000,
+                    .onAccept = [](RE::Actor*, bool) {
+                        PairedAnimPromptSink::GetSingleton()->HandleFeedAccepted();
+                    }
+                });
+            }
+        }
+
+        return prompts;
+    });
 }
 
 void PairedAnimPromptSink::UpdateFeedButtons() {
     auto* settings = Settings::GetSingleton();
 
-    // Update button bindings only - prompt is constructed dynamically in SetTarget()
+    // Primary button bindings
     feedButtons_ = {{
         {RE::INPUT_DEVICE::kKeyboard, static_cast<SkyPromptAPI::ButtonID>(settings->Input.FeedKey)},
         {RE::INPUT_DEVICE::kGamepad, static_cast<SkyPromptAPI::ButtonID>(settings->Input.FeedGamepadKey)}
+    }};
+
+    // Secondary button bindings
+    secondaryButtons_ = {{
+        {RE::INPUT_DEVICE::kKeyboard, static_cast<SkyPromptAPI::ButtonID>(settings->Input.SecondaryKey)},
+        {RE::INPUT_DEVICE::kGamepad, static_cast<SkyPromptAPI::ButtonID>(settings->Input.SecondaryGamepadKey)}
     }};
 
     // If there's an active target, refresh the prompt with new buttons
@@ -196,53 +278,90 @@ void PairedAnimPromptSink::UpdateFeedButtons() {
     }
 }
 
+void PairedAnimPromptSink::RegisterPromptCallback(PromptCallback callback) {
+    promptCallbacks_.push_back(std::move(callback));
+    SKSE::log::info("Registered prompt callback (total: {})", promptCallbacks_.size());
+}
+
 std::span<const SkyPromptAPI::Prompt> PairedAnimPromptSink::GetPrompts() const {
     return prompts_;
 }
 
 void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
-    SKSE::log::info("ProcessEvent - eventType: {}, promptType: {}, text: '{}'",
+    SKSE::log::info("ProcessEvent - eventType: {}, promptType: {}, actionID: {}, text: '{}'",
         static_cast<int>(event.type),
         static_cast<int>(event.prompt.type),
+        event.prompt.actionID,
         event.prompt.text);
 
     // Get non-const singleton - ProcessEvent is const due to API contract,
     // but we need to modify state. Using singleton access is the proper pattern here.
     auto* self = GetSingleton();
 
+    // Handle timing out separately (not tied to specific prompt)
+    if (event.type == SkyPromptAPI::PromptEventType::kTimingOut) {
+        self->HandleTimingOut();
+        return;
+    }
+
+    // Find matching PromptDef by actionID
+    const PromptDef* matchedDef = nullptr;
+    for (const auto& def : self->currentPromptDefs_) {
+        if (def.priority == event.prompt.actionID) {  // We use priority as actionID for now
+            matchedDef = &def;
+            break;
+        }
+    }
+
+    // Fallback: match by index if we have prompts
+    if (!matchedDef && !self->currentPromptDefs_.empty()) {
+        // Find by matching text as fallback
+        for (const auto& def : self->currentPromptDefs_) {
+            if (def.text == event.prompt.text) {
+                matchedDef = &def;
+                break;
+            }
+        }
+        // If still no match, use first prompt
+        if (!matchedDef) {
+            matchedDef = &self->currentPromptDefs_[0];
+        }
+    }
+
+    if (!matchedDef) {
+        SKSE::log::warn("ProcessEvent: No matching PromptDef found");
+        return;
+    }
+
+    auto targetPtr = self->GetTarget();
+    RE::Actor* target = targetPtr ? targetPtr.get() : nullptr;
+
     switch (event.type) {
     case SkyPromptAPI::PromptEventType::kDown:
-        // Button pressed - just log, don't act yet (wait for kUp or kAccepted)
-        SKSE::log::debug("kDown event - button pressed (waiting for release or hold completion)");
+        SKSE::log::debug("kDown event - button pressed");
         break;
+
     case SkyPromptAPI::PromptEventType::kUp:
-        // Button released - for kHold prompts this means quick press (normal feed)
+        // Button released early - for kHold this is non-lethal
         if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
-            SKSE::log::info("kUp on kHold prompt - button released early, executing normal feed (non-lethal)");
-            self->isLethalFeedInProgress_ = false;
-            // TEST: Use minimal test function instead
-            // self->HandleFeedAcceptedTest();
-            self->HandleFeedAccepted();
-        } else {
-            SKSE::log::debug("kUp on kSinglePress prompt - ignoring");
+            SKSE::log::info("kUp on kHold - early release (holdComplete=false)");
+            if (matchedDef->onAccept && target) {
+                matchedDef->onAccept(target, false);
+            }
         }
         break;
+
     case SkyPromptAPI::PromptEventType::kAccepted:
-        // For kHold: held to completion (lethal feed)
-        // For kSinglePress: normal single press
-        if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
-            SKSE::log::info("kAccepted on kHold prompt - hold completed, executing lethal feed");
-            self->isLethalFeedInProgress_ = true;
-        } else {
-            SKSE::log::info("kAccepted on kSinglePress prompt - executing normal feed");
+        // Hold completed or single press
+        {
+            bool holdComplete = (event.prompt.type == SkyPromptAPI::PromptType::kHold);
+            SKSE::log::info("kAccepted - executing (holdComplete={})", holdComplete);
+            if (matchedDef->onAccept && target) {
+                matchedDef->onAccept(target, holdComplete);
+            }
         }
-        // TEST: Use minimal test function instead
-        // self->HandleFeedAcceptedTest();
-        self->HandleFeedAccepted();
         break;
-    case SkyPromptAPI::PromptEventType::kTimingOut:
-        self->HandleTimingOut();
-        break;
+
     default:
         break;
     }
@@ -657,63 +776,51 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
         SetTargetHandle(emptyHandle);
     }
 
-    // Construct prompt dynamically if needed to ensure keys are up to date
-    // But we update buttons on init or update, here we just attach target
+    // Clear previous prompts
+    currentPromptDefs_.clear();
+    prompts_.clear();
+
     if (target) {
-        auto* settings = Settings::GetSingleton();
-        auto* player = RE::PlayerCharacter::GetSingleton();
-
-        // Determine prompt type based on combat state
-        SkyPromptAPI::PromptType promptType = SkyPromptAPI::PromptType::kSinglePress;
-        std::string promptText = "Feed";
-        float progressValue = 0.0f;
-        uint32_t textColor = 0xFFFFFFFF;  // White (AABBGGRR format)
-
-        // Check if target is dead - use different prompt for corpses
-        bool targetIsDead = target->IsDead();
-
-        if (targetIsDead) {
-            // Dead targets get simple "Drain Corpse" prompt (no hold-to-kill option)
-            promptText = "Drain Corpse";
-            SKSE::log::info("SetTarget: Using corpse prompt - target: {}", target->GetName());
-        } else {
-            // Check if target is NOT in combat and lethal feed is enabled
-            bool targetInCombat = target->IsInCombat();
-            bool playerInCombat = player && player->IsInCombat();
-            bool isEssential = TargetState::IsEssentialOrProtected(target);
-
-            // Show kill prompt only if: not in combat, lethal feed enabled, and not excluded Essential actor
-            bool canShowLethalPrompt = !targetInCombat && !playerInCombat && settings->NonCombat.EnableLethalFeed;
-            if (canShowLethalPrompt && settings->NonCombat.ExcludeEssentialFromLethal && isEssential) {
-                canShowLethalPrompt = false;
-                SKSE::log::info("SetTarget: Excluding Essential actor {} from lethal prompt", target->GetName());
-            }
-
-            if (canShowLethalPrompt) {
-                // Use HOLD prompt for non-combat (lethal feed)
-                promptType = SkyPromptAPI::PromptType::kHold;
-                promptText = "Feed (Hold to Kill)";
-                progressValue = settings->NonCombat.LethalHoldDuration;
-                textColor = 0xFF5555FF;  // Red warning color for lethal option
-                SKSE::log::info("SetTarget: Using kHold prompt (lethal feed enabled) - target: {}, duration: {}s",
-                    target->GetName(), progressValue);
-            } else {
-                SKSE::log::info("SetTarget: Using kSinglePress prompt - target: {}, targetInCombat: {}, playerInCombat: {}, isEssential: {}",
-                    target->GetName(), targetInCombat, playerInCombat, isEssential);
+        // Collect prompts from all registered callbacks
+        for (const auto& callback : promptCallbacks_) {
+            auto defs = callback(target);
+            for (auto& def : defs) {
+                currentPromptDefs_.push_back(std::move(def));
             }
         }
 
-        prompts_[0] = SkyPromptAPI::Prompt(
-            promptText,
-            1, 1, promptType,
-            target->GetFormID(),
-            feedButtons_,
-            textColor,
-            progressValue  // progress threshold for hold
-        );
-    } else {
-        // Clear prompt array to avoid stale FormID
-        prompts_[0] = SkyPromptAPI::Prompt();
+        // Sort by priority (highest first)
+        std::sort(currentPromptDefs_.begin(), currentPromptDefs_.end(),
+            [](const PromptDef& a, const PromptDef& b) {
+                return a.priority > b.priority;
+            });
+
+        SKSE::log::info("SetTarget: {} - collected {} prompts from callbacks",
+            target->GetName(), currentPromptDefs_.size());
+
+        // Convert to SkyPromptAPI::Prompt format
+        // Limit to 2 prompts (primary and secondary buttons)
+        size_t maxPrompts = std::min(currentPromptDefs_.size(), size_t(2));
+        for (size_t i = 0; i < maxPrompts; ++i) {
+            const auto& def = currentPromptDefs_[i];
+
+            // Select button binding based on index
+            auto& buttons = (i == 0) ? feedButtons_ : secondaryButtons_;
+
+            prompts_.push_back(SkyPromptAPI::Prompt(
+                def.text,
+                1,                          // eventID
+                static_cast<uint16_t>(def.priority),  // actionID - use priority for routing
+                def.type,
+                target->GetFormID(),
+                buttons,
+                def.color,
+                def.holdDuration
+            ));
+
+            SKSE::log::debug("SetTarget: Prompt[{}] = '{}' (priority={}, type={})",
+                i, def.text, def.priority, static_cast<int>(def.type));
+        }
     }
 }
 

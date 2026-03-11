@@ -12,6 +12,7 @@ namespace SacrilegeIntegration {
         bool isParalyzed = false;
         bool isCombatFeed = false;
         bool isEmbrace = false;
+        bool animationHandlesKill = false;  // If true, skip kill (animation has kill baked in)
     };
 
     // Initialize Sacrilege integration (call during kDataLoaded)

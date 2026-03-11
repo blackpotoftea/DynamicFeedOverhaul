@@ -8,6 +8,7 @@
 #include "integration/OStimIntegration.h"
 #include "integration/PoiseIntegration.h"
 #include "integration/SacrosanctIntegration.h"
+#include "integration/SacrilegeIntegration.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
 #include "utils/AnimUtil.h"
@@ -40,10 +41,17 @@ void OnDataLoaded()
         SKSE::log::info("Poise mod not detected - using vanilla stagger behavior");
     }
 
-    if (SacrosanctIntegration::Initialize()) {
-        SKSE::log::info("Sacrosanct integration initialized - C++ combat feed bypass enabled");
-    } else {
-        SKSE::log::info("Sacrosanct not detected - using vanilla vampire feed system");
+    // Vampire overhaul integrations
+    bool hasSacrosanct = SacrosanctIntegration::Initialize();
+    bool hasSacrilege = SacrilegeIntegration::Initialize();
+
+    if (hasSacrosanct) SKSE::log::info("Sacrosanct detected");
+    if (hasSacrilege) SKSE::log::info("Sacrilege detected");
+
+    if (!hasSacrosanct && !hasSacrilege) {
+        SKSE::log::info("No vampire overhaul detected - using vanilla vampire feed system");
+    } else if (hasSacrosanct && hasSacrilege) {
+        SKSE::log::warn("Multiple vampire overhauls detected - this may cause conflicts!");
     }
 
     if (SKSEMenuFramework::IsInstalled()) {

@@ -270,7 +270,7 @@ namespace SacrilegeIntegration {
         }
 
         // Check for Sacrilege ESP
-        bool hasSacrilege = dataHandler->LookupModByName("Sacrilege.esp") != nullptr;
+        bool hasSacrilege = dataHandler->LookupModByName("Sacrilege - Minimalistic Vampires of Skyrim.esp") != nullptr;
         if (!hasSacrilege) {
             SKSE::log::info("SacrilegeIntegration: Sacrilege not installed");
             g_available = false;
@@ -431,9 +431,12 @@ namespace SacrilegeIntegration {
         }
 
         // === STEP 6: Lethal kill ===
-        if (context.isLethal && !context.target->IsDead()) {
+        // Skip if animation handles the kill (lethal idle/OAR animation has kill baked in)
+        if (context.isLethal && !context.animationHandlesKill && !context.target->IsDead()) {
             context.target->KillImpl(player, 1000.0f, true, true);
             SKSE::log::info("SacrilegeIntegration: Killed target");
+        } else if (context.isLethal && context.animationHandlesKill) {
+            SKSE::log::info("SacrilegeIntegration: Skipping kill - animation handles it");
         }
 
         // === STEP 7-8: Restore Health (with Fountain of Blood perk check) ===

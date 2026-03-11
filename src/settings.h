@@ -29,8 +29,10 @@ public:
 
     // Input settings
     struct {
-        int FeedKey{ 0x22 };          // Keyboard G
-        int FeedGamepadKey{ 0x1000 }; // Gamepad A
+        int FeedKey{ 0x22 };              // Keyboard G (primary)
+        int FeedGamepadKey{ 0x1000 };     // Gamepad A (primary)
+        int SecondaryKey{ 0x23 };         // Keyboard H (secondary prompt)
+        int SecondaryGamepadKey{ 0x2000 }; // Gamepad B (secondary prompt)
     } Input;
 
     // Prompt Display settings
@@ -113,11 +115,12 @@ public:
 
     // Integration settings
     struct {
-        bool EnableSacrosanct{ true };          // Enable Sacrosanct integration
-        bool EnableSacrilege{ true };           // Enable Sacrilege integration
-        bool EnableBetterVampires{ true };      // Enable Better Vampires integration
-        bool PoiseIgnoresLevelCheck{ true };    // When poise mod detected, ignore level requirements
-        bool EnableSacrosanctInCombat{ true };  // Use C++ integration for Sacrosanct/Sacrilege during combat (bypasses AI-driven state)
+        bool EnableSacrosanct{ true };              // Enable Sacrosanct integration
+        bool EnableSacrilege{ true };               // Enable Sacrilege integration
+        bool EnableBetterVampires{ true };          // Enable Better Vampires integration
+        bool PoiseIgnoresLevelCheck{ true };        // When poise mod detected, ignore level requirements
+        bool DeepSacrosanctIntegration{ true };     // Use C++ to mimic Sacrosanct ProcessFeed (bypasses Papyrus)
+        bool DeepSacrilegeIntegration{ true };      // Use C++ to mimic Sacrilege ProcessFeed (bypasses Papyrus)
     } Integration;
 
     void LoadINI();
