@@ -84,15 +84,19 @@ namespace CustomFeed {
     // Play feed animation by EditorID
     // For standing/combat: paired animation with target
     // For bed/bedroll: solo idle on player only (no target involvement)
-    // Returns true if animation started successfully
-    bool PlayPairedFeed(const char* idleEditorID, RE::Actor* target, bool isPaired) {
+    // callback is invoked on game thread after animation starts (or fails)
+    void PlayPairedFeed(const char* idleEditorID, RE::Actor* target, bool isPaired,
+                        FeedCallback callback) {
         SKSE::log::debug("[CustomFeed] PlayPairedFeed called (paired={})", isPaired);
 
         // Validate inputs
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player) {
             SKSE::log::error("[CustomFeed] FAILED: player is null");
-            return false;
+            if (callback) {
+                callback(false, nullptr);
+            }
+            return;
         }
 
         // Save weapon/magic drawn state so we can restore it after feeding
@@ -101,12 +105,18 @@ namespace CustomFeed {
         SKSE::log::info("[CustomFeed] Saved weapon drawn state: {}", wasWeaponDrawn_);
         if (!idleEditorID) {
             SKSE::log::error("[CustomFeed] FAILED: idleEditorID is null");
-            return false;
+            if (callback) {
+                callback(false, target);
+            }
+            return;
         }
         // Target only required for paired animations
         if (isPaired && !target) {
             SKSE::log::error("[CustomFeed] FAILED: target is null for paired animation");
-            return false;
+            if (callback) {
+                callback(false, nullptr);
+            }
+            return;
         }
 
         SKSE::log::debug("[CustomFeed] Looking up idle: '{}'", idleEditorID);
@@ -121,7 +131,10 @@ namespace CustomFeed {
         if (!feedIdle) {
             SKSE::log::error("[CustomFeed] FAILED: Idle '{}' not found in game data", idleEditorID);
             ClearFeedTarget();
-            return false;
+            if (callback) {
+                callback(false, target);
+            }
+            return;
         }
         SKSE::log::debug("[CustomFeed] Found idle form: {:X}", feedIdle->GetFormID());
 
@@ -129,10 +142,10 @@ namespace CustomFeed {
         SKSE::log::debug("[CustomFeed] Calling AnimUtil::playIdle (paired={})...", isPaired);
 
         // AnimUtil::playIdle handles thread-safety and ObjectRefHandle automatically
-        AnimUtil::playIdle(player, feedIdle, isPaired ? target : nullptr);
+        // The callback will be invoked on game thread after PlayIdle succeeds or fails
+        AnimUtil::playIdle(player, feedIdle, isPaired ? target : nullptr, callback);
 
-        SKSE::log::info("[CustomFeed] SUCCESS: Animation playback initiated");
-        return true;
+        SKSE::log::info("[CustomFeed] Animation playback initiated (callback pending)");
     }
 
     // Force stop - recovery function for stuck animations

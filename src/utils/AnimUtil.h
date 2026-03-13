@@ -3,6 +3,7 @@
 #include <SKSE/SKSE.h>
 #include <RE/Skyrim.h>
 #include <cmath>
+#include <functional>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -89,10 +90,15 @@ namespace AnimUtil {
         return normalizeAngle(diff);
     }
 
+    // Callback type for playIdle result - called on game thread after PlayIdle attempt
+    // Parameters: success (true if animation started), target actor (may be null for non-paired)
+    using PlayIdleCallback = std::function<void(bool success, RE::Actor* target)>;
+
     // Core animation functions
     void playAnimation(RE::Actor* actor, const std::string& animation);
     void playAnimation(RE::Actor* actor, const std::string& animation, float playbackSpeed);
-    void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target = nullptr);
+    void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target = nullptr,
+                  PlayIdleCallback callback = nullptr);
 
     // Preprocessing for paired animations - clears stagger/attack/knockdown states
     void PrepareActorForPairedIdle(RE::Actor* actor);

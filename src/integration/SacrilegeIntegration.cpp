@@ -7,7 +7,6 @@
  * =============================================================================
  *
  * Based on SQL_FeedManager_Script.ProcessFeed() from Sacrilege mod.
- * Sacrilege is a minimalistic vampire mod - simpler than Sacrosanct.
  *
  * PAPYRUS FUNCTION SIGNATURE:
  *   ProcessFeed(Actor akTarget, Bool akIsLethal, Bool akIsSleeping,
@@ -102,12 +101,17 @@ namespace SacrilegeIntegration {
             auto* audioManager = RE::BSAudioManager::GetSingleton();
             if (!audioManager) return;
 
-            RE::BSSoundHandle soundHandle;
-            audioManager->BuildSoundDataFromDescriptor(soundHandle, descriptor);
+            RE::BSSoundHandle handle;
+            handle.soundID = static_cast<uint32_t>(-1);
+            handle.assumeSuccess = false;
+            handle.state.reset();
 
-            if (soundHandle.IsValid()) {
-                soundHandle.SetObjectToFollow(target->Get3D());
-                soundHandle.Play();
+            audioManager->BuildSoundDataFromDescriptor(handle, descriptor);
+
+            if (handle.IsValid()) {
+                handle.SetPosition(target->GetPosition());
+                handle.SetObjectToFollow(target->Get3D());
+                handle.Play();
             }
         }
 

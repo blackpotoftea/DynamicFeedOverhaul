@@ -609,13 +609,17 @@ namespace SacrosanctIntegration {
                 return;
             }
 
-            RE::BSSoundHandle soundHandle;
-            audioManager->BuildSoundDataFromDescriptor(soundHandle, sound);
+            RE::BSSoundHandle handle;
+            handle.soundID = static_cast<uint32_t>(-1);
+            handle.assumeSuccess = false;
+            handle.state.reset();
 
-            if (soundHandle.IsValid()) {
-                // SetObjectToFollow takes NiAVObject* (the 3D model root)
-                soundHandle.SetObjectToFollow(target->Get3D());
-                soundHandle.Play();
+            audioManager->BuildSoundDataFromDescriptor(handle, sound);
+
+            if (handle.IsValid()) {
+                handle.SetPosition(target->GetPosition());
+                handle.SetObjectToFollow(target->Get3D());
+                handle.Play();
                 SKSE::log::debug("Helpers::PlaySound: Playing sound on {}", target->GetName());
             } else {
                 SKSE::log::warn("Helpers::PlaySound: Failed to build sound handle");

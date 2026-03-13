@@ -106,10 +106,14 @@ namespace AnimUtil {
     }
 
     // Play idle animation (thread-safe)
-    void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target) {
+    void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target,
+                  PlayIdleCallback callback) {
         if (!actor || !idle) {
             SKSE::log::warn("[AnimUtil::playIdle] Invalid input: actor={}, idle={}",
                 actor ? "valid" : "null", idle ? "valid" : "null");
+            if (callback) {
+                callback(false, nullptr);
+            }
             return;
         }
 
@@ -122,11 +126,14 @@ namespace AnimUtil {
         SKSE::log::debug("[AnimUtil::playIdle] Queuing idle {:X} for {} (target: {})",
             idleFormID, actorName, targetName);
 
-        SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, targetHandle, actorName, targetName] {
+        SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, targetHandle, actorName, targetName, callback] {
             // 1. Resolve the handle to get NiPointer<TESObjectREFR>
             auto refPtr = actorHandle.get();
             if (!refPtr) {
                 SKSE::log::error("[AnimUtil::playIdle] FAILED: Actor handle invalid for {}", actorName);
+                if (callback) {
+                    callback(false, nullptr);
+                }
                 return;
             }
 
@@ -134,12 +141,18 @@ namespace AnimUtil {
             auto* a = refPtr->As<RE::Actor>();
             if (!a) {
                 SKSE::log::error("[AnimUtil::playIdle] FAILED: Object is not an Actor for {}", actorName);
+                if (callback) {
+                    callback(false, nullptr);
+                }
                 return;
             }
 
             auto* idle = RE::TESForm::LookupByID<RE::TESIdleForm>(idleFormID);
             if (!idle) {
                 SKSE::log::error("[AnimUtil::playIdle] FAILED: Idle form {:X} not found for {}", idleFormID, actorName);
+                if (callback) {
+                    callback(false, nullptr);
+                }
                 return;
             }
 
@@ -161,12 +174,15 @@ namespace AnimUtil {
                 SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
                 PrepareActorForPairedIdle(a);
                 PrepareActorForPairedIdle(targetActor);
-                
+
             }
 
             auto* process = a->GetActorRuntimeData().currentProcess;
             if (!process) {
                 SKSE::log::error("[AnimUtil::playIdle] FAILED: No process for {}", actorName);
+                if (callback) {
+                    callback(false, targetActor);
+                }
                 return;
             }
 
@@ -188,6 +204,11 @@ namespace AnimUtil {
                 // FeedAnimState uses atomics internally so this is thread-safe
                 FeedAnimState::MarkFeedEnded();
                 AnimEventSink::Unregister();
+            }
+
+            // Invoke callback with result (called on game thread)
+            if (callback) {
+                callback(success, targetActor);
             }
         });
     }

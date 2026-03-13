@@ -201,9 +201,7 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
                 .type = SkyPromptAPI::PromptType::kSinglePress,
                 .color = 0xFFFFFFFF,
                 .priority = 1000,
-                .onAccept = [](RE::Actor*, bool) {
-                    PairedAnimPromptSink::GetSingleton()->HandleFeedAccepted();
-                }
+                .onAccept = nullptr  // No state to set
             });
         }
         else if (playerInCombat || targetInCombat) {
@@ -214,9 +212,8 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
                 .color = 0xFF5555FF,  // Red
                 .priority = 1000,
                 .onAccept = [](RE::Actor*, bool) {
-                    auto* self = PairedAnimPromptSink::GetSingleton();
-                    self->isLethalFeedInProgress_ = true;
-                    self->HandleFeedAccepted();
+                    // Combat feed is always lethal
+                    PairedAnimPromptSink::GetSingleton()->isLethalFeedInProgress_ = true;
                 }
             });
         }
@@ -233,9 +230,8 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
                     .color = 0xFF5555FF,  // Red warning
                     .priority = 1000,
                     .onAccept = [](RE::Actor*, bool holdComplete) {
-                        auto* self = PairedAnimPromptSink::GetSingleton();
-                        self->isLethalFeedInProgress_ = holdComplete;
-                        self->HandleFeedAccepted();
+                        // Only set state - ProcessEvent calls HandleFeedAccepted
+                        PairedAnimPromptSink::GetSingleton()->isLethalFeedInProgress_ = holdComplete;
                     }
                 });
             } else {
@@ -244,9 +240,7 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
                     .type = SkyPromptAPI::PromptType::kSinglePress,
                     .color = 0xFFFFFFFF,
                     .priority = 1000,
-                    .onAccept = [](RE::Actor*, bool) {
-                        PairedAnimPromptSink::GetSingleton()->HandleFeedAccepted();
-                    }
+                    .onAccept = nullptr  // No state to set
                 });
             }
         }
@@ -342,23 +336,20 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
         break;
 
     case SkyPromptAPI::PromptEventType::kUp:
-        // Button released early - for kHold this is non-lethal
+        // Button released early - for kHold this is non-lethal feed
         if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
-            SKSE::log::info("kUp on kHold - early release (holdComplete=false)");
-            if (matchedDef->onAccept && target) {
-                matchedDef->onAccept(target, false);
-            }
+            SKSE::log::info("kUp on kHold - early release, executing non-lethal feed");
+            if (matchedDef->onAccept) matchedDef->onAccept(target, false);
+            self->HandleFeedAccepted();
         }
         break;
 
     case SkyPromptAPI::PromptEventType::kAccepted:
-        // Hold completed or single press
         {
             bool holdComplete = (event.prompt.type == SkyPromptAPI::PromptType::kHold);
             SKSE::log::info("kAccepted - executing (holdComplete={})", holdComplete);
-            if (matchedDef->onAccept && target) {
-                matchedDef->onAccept(target, holdComplete);
-            }
+            if (matchedDef->onAccept) matchedDef->onAccept(target, holdComplete);
+            self->HandleFeedAccepted();
         }
         break;
 
@@ -391,18 +382,24 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
 
 
     SKSE::log::info("Playing feed idle '{}' (paired={}, lethal={})", idleEditorID, isPairedAnim, isLethal);
-    
-    if (CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim)) {
+
+    // Create callback that runs AFTER animation starts successfully (on game thread)
+    // This ensures integration logic runs only when animation is actually playing
+    auto onAnimationResult = [isLethal, hasOARAnimation](bool success, RE::Actor* callbackTarget) {
+        if (!success) {
+            SKSE::log::warn("CustomFeed failed - animation did not start");
+            return;
+        }
+
+        SKSE::log::info("Animation started successfully - running integration");
 
         auto* player = RE::PlayerCharacter::GetSingleton();
-        auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(idleEditorID);
 
-
-        PapyrusCall::SendOnVampireFeedEvent(target);
+        PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
 
         // Send custom DAO_VampireFeed event with attacker and target
         if (player) {
-            PapyrusCall::SendDAO_VampireFeedEvent(player, target);
+            PapyrusCall::SendDAO_VampireFeedEvent(player, callbackTarget);
         }
 
         // Only call vampire script if NOT a werewolf
@@ -411,13 +408,11 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
             if (vampireQuest) {
                 // If lethal, the kill move animation handles the kill - don't double-kill in integration
                 bool animationHandlesKill = isLethal;
-                PapyrusCall::CallVampireFeed(vampireQuest, target, isLethal, animationHandlesKill);
+                PapyrusCall::CallVampireFeed(vampireQuest, callbackTarget, isLethal, animationHandlesKill);
             } else {
                 SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
             }
         }
-
-
 
         // Integration-specific post-feed handling
         PapyrusCall::VampireIntegration integration = PapyrusCall::DetectVampireIntegration();
@@ -440,17 +435,18 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
                 // Only kill if:
                 // 1. User wants lethal feed
                 // 2. NO OAR combat animation found (if OAR anim exists, kill is baked in)
-                if (isLethal && target && !hasOARAnimation) {
+                if (isLethal && callbackTarget && !hasOARAnimation) {
                     SKSE::log::info("No OAR animation found - manually killing target after animation");
-                    AnimUtil::KillTarget(target);
+                    AnimUtil::KillTarget(callbackTarget);
                 } else if (isLethal && hasOARAnimation) {
                     SKSE::log::info("OAR combat animation found - letting animation handle kill");
                 }
                 break;
         }
-    } else {
-        SKSE::log::warn("CustomFeed failed");
-    }
+    };
+
+    // PlayPairedFeed now takes callback - integration runs after animation starts
+    CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim, onAnimationResult);
 }
 
 // Minimal test function - bare bones kill move playback
@@ -810,7 +806,7 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
             prompts_.push_back(SkyPromptAPI::Prompt(
                 def.text,
                 1,                          // eventID
-                static_cast<uint16_t>(def.priority),  // actionID - use priority for routing
+                1,                          // actionID - keep as 1 like old code
                 def.type,
                 target->GetFormID(),
                 buttons,
