@@ -1,5 +1,6 @@
 #include "PCH.h"
 #include "SacrilegeIntegration.h"
+#include "VampireIntegrationUtils.h"
 
 /*
  * =============================================================================
@@ -67,7 +68,7 @@ namespace SacrilegeIntegration {
         RE::TESQuest* g_dlc1VampireTurnQuest = nullptr;
 
         // Sounds
-        RE::TESSound* g_feedSound = nullptr;
+        RE::BGSSoundDescriptorForm* g_feedSound = nullptr;
 
         // Messages
         RE::BGSMessage* g_dlc1BloodPointsMsg = nullptr;
@@ -91,87 +92,12 @@ namespace SacrilegeIntegration {
         RE::AlchemyItem* g_advanceAgePotion = nullptr;
         RE::AlchemyItem* g_dlc1BloodPotion = nullptr;
 
-        // Helper: Play sound on actor
-        void PlaySound(RE::TESSound* sound, RE::Actor* target) {
-            if (!sound || !target) return;
-
-            auto* descriptor = sound->descriptor;
-            if (!descriptor) return;
-
-            auto* audioManager = RE::BSAudioManager::GetSingleton();
-            if (!audioManager) return;
-
-            RE::BSSoundHandle handle;
-            handle.soundID = static_cast<uint32_t>(-1);
-            handle.assumeSuccess = false;
-            handle.state.reset();
-
-            audioManager->BuildSoundDataFromDescriptor(handle, descriptor);
-
-            if (handle.IsValid()) {
-                handle.SetPosition(target->GetPosition());
-                handle.SetObjectToFollow(target->Get3D());
-                handle.Play();
-            }
-        }
-
-        // Helper: Show message
-        void ShowMessage(RE::BGSMessage* message) {
-            if (!message) return;
-            RE::BSString result;
-            message->GetDescription(result, nullptr);
-            RE::DebugNotification(result.c_str());
-        }
-
-        // Helper: Call Papyrus method (no args)
-        bool CallPapyrusMethod(RE::TESQuest* quest, const char* scriptName, const char* funcName) {
-            if (!quest) return false;
-            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            if (!vm) return false;
-
-            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
-            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
-
-            auto* args = RE::MakeFunctionArguments();
-
-            class EmptyCallback : public RE::BSScript::IStackCallbackFunctor {
-            public:
-                void operator()(RE::BSScript::Variable) override {}
-                bool CanSave() const override { return false; }
-                void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
-            };
-            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
-
-            bool result = vm->DispatchMethodCall(handle, scriptName, funcName, args, callback);
-            if (!result) delete args;
-            return result;
-        }
-
-        // Helper: Call PlayerBitesMe on DLC1VampireTurn
-        bool CallPlayerBitesMe(RE::Actor* target) {
-            if (!target || !g_dlc1VampireTurnQuest) return false;
-
-            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            if (!vm) return false;
-
-            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(
-                RE::TESQuest::FORMTYPE, g_dlc1VampireTurnQuest);
-            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
-
-            auto* args = RE::MakeFunctionArguments(std::move(target));
-
-            class EmptyCallback : public RE::BSScript::IStackCallbackFunctor {
-            public:
-                void operator()(RE::BSScript::Variable) override {}
-                bool CanSave() const override { return false; }
-                void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
-            };
-            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
-
-            bool result = vm->DispatchMethodCall(handle, "DLC1VampireTurnScript", "PlayerBitesMe", args, callback);
-            if (!result) delete args;
-            return result;
-        }
+        // Use utility functions
+        using VampireIntegrationUtils::PlaySound;
+        using VampireIntegrationUtils::ShowMessage;
+        using VampireIntegrationUtils::CastSpell;
+        using VampireIntegrationUtils::HasMagicEffect;
+        using VampireIntegrationUtils::CallPapyrusMethod;
 
         // Helper: Call AdvanceAge on PlayerVampireQuest
         bool CallAdvanceAge(RE::Actor* player, float amount) {
@@ -186,43 +112,11 @@ namespace SacrilegeIntegration {
 
             auto* args = RE::MakeFunctionArguments(std::move(player), std::move(amount));
 
-            class EmptyCallback : public RE::BSScript::IStackCallbackFunctor {
-            public:
-                void operator()(RE::BSScript::Variable) override {}
-                bool CanSave() const override { return false; }
-                void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
-            };
-            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
+            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new VampireIntegrationUtils::EmptyCallback());
 
             bool result = vm->DispatchMethodCall(handle, "PlayerVampireQuestScript", "AdvanceAge", args, callback);
             if (!result) delete args;
             return result;
-        }
-
-        // Helper: Cast spell
-        void CastSpell(RE::SpellItem* spell, RE::Actor* caster, RE::Actor* target) {
-            if (!spell || !caster) return;
-            auto* magicCaster = caster->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant);
-            if (magicCaster) {
-                magicCaster->CastSpellImmediate(spell, false, target, 1.0f, false, 0.0f, nullptr);
-            }
-        }
-
-        // Helper: Check if actor has magic effect
-        bool HasMagicEffect(RE::Actor* actor, RE::EffectSetting* effect) {
-            if (!actor || !effect) return false;
-            auto* magicTarget = actor->AsMagicTarget();
-            if (!magicTarget) return false;
-
-            auto* activeEffects = magicTarget->GetActiveEffectList();
-            if (!activeEffects) return false;
-
-            for (auto* activeEffect : *activeEffects) {
-                if (activeEffect && activeEffect->GetBaseObject() == effect) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         // Lifeblood progression (Sacrilege version of Vampire Lord XP)
@@ -308,7 +202,7 @@ namespace SacrilegeIntegration {
         g_dlc1VampireTurnQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("DLC1VampireTurn");
 
         // Sounds
-        g_feedSound = RE::TESForm::LookupByEditorID<RE::TESSound>("SQL_Mechanics_Marker_FeedSound");
+        g_feedSound = RE::TESForm::LookupByEditorID<RE::BGSSoundDescriptorForm>("SQL_Mechanics_Marker_FeedSound");
 
         // Messages
         g_dlc1BloodPointsMsg = RE::TESForm::LookupByEditorID<RE::BGSMessage>("DLC1BloodPointsMsg");
@@ -422,7 +316,9 @@ namespace SacrilegeIntegration {
         // === STEP 2: StartVampireFeed - SKIP (causes AI-driven state) ===
 
         // === STEP 3: DLC1VampireTurn.PlayerBitesMe ===
-        CallPlayerBitesMe(context.target);
+        if (g_dlc1VampireTurnQuest) {
+            VampireIntegrationUtils::CallPlayerBitesMe(g_dlc1VampireTurnQuest, context.target);
+        }
 
         // === STEP 4: Play feed sound ===
         if (g_feedSound) {

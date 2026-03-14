@@ -12,6 +12,7 @@ set(sources ${sources}
     src/integration/PoiseIntegration.cpp
     src/integration/SacrosanctIntegration.cpp
     src/integration/SacrilegeIntegration.cpp
+    src/integration/VampireIntegrationUtils.cpp
     src/utils/MenuCheck.cpp
     src/feed/TargetState.cpp
     src/feed/AnimationRegistry.cpp

@@ -1,5 +1,6 @@
 #include "PCH.h"
 #include "SacrosanctIntegration.h"
+#include "VampireIntegrationUtils.h"
 
 /*
  * =============================================================================
@@ -124,7 +125,7 @@ namespace SacrosanctIntegration {
         RE::BGSMessage* g_msgStrongBlood = nullptr;
         RE::BGSMessage* g_msgBloodBond = nullptr;
 
-        // Sounds - Sound Markers are BGSSoundDescriptorForm (SNDR)
+        // Sounds - use vanilla SNDR directly
         RE::BGSSoundDescriptorForm* g_feedSound = nullptr;
 
         // Quests
@@ -272,8 +273,8 @@ namespace SacrosanctIntegration {
         g_msgStrongBlood = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_StrongBlood");
         g_msgBloodBond = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_BloodBond");
 
-        // Sounds - Sacrosanct uses Sound Markers which are BGSSoundDescriptorForm (SNDR)
-        g_feedSound = RE::TESForm::LookupByEditorID<RE::BGSSoundDescriptorForm>("SCS_Mechanics_Marker_FeedSound");
+        // Sounds - vanilla NPCHumanVampireFeed [SNDR:000FF984]
+        g_feedSound = RE::TESDataHandler::GetSingleton()->LookupForm<RE::BGSSoundDescriptorForm>(0x0FF984, "Skyrim.esm");
 
         // Quests
         g_playerVampireQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerVampireQuest");
@@ -523,151 +524,16 @@ namespace SacrosanctIntegration {
     // === HELPER FUNCTIONS ===
     namespace Helpers {
 
-        // === SCRIPT PROPERTY ACCESS ===
-        // For accessing script-local variables (properties) that are not globals
-
-        bool GetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int& outValue) {
-            if (!quest) return false;
-
-            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            if (!vm) {
-                SKSE::log::warn("Helpers::GetScriptPropertyInt: VM not available");
-                return false;
-            }
-
-            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
-            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
-                SKSE::log::warn("Helpers::GetScriptPropertyInt: Failed to get handle for quest");
-                return false;
-            }
-
-            RE::BSTSmartPointer<RE::BSScript::Object> object;
-            if (!vm->FindBoundObject(handle, scriptName, object) || !object) {
-                SKSE::log::warn("Helpers::GetScriptPropertyInt: Script '{}' not found on quest", scriptName);
-                return false;
-            }
-
-            auto* property = object->GetProperty(propertyName);
-            if (!property) {
-                SKSE::log::warn("Helpers::GetScriptPropertyInt: Property '{}' not found", propertyName);
-                return false;
-            }
-
-            outValue = property->GetSInt();
-            SKSE::log::debug("Helpers::GetScriptPropertyInt: {}.{} = {}", scriptName, propertyName, outValue);
-            return true;
-        }
-
-        bool SetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int value) {
-            if (!quest) return false;
-
-            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            if (!vm) {
-                SKSE::log::warn("Helpers::SetScriptPropertyInt: VM not available");
-                return false;
-            }
-
-            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
-            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
-                SKSE::log::warn("Helpers::SetScriptPropertyInt: Failed to get handle for quest");
-                return false;
-            }
-
-            RE::BSTSmartPointer<RE::BSScript::Object> object;
-            if (!vm->FindBoundObject(handle, scriptName, object) || !object) {
-                SKSE::log::warn("Helpers::SetScriptPropertyInt: Script '{}' not found on quest", scriptName);
-                return false;
-            }
-
-            auto* property = object->GetProperty(propertyName);
-            if (!property) {
-                SKSE::log::warn("Helpers::SetScriptPropertyInt: Property '{}' not found", propertyName);
-                return false;
-            }
-
-            property->SetSInt(value);
-            SKSE::log::debug("Helpers::SetScriptPropertyInt: {}.{} = {}", scriptName, propertyName, value);
-            return true;
-        }
-
-        void CastSpell(RE::SpellItem* spell, RE::Actor* casterActor, RE::Actor* target) {
-            if (!spell || !casterActor) return;
-            auto* caster = casterActor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant);
-            if (caster) {
-                caster->CastSpellImmediate(spell, false, target, 1.0f, false, 0.0f, nullptr);
-                SKSE::log::debug("Helpers::CastSpell: {} on {}",
-                    spell->GetName(), target ? target->GetName() : "self");
-            }
-        }
-
-        void PlaySound(RE::BGSSoundDescriptorForm* sound, RE::Actor* target) {
-            if (!sound || !target) return;
-
-            auto* audioManager = RE::BSAudioManager::GetSingleton();
-            if (!audioManager) {
-                SKSE::log::warn("Helpers::PlaySound: BSAudioManager not available");
-                return;
-            }
-
-            RE::BSSoundHandle handle;
-            handle.soundID = static_cast<uint32_t>(-1);
-            handle.assumeSuccess = false;
-            handle.state.reset();
-
-            audioManager->BuildSoundDataFromDescriptor(handle, sound);
-
-            if (handle.IsValid()) {
-                handle.SetPosition(target->GetPosition());
-                handle.SetObjectToFollow(target->Get3D());
-                handle.Play();
-                SKSE::log::debug("Helpers::PlaySound: Playing sound on {}", target->GetName());
-            } else {
-                SKSE::log::warn("Helpers::PlaySound: Failed to build sound handle");
-            }
-        }
-
-        void ShowMessage(RE::BGSMessage* message) {
-            if (!message) return;
-            // Simple notification without substitutions
-            RE::BSString result;
-            message->GetDescription(result, nullptr);
-            RE::DebugNotification(result.c_str());
-            SKSE::log::debug("Helpers::ShowMessage: {}", result.c_str());
-        }
-
-        void DispelSpell(RE::Actor* actor, RE::SpellItem* spell) {
-            if (!actor || !spell) return;
-            // DispelSpell requires going through MagicTarget
-            auto* magicTarget = actor->AsMagicTarget();
-            if (magicTarget) {
-                RE::ActorHandle handle;
-                magicTarget->DispelEffect(spell, handle, nullptr);
-                SKSE::log::debug("Helpers::DispelSpell: {} from {}", spell->GetName(), actor->GetName());
-            }
-        }
-
-        bool CallPapyrusMethod(RE::TESQuest* quest, const char* scriptName, const char* funcName) {
-            if (!quest) return false;
-            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            if (!vm) return false;
-
-            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
-            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
-
-            auto* args = RE::MakeFunctionArguments();
-
-            class EmptyCallback : public RE::BSScript::IStackCallbackFunctor {
-            public:
-                void operator()(RE::BSScript::Variable) override {}
-                bool CanSave() const override { return false; }
-                void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
-            };
-            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
-
-            bool result = vm->DispatchMethodCall(handle, scriptName, funcName, args, callback);
-            if (!result) delete args;
-            return result;
-        }
+        // Use utility functions
+        using VampireIntegrationUtils::CastSpell;
+        using VampireIntegrationUtils::PlaySound;
+        using VampireIntegrationUtils::ShowMessage;
+        using VampireIntegrationUtils::DispelSpell;
+        using VampireIntegrationUtils::HasMagicEffect;
+        using VampireIntegrationUtils::CallPapyrusMethod;
+        using VampireIntegrationUtils::SetQuestStage;
+        using VampireIntegrationUtils::GetScriptPropertyInt;
+        using VampireIntegrationUtils::SetScriptPropertyInt;
 
         bool CallPapyrusMethodFloat(RE::TESQuest* quest, const char* scriptName, const char* funcName, float arg) {
             if (!quest) return false;
@@ -679,71 +545,23 @@ namespace SacrosanctIntegration {
 
             auto* args = RE::MakeFunctionArguments(std::move(arg));
 
-            class EmptyCallback : public RE::BSScript::IStackCallbackFunctor {
-            public:
-                void operator()(RE::BSScript::Variable) override {}
-                bool CanSave() const override { return false; }
-                void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
-            };
-            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
+            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new VampireIntegrationUtils::EmptyCallback());
 
             bool result = vm->DispatchMethodCall(handle, scriptName, funcName, args, callback);
             if (!result) delete args;
             return result;
         }
 
-        bool SetQuestStage(RE::TESQuest* quest, int stage) {
-            if (!quest) return false;
-            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            if (!vm) return false;
-
-            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
-            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
-
-            // SetStage takes an int parameter
-            auto* args = RE::MakeFunctionArguments(static_cast<std::int32_t>(stage));
-
-            class EmptyCallback : public RE::BSScript::IStackCallbackFunctor {
-            public:
-                void operator()(RE::BSScript::Variable) override {}
-                bool CanSave() const override { return false; }
-                void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
-            };
-            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
-
-            // SetStage is a native Quest method, script name is "Quest"
-            bool result = vm->DispatchMethodCall(handle, "Quest", "SetStage", args, callback);
-            if (!result) delete args;
-            else SKSE::log::info("Helpers::SetQuestStage: Set {} to stage {}", quest->GetFormEditorID(), stage);
-            return result;
-        }
-
-        bool HasMagicEffectWithKeyword(RE::Actor* actor, RE::EffectSetting* effect) {
-            if (!actor || !effect) return false;
-            auto* magicTarget = actor->AsMagicTarget();
-            if (!magicTarget) return false;
-
-            auto* activeEffects = magicTarget->GetActiveEffectList();
-            if (!activeEffects) return false;
-
-            for (auto* activeEffect : *activeEffects) {
-                if (activeEffect && activeEffect->GetBaseObject() == effect) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         void ApplyRacialAbility(RE::Actor* player, RE::Actor* target, bool isSleeping) {
             if (!player) return;
 
             // Dunmer
-            if (g_dunmerEffect && HasMagicEffectWithKeyword(player, g_dunmerEffect) && g_dunmerSpell) {
+            if (g_dunmerEffect && HasMagicEffect(player, g_dunmerEffect) && g_dunmerSpell) {
                 CastSpell(g_dunmerSpell, player, target);
                 SKSE::log::info("Helpers: Applied Dunmer racial ability");
             }
             // Altmer
-            else if (g_altmerEffect && HasMagicEffectWithKeyword(player, g_altmerEffect)) {
+            else if (g_altmerEffect && HasMagicEffect(player, g_altmerEffect)) {
                 RE::SpellItem* spell = isSleeping ? g_altmerProcLongSpell : g_altmerProcSpell;
                 if (spell) {
                     CastSpell(spell, player, nullptr);
@@ -751,7 +569,7 @@ namespace SacrosanctIntegration {
                 }
             }
             // Orc
-            else if (g_orcEffect && HasMagicEffectWithKeyword(player, g_orcEffect)) {
+            else if (g_orcEffect && HasMagicEffect(player, g_orcEffect)) {
                 RE::SpellItem* spell = isSleeping ? g_orcProcLongSpell : g_orcProcSpell;
                 if (spell) {
                     CastSpell(spell, player, nullptr);
@@ -1175,46 +993,7 @@ namespace SacrosanctIntegration {
             SKSE::log::debug("SacrosanctIntegration: DLC1VampireTurn quest not found, skipping PlayerBitesMe");
             return false;
         }
-
-        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-        if (!vm) return false;
-
-        // Get handle for the quest
-        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(
-            RE::TESQuest::FORMTYPE, g_dlc1VampireTurnQuest);
-        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
-            SKSE::log::warn("SacrosanctIntegration: Failed to get handle for DLC1VampireTurn");
-            return false;
-        }
-
-        // Call PlayerBitesMe(Actor akTarget)
-        auto* args = RE::MakeFunctionArguments(std::move(target));
-
-        // Empty callback
-        class EmptyCallback : public RE::BSScript::IStackCallbackFunctor {
-        public:
-            void operator()(RE::BSScript::Variable) override {}
-            bool CanSave() const override { return false; }
-            void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
-        };
-        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
-
-        bool result = vm->DispatchMethodCall(
-            handle,
-            "DLC1VampireTurnScript",
-            "PlayerBitesMe",
-            args,
-            callback
-        );
-
-        if (!result) {
-            delete args;
-            SKSE::log::warn("SacrosanctIntegration: PlayerBitesMe call failed");
-        } else {
-            SKSE::log::debug("SacrosanctIntegration: PlayerBitesMe called successfully");
-        }
-
-        return result;
+        return VampireIntegrationUtils::CallPlayerBitesMe(g_dlc1VampireTurnQuest, target);
     }
 
     namespace VampireState {
