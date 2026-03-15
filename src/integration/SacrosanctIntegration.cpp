@@ -486,7 +486,7 @@ namespace SacrosanctIntegration {
 
         // === FORMLISTS ===
         SKSE::log::debug("  [FormLists]");
-        SKSE::log::debug("    Hemomancy_FormList: {}", g_hemomancyFormList ? "found" : "missing");
+        SKSE::log::debug("    Hemomancy_FormList (Expanded): {}", g_hemomancyFormList ? "found" : "missing");
         SKSE::log::debug("    StrongBlood_Track: {}", g_strongBloodTrack ? "found" : "missing");
         SKSE::log::debug("    StrongBlood_Base: {}", g_strongBloodBase ? "found" : "missing");
 
@@ -534,6 +534,7 @@ namespace SacrosanctIntegration {
         using VampireIntegrationUtils::SetQuestStage;
         using VampireIntegrationUtils::GetScriptPropertyInt;
         using VampireIntegrationUtils::SetScriptPropertyInt;
+        using VampireIntegrationUtils::FormListRemoveForm;
 
         bool CallPapyrusMethodFloat(RE::TESQuest* quest, const char* scriptName, const char* funcName, float arg) {
             if (!quest) return false;
@@ -543,13 +544,9 @@ namespace SacrosanctIntegration {
             auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
             if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
 
-            auto* args = RE::MakeFunctionArguments(std::move(arg));
-
             RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new VampireIntegrationUtils::EmptyCallback());
 
-            bool result = vm->DispatchMethodCall(handle, scriptName, funcName, args, callback);
-            if (!result) delete args;
-            return result;
+            return vm->DispatchMethodCall(handle, scriptName, funcName, RE::MakeFunctionArguments(std::move(arg)), callback);
         }
 
         void ApplyRacialAbility(RE::Actor* player, RE::Actor* target, bool isSleeping) {
@@ -594,21 +591,24 @@ namespace SacrosanctIntegration {
                 return;  // Already at max stage
             }
 
-            // Start Sommelier quest if not running
-            if (g_sommelierQuest && !g_sommelierQuest->IsRunning()) {
-                g_sommelierQuest->Start();
-                SKSE::log::info("Helpers: Started Sommelier quest");
+            // Start Sommelier quest if not running (and show help message)
+            if (g_sommelierQuest && !VampireIntegrationUtils::IsQuestRunning(g_sommelierQuest)) {
+                CallPapyrusMethod(g_sommelierQuest, "Quest", "Start");
+                SKSE::log::info("Helpers: Started Sommelier quest via Papyrus");
 
-                // Show help message tutorial
-                // NOTE: ShowAsHelpMessage not easily callable from C++, using simple notification
+                // Show help message tutorial via Papyrus
                 if (g_hemomancyHelpMessage) {
-                    ShowMessage(g_hemomancyHelpMessage);
+                    VampireIntegrationUtils::ShowAsHelpMessage(g_hemomancyHelpMessage, "SCS_GetHemomancyByFeedingEvent", 5.0f, 0.0f, 1);
                 }
+            } else {
+                SKSE::log::debug("Helpers: Sommelier quest already running (IsQuestRunning={})",
+                    g_sommelierQuest ? VampireIntegrationUtils::IsQuestRunning(g_sommelierQuest) : false);
             }
 
             // First hemomancy spell (stage 0 - add the base ability)
             if (g_hemomancyStage->value == 0.0f && g_hemomancyBaseAbility) {
                 player->AddSpell(g_hemomancyBaseAbility);
+                SKSE::log::info("Helpers: Added hemomancy base ability (stage 0)");
             }
 
             // Increment steps
@@ -622,10 +622,13 @@ namespace SacrosanctIntegration {
                 // Add new hemomancy spell from formlist
                 int stageIndex = static_cast<int>(g_hemomancyStage->value);
                 if (stageIndex < hemoSize) {
-                    auto* newSpell = g_hemomancyFormList->forms[stageIndex]->As<RE::SpellItem>();
-                    if (newSpell) {
-                        player->AddSpell(newSpell);
-                        SKSE::log::info("Helpers: Added hemomancy spell at stage {}", stageIndex);
+                    auto* form = g_hemomancyFormList->forms[stageIndex];
+                    if (form) {
+                        auto* newSpell = form->As<RE::SpellItem>();
+                        if (newSpell) {
+                            player->AddSpell(newSpell);
+                            SKSE::log::info("Helpers: Added hemomancy spell at stage {}", stageIndex);
+                        }
                     }
                 }
 
@@ -640,7 +643,7 @@ namespace SacrosanctIntegration {
             }
 
             // Complete quest if at max (via Papyrus since CompleteQuest is a script function)
-            if (g_hemomancyStage->value >= static_cast<float>(hemoSize) && g_sommelierQuest && g_sommelierQuest->IsRunning()) {
+            if (g_hemomancyStage->value >= static_cast<float>(hemoSize) && g_sommelierQuest && VampireIntegrationUtils::IsQuestRunning(g_sommelierQuest)) {
                 CallPapyrusMethod(g_sommelierQuest, "Quest", "CompleteQuest");
                 SKSE::log::info("Helpers: Completed Sommelier quest via Papyrus");
             }
@@ -704,17 +707,11 @@ namespace SacrosanctIntegration {
                 SKSE::log::warn("Helpers: Strong Blood - failed to update StrongBloodCounter property");
             }
 
-            // Remove target from tracking list
-            // BGSListForm doesn't have RemoveForm in CommonLibSSE, so we manually remove from the array
-            // Note: This only works for the main forms array, not scriptAddedTempForms
-            // For runtime-added forms, Papyrus RemoveAddedForm handles scriptAddedTempForms
-            auto& formsList = g_strongBloodTrack->forms;
-            for (auto it = formsList.begin(); it != formsList.end(); ++it) {
-                if (*it == targetBase) {
-                    formsList.erase(it);
-                    SKSE::log::info("Helpers: Strong Blood - removed {} from tracking list", target->GetName());
-                    break;
-                }
+            // Remove target from tracking list via Papyrus to properly handle scriptAddedTempForms
+            if (FormListRemoveForm(g_strongBloodTrack, targetBase)) {
+                SKSE::log::info("Helpers: Strong Blood - removed {} from tracking list", target->GetName());
+            } else {
+                SKSE::log::warn("Helpers: Strong Blood - failed to remove {} from tracking list", target->GetName());
             }
         }
 
@@ -748,11 +745,7 @@ namespace SacrosanctIntegration {
 
         void ProcessBloodBond(RE::Actor* player, RE::Actor* target, bool isSleeping, bool isLethal, bool isEmbrace) {
             if (!isSleeping || isLethal || !target || !player) return;
-            if (!g_bloodBondAbility) return;
-
-            // Check if player has Blood Bond ability
-            auto* bloodBondSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Reward_Spell_BloodBond_Ab");
-            if (!bloodBondSpell || !player->HasSpell(bloodBondSpell)) return;
+            if (!g_bloodBondAbility || !player->HasSpell(g_bloodBondAbility)) return;
 
             // Check unique (if required)
             if (g_forceUniqueCheck && g_forceUniqueCheck->value == 0.0f) {
@@ -929,7 +922,7 @@ namespace SacrosanctIntegration {
             }
         }
 
-        // TODO: add emabre options for context menu 
+        // TODO: add embrace options for context menu 
         // === STEP 16: Embrace spell (non-lethal embrace) ===
         if (context.isEmbrace && !context.isLethal && g_embraceSpell) {
             Helpers::CastSpell(g_embraceSpell, player, context.target);
@@ -970,8 +963,7 @@ namespace SacrosanctIntegration {
 
         // === STEP 25: Harvest Moon (lethal, gives blood potion) ===
         if (context.isLethal && g_dlc1BloodPotion) {
-            auto* harvestMoonSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Reward_Spell_HarvestMoon_Ab");
-            if (harvestMoonSpell && player->HasSpell(harvestMoonSpell)) {
+            if (g_harvestMoonAbility && player->HasSpell(g_harvestMoonAbility)) {
                 player->AddObjectToContainer(g_dlc1BloodPotion, nullptr, 1, nullptr);
                 SKSE::log::info("SacrosanctIntegration: Harvest Moon - added blood potion");
             }
@@ -1086,11 +1078,16 @@ namespace SacrosanctIntegration {
     namespace SacrosanctState {
 
         bool HasHemomancy() {
-            // Check if player has any hemomancy-related perks
-            // This is a simplified check - Sacrosanct has multiple hemomancy perks
-            return HasSacrosanctPerk("SCS_Hemomancy_Apprentice") ||
-                   HasSacrosanctPerk("SCS_Hemomancy_Novice") ||
-                   HasSacrosanctPerk("SCS_Perk_BloodMagic");
+            // Check if player has started hemomancy progression (stage > 0 means they have at least one spell)
+            if (g_hemomancyStage && g_hemomancyStage->value > 0.0f) {
+                return true;
+            }
+            // Also check if player has the base hemomancy ability
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (player && g_hemomancyBaseAbility && player->HasSpell(g_hemomancyBaseAbility)) {
+                return true;
+            }
+            return false;
         }
 
         bool AddBloodPoints(float amount) {

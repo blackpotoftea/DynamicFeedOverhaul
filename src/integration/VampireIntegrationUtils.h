@@ -16,6 +16,7 @@ namespace VampireIntegrationUtils {
 
     // UI
     void ShowMessage(RE::BGSMessage* message);
+    bool ShowAsHelpMessage(RE::BGSMessage* message, const char* eventName, float duration = 5.0f, float interval = 0.0f, int maxTimes = 1);
 
     // Magic
     void CastSpell(RE::SpellItem* spell, RE::Actor* caster, RE::Actor* target);
@@ -26,6 +27,10 @@ namespace VampireIntegrationUtils {
     bool CallPapyrusMethod(RE::TESQuest* quest, const char* scriptName, const char* funcName);
     bool CallPlayerBitesMe(RE::TESQuest* dlc1VampireTurnQuest, RE::Actor* target);
     bool SetQuestStage(RE::TESQuest* quest, int stage);
+    bool IsQuestRunning(RE::TESQuest* quest);
+
+    // FormList
+    bool FormListRemoveForm(RE::BGSListForm* formList, RE::TESForm* form);
 
     // Script properties
     bool GetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int& outValue);

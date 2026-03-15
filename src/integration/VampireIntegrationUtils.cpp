@@ -37,6 +37,43 @@ namespace VampireIntegrationUtils {
         SKSE::log::debug("VampireIntegrationUtils::ShowMessage: {}", result.c_str());
     }
 
+    bool ShowAsHelpMessage(RE::BGSMessage* message, const char* eventName, float duration, float interval, int maxTimes) {
+        if (!message) return false;
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            SKSE::log::warn("VampireIntegrationUtils::ShowAsHelpMessage: VM not available");
+            return false;
+        }
+
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::BGSMessage::FORMTYPE, message);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
+            SKSE::log::warn("VampireIntegrationUtils::ShowAsHelpMessage: Failed to get handle for message");
+            return false;
+        }
+
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
+
+        RE::BSFixedString event(eventName);
+        // Copy floats to avoid passing references to MakeFunctionArguments
+        float dur = duration;
+        float intv = interval;
+        bool result = vm->DispatchMethodCall(
+            handle,
+            "Message",
+            "ShowAsHelpMessage",
+            RE::MakeFunctionArguments(std::move(event), std::move(dur), std::move(intv), static_cast<std::int32_t>(maxTimes)),
+            callback
+        );
+
+        if (result) {
+            SKSE::log::debug("VampireIntegrationUtils::ShowAsHelpMessage: Displayed help message '{}'", eventName);
+        } else {
+            SKSE::log::warn("VampireIntegrationUtils::ShowAsHelpMessage: Failed to show message");
+        }
+        return result;
+    }
+
     void CastSpell(RE::SpellItem* spell, RE::Actor* caster, RE::Actor* target) {
         if (!spell || !caster) return;
         auto* magicCaster = caster->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant);
@@ -81,13 +118,9 @@ namespace VampireIntegrationUtils {
         auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
         if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
 
-        auto* args = RE::MakeFunctionArguments();
-
         RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
 
-        bool result = vm->DispatchMethodCall(handle, scriptName, funcName, args, callback);
-        if (!result) delete args;
-        return result;
+        return vm->DispatchMethodCall(handle, scriptName, funcName, RE::MakeFunctionArguments(), callback);
     }
 
     bool CallPlayerBitesMe(RE::TESQuest* dlc1VampireTurnQuest, RE::Actor* target) {
@@ -103,20 +136,17 @@ namespace VampireIntegrationUtils {
             return false;
         }
 
-        auto* args = RE::MakeFunctionArguments(std::move(target));
-
         RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
 
         bool result = vm->DispatchMethodCall(
             handle,
             "DLC1VampireTurnScript",
             "PlayerBitesMe",
-            args,
+            RE::MakeFunctionArguments(std::move(target)),
             callback
         );
 
         if (!result) {
-            delete args;
             SKSE::log::warn("VampireIntegrationUtils::CallPlayerBitesMe: PlayerBitesMe call failed");
         } else {
             SKSE::log::debug("VampireIntegrationUtils::CallPlayerBitesMe: PlayerBitesMe called successfully");
@@ -133,14 +163,28 @@ namespace VampireIntegrationUtils {
         auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
         if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
 
-        auto* args = RE::MakeFunctionArguments(static_cast<std::int32_t>(stage));
-
         RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
 
-        bool result = vm->DispatchMethodCall(handle, "Quest", "SetStage", args, callback);
-        if (!result) delete args;
-        else SKSE::log::info("VampireIntegrationUtils::SetQuestStage: Set {} to stage {}", quest->GetFormEditorID(), stage);
+        bool result = vm->DispatchMethodCall(handle, "Quest", "SetStage", RE::MakeFunctionArguments(static_cast<std::int32_t>(stage)), callback);
+        if (result) {
+            SKSE::log::info("VampireIntegrationUtils::SetQuestStage: Set {} to stage {}", quest->GetFormEditorID(), stage);
+        }
         return result;
+    }
+
+    bool IsQuestRunning(RE::TESQuest* quest) {
+        if (!quest) return false;
+
+        // Check if quest is enabled and has a stage > 0
+        // RE::TESQuest::IsRunning() may not match Papyrus GetQuestRunning behavior
+        // A quest that hasn't started will have currentStage == 0
+        bool enabled = (quest->data.flags & RE::QuestFlag::kEnabled) != RE::QuestFlag::kNone;
+        bool hasStage = quest->currentStage > 0;
+
+        SKSE::log::debug("VampireIntegrationUtils::IsQuestRunning: {} enabled={}, currentStage={}, alreadyRun={}, IsRunning()={}",
+            quest->GetFormEditorID(), enabled, quest->currentStage, quest->alreadyRun, quest->IsRunning());
+
+        return enabled && hasStage;
     }
 
     bool GetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int& outValue) {
@@ -205,6 +249,30 @@ namespace VampireIntegrationUtils {
         property->SetSInt(value);
         SKSE::log::debug("VampireIntegrationUtils::SetScriptPropertyInt: {}.{} = {}", scriptName, propertyName, value);
         return true;
+    }
+
+    bool FormListRemoveForm(RE::BGSListForm* formList, RE::TESForm* form) {
+        if (!formList || !form) return false;
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            SKSE::log::warn("VampireIntegrationUtils::FormListRemoveForm: VM not available");
+            return false;
+        }
+
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::BGSListForm::FORMTYPE, formList);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
+            SKSE::log::warn("VampireIntegrationUtils::FormListRemoveForm: Failed to get handle for formlist");
+            return false;
+        }
+
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
+
+        bool result = vm->DispatchMethodCall(handle, "FormList", "RemoveAddedForm", RE::MakeFunctionArguments(std::move(form)), callback);
+        if (result) {
+            SKSE::log::debug("VampireIntegrationUtils::FormListRemoveForm: Removed form {:08X} from formlist", form->GetFormID());
+        }
+        return result;
     }
 
 }

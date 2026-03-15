@@ -40,8 +40,8 @@
 namespace SacrilegeIntegration {
 
     namespace {
-        bool g_initialized = false;
-        bool g_available = false;
+        std::atomic<bool> g_initialized{false};
+        std::atomic<bool> g_available{false};
 
         // Globals
         RE::TESGlobal* g_blockFeedingFlag = nullptr;
@@ -92,6 +92,14 @@ namespace SacrilegeIntegration {
         RE::AlchemyItem* g_advanceAgePotion = nullptr;
         RE::AlchemyItem* g_dlc1BloodPotion = nullptr;
 
+        // RAII guard for BlockFeeding flag
+        struct BlockFeedingGuard {
+            BlockFeedingGuard() { if (g_blockFeedingFlag) g_blockFeedingFlag->value = 1.0f; }
+            ~BlockFeedingGuard() { if (g_blockFeedingFlag) g_blockFeedingFlag->value = 0.0f; }
+            BlockFeedingGuard(const BlockFeedingGuard&) = delete;
+            BlockFeedingGuard& operator=(const BlockFeedingGuard&) = delete;
+        };
+
         // Use utility functions
         using VampireIntegrationUtils::PlaySound;
         using VampireIntegrationUtils::ShowMessage;
@@ -110,13 +118,10 @@ namespace SacrilegeIntegration {
                 RE::TESQuest::FORMTYPE, g_playerVampireQuest);
             if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
 
-            auto* args = RE::MakeFunctionArguments(std::move(player), std::move(amount));
-
             RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new VampireIntegrationUtils::EmptyCallback());
 
-            bool result = vm->DispatchMethodCall(handle, "PlayerVampireQuestScript", "AdvanceAge", args, callback);
-            if (!result) delete args;
-            return result;
+            return vm->DispatchMethodCall(handle, "PlayerVampireQuestScript", "AdvanceAge",
+                RE::MakeFunctionArguments(std::move(player), std::move(amount)), callback);
         }
 
         // Lifeblood progression (Sacrilege version of Vampire Lord XP)
@@ -226,7 +231,15 @@ namespace SacrilegeIntegration {
         g_advanceAgePotion = RE::TESForm::LookupByEditorID<RE::AlchemyItem>("SQL_Potion_Potion_AdvanceAge");
         g_dlc1BloodPotion = RE::TESForm::LookupByEditorID<RE::AlchemyItem>("DLC1BloodPotion");
 
-        g_available = true;
+        // Validate essential forms are present
+        g_available = g_playerVampireQuest && g_dlc1VampireTurnQuest && g_sacrilegeQuest;
+        if (!g_available) {
+            SKSE::log::warn("SacrilegeIntegration: Missing essential forms - PlayerVampireQuest:{}, DLC1VampireTurn:{}, SQL_FeedManager_Quest:{}",
+                g_playerVampireQuest ? "ok" : "MISSING",
+                g_dlc1VampireTurnQuest ? "ok" : "MISSING",
+                g_sacrilegeQuest ? "ok" : "MISSING");
+            return false;
+        }
         SKSE::log::debug("SacrilegeIntegration: Initialized successfully");
 
         // Globals - Sacrilege specific
@@ -308,10 +321,8 @@ namespace SacrilegeIntegration {
 
         bool targetIsNPC = g_actorTypeNPC && context.target->HasKeyword(g_actorTypeNPC);
 
-        // === STEP 1: Set BlockFeeding flag ===
-        if (g_blockFeedingFlag) {
-            g_blockFeedingFlag->value = 1.0f;
-        }
+        // === STEP 1: Set BlockFeeding flag (RAII ensures cleanup) ===
+        BlockFeedingGuard blockGuard;
 
         // === STEP 2: StartVampireFeed - SKIP (causes AI-driven state) ===
 
@@ -363,10 +374,7 @@ namespace SacrilegeIntegration {
             SKSE::log::info("SacrilegeIntegration: Applied Dunmer racial ability");
         }
 
-        // === STEP 10: Clear BlockFeeding flag ===
-        if (g_blockFeedingFlag) {
-            g_blockFeedingFlag->value = 0.0f;
-        }
+        // === STEP 10: BlockFeeding flag cleared automatically by RAII guard ===
 
         // === STEP 11: Lifeblood progression (lethal + has VL power) ===
         if (context.isLethal && context.target->IsDead()) {
