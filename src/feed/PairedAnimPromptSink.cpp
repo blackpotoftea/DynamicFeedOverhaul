@@ -972,6 +972,16 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
         return false;
     }
 
+    // 1.5. Werewolf front-only check: werewolf paired feed only has front animation
+    // If player is behind a living target, don't show prompt
+    if (TargetState::IsWerewolf(player) && !target->IsDead()) {
+        bool isBehind = AnimUtil::GetClosestDirection(target, player);
+        if (isBehind) {
+            SKSE::log::debug("IsValidFeedTarget: false - werewolf requires front position (player is behind)");
+            return false;
+        }
+    }
+
     // 2. Check Standard Exclusions (Filters, Paired Animations, etc.)
     if (IsExcluded(target)) {
         SKSE::log::debug("IsValidFeedTarget: false - target excluded");
