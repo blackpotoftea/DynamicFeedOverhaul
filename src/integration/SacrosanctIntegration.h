@@ -33,6 +33,13 @@ namespace SacrosanctIntegration {
     // Does NOT call StartVampireFeed (avoids AI-driven state)
     bool CallPreFeedPapyrus(RE::Actor* target);
 
+    // Check if player can use Embrace (has Foster Childe perk)
+    bool CanEmbrace();
+
+    // Register Embrace prompt callback with PairedAnimPromptSink
+    // Call this after Initialize() and after PairedAnimPromptSink is ready
+    void RegisterEmbracePrompt();
+
     // Direct game state manipulation (vanilla vampire globals)
     // These work with or without Sacrosanct
     namespace VampireState {

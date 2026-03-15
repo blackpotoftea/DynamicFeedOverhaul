@@ -45,7 +45,10 @@ void OnDataLoaded()
     bool hasSacrosanct = SacrosanctIntegration::Initialize();
     bool hasSacrilege = SacrilegeIntegration::Initialize();
 
-    if (hasSacrosanct) SKSE::log::info("Sacrosanct detected");
+    if (hasSacrosanct) {
+        SKSE::log::info("Sacrosanct detected");
+        SacrosanctIntegration::RegisterEmbracePrompt();
+    }
     if (hasSacrilege) SKSE::log::info("Sacrilege detected");
 
     if (!hasSacrosanct && !hasSacrilege) {

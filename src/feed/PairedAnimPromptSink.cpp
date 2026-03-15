@@ -298,28 +298,11 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
         return;
     }
 
-    // Find matching PromptDef by actionID
+    // Find matching PromptDef by actionID (actionID = index in currentPromptDefs_)
     const PromptDef* matchedDef = nullptr;
-    for (const auto& def : self->currentPromptDefs_) {
-        if (def.priority == event.prompt.actionID) {  // We use priority as actionID for now
-            matchedDef = &def;
-            break;
-        }
-    }
-
-    // Fallback: match by index if we have prompts
-    if (!matchedDef && !self->currentPromptDefs_.empty()) {
-        // Find by matching text as fallback
-        for (const auto& def : self->currentPromptDefs_) {
-            if (def.text == event.prompt.text) {
-                matchedDef = &def;
-                break;
-            }
-        }
-        // If still no match, use first prompt
-        if (!matchedDef) {
-            matchedDef = &self->currentPromptDefs_[0];
-        }
+    size_t actionIndex = static_cast<size_t>(event.prompt.actionID);
+    if (actionIndex < self->currentPromptDefs_.size()) {
+        matchedDef = &self->currentPromptDefs_[actionIndex];
     }
 
     if (!matchedDef) {
@@ -705,7 +688,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // }
 
         ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
-        // Reset lethal flag after use
+        // Reset lethal flag after use (embrace flag reset by integration)
         isLethalFeedInProgress_ = false;
     }
 }
@@ -805,8 +788,8 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
 
             prompts_.push_back(SkyPromptAPI::Prompt(
                 def.text,
-                1,                          // eventID
-                1,                          // actionID - keep as 1 like old code
+                static_cast<SkyPromptAPI::EventID>(i + 1),  // eventID - different row for each (1, 2, ...)
+                static_cast<SkyPromptAPI::ActionID>(i),     // actionID - unique per prompt (0, 1, ...)
                 def.type,
                 target->GetFormID(),
                 buttons,
@@ -814,8 +797,8 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
                 def.holdDuration
             ));
 
-            SKSE::log::debug("SetTarget: Prompt[{}] = '{}' (priority={}, type={})",
-                i, def.text, def.priority, static_cast<int>(def.type));
+            SKSE::log::info("SetTarget: Prompt[{}] = '{}' (actionID={}, button=0x{:X})",
+                i, def.text, i, static_cast<uint32_t>(buttons[0].second));
         }
     }
 }

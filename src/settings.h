@@ -31,8 +31,8 @@ public:
     struct {
         int FeedKey{ 0x22 };              // Keyboard G (primary)
         int FeedGamepadKey{ 0x1000 };     // Gamepad A (primary)
-        int SecondaryKey{ 0x23 };         // Keyboard H (secondary prompt)
-        int SecondaryGamepadKey{ 0x2000 }; // Gamepad B (secondary prompt)
+        int SecondaryKey{ 0x23 };         // Keyboard H (secondary prompt - Embrace for Sacrosanct)
+        int SecondaryGamepadKey{ 0x2000 }; // Gamepad B (secondary prompt - Embrace for Sacrosanct)
     } Input;
 
     // Prompt Display settings

@@ -95,6 +95,9 @@ public:
     // Lethal feed state (set by callbacks before HandleFeedAccepted)
     mutable bool isLethalFeedInProgress_{false};
 
+    // Embrace feed state (set by Sacrosanct callback before HandleFeedAccepted)
+    mutable bool isEmbraceFeedInProgress_{false};
+
 private:
     PairedAnimPromptSink();
 

@@ -247,9 +247,9 @@ void Settings::SaveINI() {
     ini.SetLongValue("Input", "FeedGamepadKey", Input.FeedGamepadKey,
         "; Gamepad key code for primary feed prompt (default 0x1000 = A)");
     ini.SetLongValue("Input", "SecondaryKey", Input.SecondaryKey,
-        "; Keyboard key code for secondary prompt (default 0x23 = H)");
+        "; Keyboard key code for secondary prompt - Embrace (Sacrosanct) (default 0x23 = H)");
     ini.SetLongValue("Input", "SecondaryGamepadKey", Input.SecondaryGamepadKey,
-        "; Gamepad key code for secondary prompt (default 0x2000 = B)");
+        "; Gamepad key code for secondary prompt - Embrace (Sacrosanct) (default 0x2000 = B)");
 
     // PromptDisplay
     ini.SetBoolValue("PromptDisplay", "RequireWeaponDrawn", PromptDisplay.RequireWeaponDrawn,

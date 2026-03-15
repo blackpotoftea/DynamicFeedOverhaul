@@ -1,6 +1,8 @@
 #include "PCH.h"
 #include "SacrosanctIntegration.h"
 #include "VampireIntegrationUtils.h"
+#include "feed/PairedAnimPromptSink.h"
+#include "feed/TargetState.h"
 
 /*
  * =============================================================================
@@ -159,6 +161,7 @@ namespace SacrosanctIntegration {
         // Perks
         RE::BGSPerk* g_psychicVampirePerk = nullptr;
         RE::BGSPerk* g_lethalFeedXPPerk = nullptr;
+        RE::BGSPerk* g_fosterChildePerk = nullptr;  // Required for Embrace
 
         // Spells - Abilities (reward spells)
         RE::SpellItem* g_bloodBondAbility = nullptr;
@@ -307,6 +310,7 @@ namespace SacrosanctIntegration {
         // Perks
         g_psychicVampirePerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_PerkTree_320_Perk_VampireLord_Mortal_PsychicVampire");
         g_lethalFeedXPPerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_PerkTree_300_Perk_VampireLord_Mortal_WhiteWolf");
+        g_fosterChildePerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("SCS_PerkTree_290_Perk_VampireLord_Mortal_FosterChilde");
         g_bloodBondAbility = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Reward_Spell_BloodBond_Ab");
         g_harvestMoonAbility = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_Reward_Spell_HarvestMoon_Ab");
 
@@ -1118,5 +1122,85 @@ namespace SacrosanctIntegration {
 
             return player->HasPerk(perk);
         }
+    }
+
+    // Check if player can use Embrace (has Foster Childe perk)
+    bool CanEmbrace() {
+        if (!g_sacrosanctAvailable || !g_fosterChildePerk) return false;
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        return player && player->HasPerk(g_fosterChildePerk);
+    }
+
+    // Register Embrace prompt callback with PairedAnimPromptSink
+    void RegisterEmbracePrompt() {
+        auto* promptSink = PairedAnimPromptSink::GetSingleton();
+        if (!promptSink) {
+            SKSE::log::warn("SacrosanctIntegration: PairedAnimPromptSink not available");
+            return;
+        }
+
+        promptSink->RegisterPromptCallback([](RE::Actor* target) -> std::vector<PromptDef> {
+            std::vector<PromptDef> prompts;
+
+            if (!target) {
+                SKSE::log::debug("Embrace callback: no target");
+                return prompts;
+            }
+
+            if (!CanEmbrace()) {
+                SKSE::log::debug("Embrace callback: CanEmbrace=false (perk={}, available={})",
+                    g_fosterChildePerk ? "found" : "missing", g_sacrosanctAvailable);
+                return prompts;
+            }
+
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (!player) {
+                SKSE::log::debug("Embrace callback: no player");
+                return prompts;
+            }
+
+            // Don't show Embrace for dead targets
+            if (target->IsDead()) {
+                SKSE::log::debug("Embrace callback: target is dead");
+                return prompts;
+            }
+
+            // Don't show Embrace in combat
+            if (player->IsInCombat() || target->IsInCombat()) {
+                SKSE::log::debug("Embrace callback: in combat (player={}, target={})",
+                    player->IsInCombat(), target->IsInCombat());
+                return prompts;
+            }
+
+            // Don't show Embrace for essential/protected NPCs (can't be killed/turned)
+            if (TargetState::IsEssentialOrProtected(target)) {
+                SKSE::log::debug("Embrace callback: target is essential/protected");
+                return prompts;
+            }
+
+            // Don't show Embrace if target is already a vampire
+            if (g_vampireKeyword && target->HasKeyword(g_vampireKeyword)) {
+                SKSE::log::debug("Embrace callback: target is vampire");
+                return prompts;
+            }
+
+            SKSE::log::debug("Embrace callback: adding Embrace prompt for {}", target->GetName());
+
+            // Add Embrace prompt (secondary button, lower priority than Feed)
+            prompts.push_back({
+                .text = "Embrace",
+                .type = SkyPromptAPI::PromptType::kSinglePress,
+                .color = 0xFF00FFFF,  // Purple/magenta
+                .priority = 500,       // Lower than Feed (1000)
+                .onAccept = [](RE::Actor*, bool) {
+                    SKSE::log::info("Embrace prompt accepted");
+                    PairedAnimPromptSink::GetSingleton()->isEmbraceFeedInProgress_ = true;
+                }
+            });
+
+            return prompts;
+        });
+
+        SKSE::log::info("SacrosanctIntegration: Registered Embrace prompt callback");
     }
 }

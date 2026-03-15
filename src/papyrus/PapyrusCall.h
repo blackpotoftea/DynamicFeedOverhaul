@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../feed/TargetState.h"
+#include "../feed/PairedAnimPromptSink.h"
 #include "../integration/SacrosanctIntegration.h"
 #include "../integration/SacrilegeIntegration.h"
 
@@ -282,8 +283,13 @@ namespace PapyrusCall {
                 bool isSleeping = TargetState::IsSleeping(target);
 
                 // Deep integration: C++ mimics Sacrosanct ProcessFeed (bypasses Papyrus)
-                if (isLethal && settings->Integration.DeepSacrosanctIntegration && SacrosanctIntegration::IsAvailable()) {
-                    SKSE::log::info("Sacrosanct: Using deep C++ integration for lethal feed");
+                if (settings->Integration.DeepSacrosanctIntegration && SacrosanctIntegration::IsAvailable()) {
+                    SKSE::log::info("Sacrosanct: Using deep C++ integration");
+
+                    // Check Sacrosanct-specific embrace state from prompt sink
+                    auto* promptSink = PairedAnimPromptSink::GetSingleton();
+                    bool isEmbrace = promptSink && promptSink->isEmbraceFeedInProgress_;
+                    if (promptSink) promptSink->isEmbraceFeedInProgress_ = false;  // Reset after reading
 
                     SacrosanctIntegration::FeedContext ctx;
                     ctx.target = target;
@@ -291,6 +297,7 @@ namespace PapyrusCall {
                     ctx.isSleeping = isSleeping;
                     ctx.isCombatFeed = isCombatFeed;
                     ctx.animationHandlesKill = animationHandlesKill;
+                    ctx.isEmbrace = isEmbrace;
 
                     return SacrosanctIntegration::ProcessFeed(ctx);
                 }
