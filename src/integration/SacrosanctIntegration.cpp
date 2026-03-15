@@ -926,7 +926,6 @@ namespace SacrosanctIntegration {
             }
         }
 
-        // TODO: add embrace options for context menu 
         // === STEP 16: Embrace spell (non-lethal embrace) ===
         if (context.isEmbrace && !context.isLethal && g_embraceSpell) {
             Helpers::CastSpell(g_embraceSpell, player, context.target);

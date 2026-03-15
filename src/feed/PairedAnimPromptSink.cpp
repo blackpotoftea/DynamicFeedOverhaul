@@ -207,7 +207,7 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
         else if (playerInCombat || targetInCombat) {
             // Combat - red color, auto-lethal
             prompts.push_back({
-                .text = "Feed",
+                .text = "Kill Feed",
                 .type = SkyPromptAPI::PromptType::kSinglePress,
                 .color = 0xFF5555FF,  // Red
                 .priority = 1000,

@@ -45,10 +45,10 @@ namespace AnimUtil {
         inline constexpr const char* WEREWOLF_STANDING_FRONT = "WerewolfPairedFeedingWithHuman";
 
         // Combat idle Standing
-        inline constexpr const char* FRONT_KM_A = "pa_1HMKillMoveShortA";// "1HMKillMoveRepeatStabDowns"; //pa_1HMKillMoveShortA
+        inline constexpr const char* FRONT_KM_A = "IdleVampireStandingFront"; // "1HMKillMoveRepeatStabDowns"; //pa_1HMKillMoveShortA
 
         // Combat idle back
-        inline constexpr const char* BACK_SNEAK_KM_A ="pa_1HMSneakKillBackA"; // "KillMoveBackStab"; //pa_1HMSneakKillBackA
+        inline constexpr const char* BACK_SNEAK_KM_A ="IdleVampireStandingBack"; // "KillMoveBackStab"; //pa_1HMSneakKillBackA
     }
 
     // Lightweight position and alignment structs
