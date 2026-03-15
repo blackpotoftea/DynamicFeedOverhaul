@@ -121,6 +121,8 @@ public:
         bool PoiseIgnoresLevelCheck{ true };        // When poise mod detected, ignore level requirements
         bool DeepSacrosanctIntegration{ true };     // Use C++ to mimic Sacrosanct ProcessFeed (bypasses Papyrus)
         bool DeepSacrilegeIntegration{ true };      // Use C++ to mimic Sacrilege ProcessFeed (bypasses Papyrus)
+        bool EnableSacrosanctInCombat{ true };      // Use C++ integration for Sacrosanct during combat
+        bool EnableSacrilegeInCombat{ true };       // Use C++ integration for Sacrilege during combat
     } Integration;
 
     void LoadINI();

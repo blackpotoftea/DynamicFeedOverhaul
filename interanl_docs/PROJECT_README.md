@@ -15,10 +15,13 @@ test animation
 fixed: km_front_feed_bite
 passed: km_back_feed_bite km_front_feed_bloodrayne km_back_feed_jump_bite km_front_feed_bodyslam km_front_feed_decap
 
+werewolf progress magic effect PlayerWerewolfVictimEffect
+
 DEbug
 werewolf:
 player.addspell WerewolfChange
 set PlayerIsWerewolf to 1
+
 
 
 vampirelod

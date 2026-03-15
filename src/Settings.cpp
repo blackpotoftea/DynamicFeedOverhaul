@@ -178,6 +178,8 @@ void Settings::LoadINI() {
     Integration.PoiseIgnoresLevelCheck = ini.GetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck);
     Integration.DeepSacrosanctIntegration = ini.GetBoolValue("Integration", "DeepSacrosanctIntegration", Integration.DeepSacrosanctIntegration);
     Integration.DeepSacrilegeIntegration = ini.GetBoolValue("Integration", "DeepSacrilegeIntegration", Integration.DeepSacrilegeIntegration);
+    Integration.EnableSacrosanctInCombat = ini.GetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat);
+    Integration.EnableSacrilegeInCombat = ini.GetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
@@ -206,9 +208,9 @@ void Settings::LoadINI() {
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}",
         Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}",
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}",
         Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck,
-        Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration);
+        Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat);
 }
 
 void Settings::SaveINI() {
@@ -382,6 +384,10 @@ void Settings::SaveINI() {
         "; Use C++ to mimic Sacrosanct ProcessFeed for lethal feeds (bypasses Papyrus)");
     ini.SetBoolValue("Integration", "DeepSacrilegeIntegration", Integration.DeepSacrilegeIntegration,
         "; Use C++ to mimic Sacrilege ProcessFeed for lethal feeds (bypasses Papyrus)");
+    ini.SetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat,
+        "; Use C++ integration for Sacrosanct during combat (bypasses AI-driven state issues)");
+    ini.SetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat,
+        "; Use C++ integration for Sacrilege during combat (bypasses AI-driven state issues)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

@@ -8,6 +8,7 @@
 #include "feed/TwoSingleFeed.h"
 #include "feed/FeedIconOverlay.h"
 #include "integration/OStimIntegration.h"
+#include "integration/VampireIntegrationUtils.h"
 #include "utils/MenuCheck.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/AnimUtil.h"
@@ -195,14 +196,27 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
         bool isEssential = TargetState::IsEssentialOrProtected(target);
 
         if (isDead) {
-            // Corpse - simple drain
-            prompts.push_back({
-                .text = "Drain Corpse",
-                .type = SkyPromptAPI::PromptType::kSinglePress,
-                .color = 0xFFFFFFFF,
-                .priority = 1000,
-                .onAccept = nullptr  // No state to set
-            });
+            bool isWerewolf = player && TargetState::IsWerewolf(player);
+
+            if (isWerewolf) {
+                // Werewolf - devour corpse
+                prompts.push_back({
+                    .text = "Devour",
+                    .type = SkyPromptAPI::PromptType::kSinglePress,
+                    .color = 0xFF8844FF,  // Orange-red for savage feeding
+                    .priority = 1000,
+                    .onAccept = nullptr
+                });
+            } else {
+                // Vampire - drain corpse
+                prompts.push_back({
+                    .text = "Drain Corpse",
+                    .type = SkyPromptAPI::PromptType::kSinglePress,
+                    .color = 0xFFFFFFFF,
+                    .priority = 1000,
+                    .onAccept = nullptr
+                });
+            }
         }
         else if (playerInCombat || targetInCombat) {
             // Combat - red color, auto-lethal
@@ -394,6 +408,28 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
                 PapyrusCall::CallVampireFeed(vampireQuest, callbackTarget, isLethal, animationHandlesKill);
             } else {
                 SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
+            }
+        }
+        // Werewolf corpse feeding
+        else if (player && TargetState::IsWerewolf(player) && callbackTarget && callbackTarget->IsDead()) {
+            SKSE::log::info("Werewolf corpse feed - applying effects");
+
+            // 1. Apply PlayerWerewolfFeedVictimSpell to player
+            auto* feedSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("PlayerWerewolfFeedVictimSpell");
+            if (feedSpell) {
+                VampireIntegrationUtils::CastSpell(feedSpell, player, player);
+                SKSE::log::debug("Applied PlayerWerewolfFeedVictimSpell");
+            } else {
+                SKSE::log::warn("PlayerWerewolfFeedVictimSpell not found");
+            }
+
+            // 2. Call PlayerWerewolfChangeScript.Feed()
+            auto* werewolfQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerWerewolfQuest");
+            if (werewolfQuest) {
+                VampireIntegrationUtils::CallPapyrusMethod(werewolfQuest, "PlayerWerewolfChangeScript", "Feed");
+                SKSE::log::debug("Called PlayerWerewolfChangeScript.Feed()");
+            } else {
+                SKSE::log::warn("PlayerWerewolfQuest not found");
             }
         }
 

@@ -16,6 +16,13 @@ namespace FeedFiltering {
 
         // Dead check - skip dead actors unless AllowRecentlyDead is enabled
         if (actor->IsDead()) {
+            // Werewolves can always feed on corpses (no time/feed limits)
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (player && TargetState::IsWerewolf(player)) {
+                SKSE::log::debug("Allowed: {} - werewolf can devour any corpse", actor->GetName());
+                return false;
+            }
+
             if (settings->Filtering.AllowRecentlyDead) {
                 // Check death time - returns -1 if invalid (pre-placed corpse or no AI process)
                 float hoursSinceDeath = AnimUtil::GetHoursSinceDeath(actor);

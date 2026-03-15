@@ -283,8 +283,11 @@ namespace PapyrusCall {
                 bool isSleeping = TargetState::IsSleeping(target);
 
                 // Deep integration: C++ mimics Sacrosanct ProcessFeed (bypasses Papyrus)
-                if (settings->Integration.DeepSacrosanctIntegration && SacrosanctIntegration::IsAvailable()) {
-                    SKSE::log::info("Sacrosanct: Using deep C++ integration");
+                // Use deep integration if: enabled AND (not combat OR combat integration enabled)
+                bool useDeepIntegration = settings->Integration.DeepSacrosanctIntegration &&
+                    (!isCombatFeed || settings->Integration.EnableSacrosanctInCombat);
+                if (useDeepIntegration && SacrosanctIntegration::IsAvailable()) {
+                    SKSE::log::info("Sacrosanct: Using deep C++ integration (combat={})", isCombatFeed);
 
                     // Check Sacrosanct-specific embrace state from prompt sink
                     auto* promptSink = PairedAnimPromptSink::GetSingleton();
@@ -320,8 +323,11 @@ namespace PapyrusCall {
                 bool isSleeping = TargetState::IsSleeping(target);
 
                 // Deep integration: C++ mimics Sacrilege ProcessFeed (bypasses Papyrus)
-                if (isLethal && settings->Integration.DeepSacrilegeIntegration && SacrilegeIntegration::IsAvailable()) {
-                    SKSE::log::info("Sacrilege: Using deep C++ integration for lethal feed");
+                // Use deep integration if: lethal AND enabled AND (not combat OR combat integration enabled)
+                bool useDeepIntegration = isLethal && settings->Integration.DeepSacrilegeIntegration &&
+                    (!isCombatFeed || settings->Integration.EnableSacrilegeInCombat);
+                if (useDeepIntegration && SacrilegeIntegration::IsAvailable()) {
+                    SKSE::log::info("Sacrilege: Using deep C++ integration for lethal feed (combat={})", isCombatFeed);
 
                     SacrilegeIntegration::FeedContext ctx;
                     ctx.target = target;
