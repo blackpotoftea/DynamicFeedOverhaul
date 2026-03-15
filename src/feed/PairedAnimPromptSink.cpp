@@ -850,12 +850,19 @@ RE::NiPointer<RE::Actor> PairedAnimPromptSink::GetTarget() const {
 }
 
 bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
-    if (!actor) return true;
+    if (!actor) {
+        SKSE::log::debug("IsExcluded: actor is null");
+        return true;
+    }
 
     auto* settings = Settings::GetSingleton();
-    if (!settings->General.EnableMod) return true;
+    if (!settings->General.EnableMod) {
+        SKSE::log::debug("IsExcluded: mod disabled");
+        return true;
+    }
 
     if (FeedAnimState::IsFeedActive()) {
+        SKSE::log::debug("IsExcluded: feed already active");
         return true;
     }
     

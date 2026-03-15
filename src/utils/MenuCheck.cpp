@@ -14,7 +14,7 @@ namespace MenuCheck {
         RE::LoadingMenu::MENU_NAME,     RE::MessageBoxMenu::MENU_NAME, RE::MainMenu::MENU_NAME,
         RE::RaceSexMenu::MENU_NAME,     RE::FavoritesMenu::MENU_NAME,
         RE::CraftingMenu::MENU_NAME,    RE::BarterMenu::MENU_NAME,     RE::GiftMenu::MENU_NAME,
-        "LootMenu", 
+        // "LootMenu", //TODO add dynmic check for dead actor
         "CustomMenu",
         "PrismaUI_FocusMenu"
     };

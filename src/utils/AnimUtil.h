@@ -43,6 +43,7 @@ namespace AnimUtil {
 
         // Werewolf
         inline constexpr const char* WEREWOLF_STANDING_FRONT = "WerewolfPairedFeedingWithHuman";
+        inline constexpr const char* WEREWOLF_CORPSE_FEED = "SpecialFeeding";
 
         // Combat idle Standing
         inline constexpr const char* FRONT_KM_A = "IdleVampireStandingFront"; // "1HMKillMoveRepeatStabDowns"; //pa_1HMKillMoveShortA
@@ -97,8 +98,8 @@ namespace AnimUtil {
     // Core animation functions
     void playAnimation(RE::Actor* actor, const std::string& animation);
     void playAnimation(RE::Actor* actor, const std::string& animation, float playbackSpeed);
-    void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target = nullptr,
-                  PlayIdleCallback callback = nullptr);
+    void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* callbackTarget = nullptr,
+                  PlayIdleCallback callback = nullptr, bool isPaired = true);
 
     // Preprocessing for paired animations - clears stagger/attack/knockdown states
     void PrepareActorForPairedIdle(RE::Actor* actor);

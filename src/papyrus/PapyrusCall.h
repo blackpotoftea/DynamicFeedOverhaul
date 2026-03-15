@@ -274,6 +274,11 @@ namespace PapyrusCall {
 
     // Main function: uses detected integration to call the appropriate feed function
     inline bool CallVampireFeed(RE::TESQuest* quest, RE::Actor* target, bool isLethal = false, bool animationHandlesKill = false) {
+        if (!target) {
+            SKSE::log::error("CallVampireFeed: target is null");
+            return false;
+        }
+
         VampireIntegration integration = DetectVampireIntegration();
 
         switch (integration) {

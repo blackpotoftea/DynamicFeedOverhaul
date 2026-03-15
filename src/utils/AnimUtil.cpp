@@ -106,8 +106,10 @@ namespace AnimUtil {
     }
 
     // Play idle animation (thread-safe)
-    void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* target,
-                  PlayIdleCallback callback) {
+    // callbackTarget: actor to pass to callback (for integration), may differ from animation target
+    // isPaired: if true, use callbackTarget for PlayIdle; if false, play solo animation but still pass target to callback
+    void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* callbackTarget,
+                  PlayIdleCallback callback, bool isPaired) {
         if (!actor || !idle) {
             SKSE::log::warn("[AnimUtil::playIdle] Invalid input: actor={}, idle={}",
                 actor ? "valid" : "null", idle ? "valid" : "null");
@@ -119,14 +121,14 @@ namespace AnimUtil {
 
         auto actorHandle = actor->CreateRefHandle();
         auto idleFormID = idle->GetFormID();
-        auto targetHandle = target ? target->CreateRefHandle() : RE::ObjectRefHandle();
+        auto callbackTargetHandle = callbackTarget ? callbackTarget->CreateRefHandle() : RE::ObjectRefHandle();
         auto actorName = actor->GetName() ? std::string(actor->GetName()) : std::string("sourceActorNameNone");
-        auto targetName = target ? std::string(target->GetName()) : std::string("targetActorNameNone");
+        auto callbackTargetName = callbackTarget ? std::string(callbackTarget->GetName()) : std::string("callbackTargetNameNone");
 
-        SKSE::log::debug("[AnimUtil::playIdle] Queuing idle {:X} for {} (target: {})",
-            idleFormID, actorName, targetName);
+        SKSE::log::debug("[AnimUtil::playIdle] Queuing idle {:X} for {} (callbackTarget: {}, isPaired: {})",
+            idleFormID, actorName, callbackTargetName, isPaired);
 
-        SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, targetHandle, actorName, targetName, callback] {
+        SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, callbackTargetHandle, actorName, callbackTargetName, callback, isPaired] {
             // 1. Resolve the handle to get NiPointer<TESObjectREFR>
             auto refPtr = actorHandle.get();
             if (!refPtr) {
@@ -156,32 +158,34 @@ namespace AnimUtil {
                 return;
             }
 
-            RE::TESObjectREFR* t = nullptr;
-            RE::Actor* targetActor = nullptr;
-            if (targetHandle) {
-                auto targetRefPtr = targetHandle.get();
-                if (!targetRefPtr) {
-                    SKSE::log::warn("[AnimUtil::playIdle] Target handle invalid for {}, playing without target", actorName);
+            RE::TESObjectREFR* animTarget = nullptr;
+            RE::Actor* callbackTargetActor = nullptr;
+            if (callbackTargetHandle) {
+                auto callbackTargetRefPtr = callbackTargetHandle.get();
+                if (!callbackTargetRefPtr) {
+                    SKSE::log::warn("[AnimUtil::playIdle] Callback target handle invalid for {}", actorName);
                 } else {
                     // Target can be TESObjectREFR (for furniture/beds) or Actor, so we use .get()
-                    t = targetRefPtr.get();
-                    targetActor = t->As<RE::Actor>();
+                    callbackTargetActor = callbackTargetRefPtr->As<RE::Actor>();
+                    // Only use as animation target if isPaired
+                    if (isPaired) {
+                        animTarget = callbackTargetRefPtr.get();
+                    }
                 }
             }
 
             // Preprocess for paired animations - clear stagger/attack/knockdown states
-            if (targetActor) {
+            if (isPaired && callbackTargetActor) {
                 SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
                 PrepareActorForPairedIdle(a);
-                PrepareActorForPairedIdle(targetActor);
-
+                PrepareActorForPairedIdle(callbackTargetActor);
             }
 
             auto* process = a->GetActorRuntimeData().currentProcess;
             if (!process) {
                 SKSE::log::error("[AnimUtil::playIdle] FAILED: No process for {}", actorName);
                 if (callback) {
-                    callback(false, targetActor);
+                    callback(false, callbackTargetActor);
                 }
                 return;
             }
@@ -189,14 +193,14 @@ namespace AnimUtil {
             // Clear conditions on idle and all parents to bypass condition checks
             // IdleParser::ClearIdleConditions(idle);
 
-            bool success = process->PlayIdle(a, idle, t);
+            bool success = process->PlayIdle(a, idle, animTarget);
 
             // Restore conditions immediately after PlayIdle call
             // IdleParser::RestoreIdleConditions();
-            // bool success = _playPairedIdle(process, a, RE::DEFAULT_OBJECT::kActionIdle, idle, true, false, t);
+            // bool success = _playPairedIdle(process, a, RE::DEFAULT_OBJECT::kActionIdle, idle, true, false, animTarget);
             if (success) {
-                SKSE::log::info("[AnimUtil::playIdle] SUCCESS: Idle {:X} started on {} (target: {})",
-                    idleFormID, actorName, targetName);
+                SKSE::log::info("[AnimUtil::playIdle] SUCCESS: Idle {:X} started on {} (callbackTarget: {}, isPaired: {})",
+                    idleFormID, actorName, callbackTargetName, isPaired);
             } else {
                 SKSE::log::error("[AnimUtil::playIdle] FAILED: _playPairedIdle returned false for {} (idle: {:X})",
                     actorName, idleFormID);
@@ -207,8 +211,9 @@ namespace AnimUtil {
             }
 
             // Invoke callback with result (called on game thread)
+            // Always pass callbackTargetActor regardless of isPaired
             if (callback) {
-                callback(success, targetActor);
+                callback(success, callbackTargetActor);
             }
         });
     }
@@ -654,8 +659,14 @@ namespace AnimUtil {
         // Special handling for Werewolf and Vampire Lord
         if (player) {
             if (TargetState::IsWerewolf(player)) {
-                SKSE::log::debug("Player is Werewolf - using werewolf feed");
-                // Werewolf feeding usually works on standing targets or forces them
+                if (targetState == AnimUtil::kDead) {
+                    // Werewolf feeding on corpse - solo animation
+                    outIsPairedAnim = false;
+                    SKSE::log::debug("Player is Werewolf - using corpse devour (solo)");
+                    return Idles::WEREWOLF_CORPSE_FEED;
+                }
+                // Werewolf feeding on alive target - paired animation
+                SKSE::log::debug("Player is Werewolf - using paired feed");
                 return Idles::WEREWOLF_STANDING_FRONT;
             }
             if (TargetState::IsVampireLord(player)) {

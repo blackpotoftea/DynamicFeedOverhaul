@@ -9,6 +9,9 @@ namespace CustomFeed {
     // Track weapon/magic drawn state before feeding so we can restore it afterwards
     static bool wasWeaponDrawn_ = false;
 
+    // Track if target was already dead when feed started (for dead feed counter)
+    static bool wasTargetDeadAtStart_ = false;
+
     // Set feed target - stores ObjectRefHandle for safe persistence
     void SetFeedTarget(RE::Actor* target) {
         if (target) {
@@ -126,6 +129,9 @@ namespace CustomFeed {
 
         SetFeedTarget(target);
 
+        // Track if target was already dead (for dead feed counter - don't count lethal kills)
+        wasTargetDeadAtStart_ = target && target->IsDead();
+
         // Lookup idle form
         auto* feedIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(idleEditorID);
         if (!feedIdle) {
@@ -143,7 +149,8 @@ namespace CustomFeed {
 
         // AnimUtil::playIdle handles thread-safety and ObjectRefHandle automatically
         // The callback will be invoked on game thread after PlayIdle succeeds or fails
-        AnimUtil::playIdle(player, feedIdle, isPaired ? target : nullptr, callback);
+        // Always pass target for callback (needed for integration) even for solo animations
+        AnimUtil::playIdle(player, feedIdle, target, callback, isPaired);
 
         SKSE::log::info("[CustomFeed] Animation playback initiated (callback pending)");
     }
@@ -182,14 +189,18 @@ namespace CustomFeed {
         //     SKSE::log::debug("[CustomFeed] SetAIDriven(false) called");
         // }
 
-        // Increment dead feed count if target was dead (before clearing)
-        auto ref = feedTargetHandle_.get();
-        if (ref) {
-            auto* actor = ref->As<RE::Actor>();
-            if (actor && actor->IsDead()) {
-                AnimUtil::IncrementDeadFeedCount(actor);
+        // Increment dead feed count only if target was already dead when feed started
+        // Don't count lethal feeds that killed the target
+        if (wasTargetDeadAtStart_) {
+            auto ref = feedTargetHandle_.get();
+            if (ref) {
+                auto* actor = ref->As<RE::Actor>();
+                if (actor) {
+                    AnimUtil::IncrementDeadFeedCount(actor);
+                }
             }
         }
+        wasTargetDeadAtStart_ = false;
 
         // // Restore weapon/magic drawn state if it was drawn before feeding
         // if (player && wasWeaponDrawn_) {
