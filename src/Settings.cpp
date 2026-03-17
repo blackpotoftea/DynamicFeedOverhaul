@@ -111,6 +111,7 @@ void Settings::LoadINI() {
     PromptDisplay.RequirePlayerFacing = ini.GetBoolValue("PromptDisplay", "RequirePlayerFacing", PromptDisplay.RequirePlayerFacing);
     PromptDisplay.FacingAngleThreshold = static_cast<float>(ini.GetDoubleValue("PromptDisplay", "FacingAngleThreshold", PromptDisplay.FacingAngleThreshold));
     PromptDisplay.RelaxedCombatTargeting = ini.GetBoolValue("PromptDisplay", "RelaxedCombatTargeting", PromptDisplay.RelaxedCombatTargeting);
+    PromptDisplay.MaxTargetDistance = static_cast<float>(ini.GetDoubleValue("PromptDisplay", "MaxTargetDistance", PromptDisplay.MaxTargetDistance));
 
     // NonCombat
     NonCombat.AllowStanding = ini.GetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding);
@@ -264,6 +265,8 @@ void Settings::SaveINI() {
         "; Maximum angle (degrees) from player heading to target (90 = 180 degree cone in front)");
     ini.SetBoolValue("PromptDisplay", "RelaxedCombatTargeting", PromptDisplay.RelaxedCombatTargeting,
         "; Disable player facing requirement during combat (easier target selection in combat)");
+    ini.SetDoubleValue("PromptDisplay", "MaxTargetDistance", PromptDisplay.MaxTargetDistance,
+        "; Maximum distance to target for feed prompt to show (units, 250 = ~5 meters)");
 
     // NonCombat
     ini.SetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding,

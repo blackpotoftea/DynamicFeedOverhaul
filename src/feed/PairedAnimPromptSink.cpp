@@ -30,7 +30,7 @@ namespace FeedAnimState {
 
     void MarkFeedStarted() {
         feedState.store(State::Active, std::memory_order_release);
-        SKSE::log::debug("Feed animation started - skipping paired animation exclusion");
+        SKSE::log::info("========== FEED STARTED ==========");
 
         // Apply time slowdown if enabled and player is in combat
         auto* settings = Settings::GetSingleton();
@@ -48,7 +48,7 @@ namespace FeedAnimState {
 
     void MarkFeedEnded() {
         feedState.store(State::Ended, std::memory_order_release);
-        SKSE::log::info("Feed animation ended");
+        SKSE::log::info("========== FEED ENDED ==========");
 
         // Always reset time multiplier to normal (safe even if not slowed)
         auto* timer = RE::BSTimer::GetSingleton();
@@ -351,6 +351,7 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
         break;
 
     default:
+        SKSE::log::debug("Unhandled event type: {}", static_cast<int>(event.type));
         break;
     }
 }
@@ -988,10 +989,14 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
         return false;
     }
 
-    // 3. Check Distance (Max 250 units)
-    float dist = player->GetPosition().GetDistance(target->GetPosition());
-    if (dist > 250.0f) {
-        SKSE::log::debug("IsValidFeedTarget: false - target too far: {:.1f}", dist);
+    // 3. Check Distance
+    auto playerPos = player->GetPosition();
+    auto targetPos = target->GetPosition();
+    float dist = playerPos.GetDistance(targetPos);
+    SKSE::log::debug("IsValidFeedTarget: player pos ({:.1f}, {:.1f}, {:.1f}), target pos ({:.1f}, {:.1f}, {:.1f}), dist={:.1f}",
+        playerPos.x, playerPos.y, playerPos.z, targetPos.x, targetPos.y, targetPos.z, dist);
+    if (dist > settings->PromptDisplay.MaxTargetDistance) {
+        SKSE::log::debug("IsValidFeedTarget: false - target too far: {:.1f} (max: {:.1f})", dist, settings->PromptDisplay.MaxTargetDistance);
         return false;
     }
 
