@@ -1,5 +1,7 @@
 #include "PCH.h"
 #include "feed/AnimationRegistry.h"
+#include "feed/TargetState.h"
+#include "feed/CustomFeed.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -204,6 +206,70 @@ namespace Feed {
 
         currentIndex++;
         return anim;
+    }
+
+    // Fallback animation selection (legacy logic for when no OAR animations are loaded)
+    const char* SelectIdleAnimation(int targetState, RE::Actor* target,
+                                    const RE::NiPointer<RE::TESObjectREFR>& furnitureRef, bool isBehind,
+                                    bool& outIsPairedAnim, bool lethal) {
+        outIsPairedAnim = true;
+        auto player = RE::PlayerCharacter::GetSingleton();
+
+        // Special handling for Werewolf and Vampire Lord
+        if (player) {
+            if (TargetState::IsWerewolf(player)) {
+                if (targetState == kDead) {
+                    // Werewolf feeding on corpse - solo animation
+                    outIsPairedAnim = false;
+                    SKSE::log::debug("Player is Werewolf - using corpse devour (solo)");
+                    return Idles::WEREWOLF_CORPSE_FEED;
+                }
+                // Werewolf feeding on alive target - paired animation
+                SKSE::log::debug("Player is Werewolf - using paired feed");
+                return Idles::WEREWOLF_STANDING_FRONT;
+            }
+            if (TargetState::IsVampireLord(player)) {
+                SKSE::log::debug("Player is Vampire Lord - using VL feed");
+                return isBehind ? Idles::VAMPIRELORD_STANDING_BACK : Idles::VAMPIRELORD_STANDING_FRONT;
+            }
+        }
+
+        // Dead targets use bedroll animation (corpse on ground)
+        if (targetState == kDead) {
+            outIsPairedAnim = false;
+            bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
+            SKSE::log::debug("Dead target - using bedroll {} side (solo idle)", isLeft ? "left" : "right");
+            return isLeft ? Idles::VAMPIRE_BEDROLL_LEFT : Idles::VAMPIRE_BEDROLL_RIGHT;
+        }
+
+        if (targetState == kSleeping && furnitureRef) {
+            outIsPairedAnim = false;
+            bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
+            bool isBedroll = CustomFeed::IsBedroll(furnitureRef.get());
+
+            if (isBedroll) {
+                SKSE::log::debug("Bedroll {} side (solo idle)", isLeft ? "left" : "right");
+                return isLeft ? Idles::VAMPIRE_BEDROLL_LEFT : Idles::VAMPIRE_BEDROLL_RIGHT;
+            } else {
+                SKSE::log::debug("Bed {} side (solo idle)", isLeft ? "left" : "right");
+                return isLeft ? Idles::VAMPIRE_BED_LEFT : Idles::VAMPIRE_BED_RIGHT;
+            }
+        }
+
+        const char* posStr = isBehind ? "back" : "front";
+
+        if (targetState == kSitting) {
+            SKSE::log::debug("Sitting {} feed", posStr);
+            return isBehind ? Idles::VAMPIRE_SITTING_BACK : Idles::VAMPIRE_SITTING_FRONT;
+        } else if (lethal) {
+            // Lethal param now carries correct intent (forced by player combat or user choice)
+            SKSE::log::debug("Lethal {} feed (kill move)", posStr);
+            return isBehind ? Idles::BACK_SNEAK_KM_A : Idles::FRONT_KM_A;
+        } else {
+            // Standing or Combat (non-lethal) uses normal animations
+            SKSE::log::debug("Standing {} feed", posStr);
+            return isBehind ? Idles::VAMPIRE_STANDING_BACK : Idles::VAMPIRE_STANDING_FRONT;
+        }
     }
 
 }

@@ -6,6 +6,49 @@
 
 namespace Feed {
 
+    // Target state constants for feed type calculation
+    // These represent base values multiplied by 10 in OAR graph variable conditions
+    // Format: (TargetState * 10) + VampireHungerStage
+    constexpr int kStanding = 10;
+    constexpr int kSleeping = 20;
+    constexpr int kSitting = 30;
+    constexpr int kCombat = 40;
+    constexpr int kDead = 50;
+
+    // Idle EditorIDs for fallback animation selection
+    namespace Idles {
+        // Standing
+        inline constexpr const char* VAMPIRE_STANDING_FRONT = "IdleVampireStandingFront";
+        inline constexpr const char* VAMPIRE_STANDING_BACK = "IdleVampireStandingBack";
+        // Bed
+        inline constexpr const char* VAMPIRE_BED_LEFT = "VampireFeedingBedLeft_Loose";
+        inline constexpr const char* VAMPIRE_BED_RIGHT = "VampireFeedingBedRight_Loose";
+        // Bedroll
+        inline constexpr const char* VAMPIRE_BEDROLL_LEFT = "VampireFeedingBedRollLeft_Loose";
+        inline constexpr const char* VAMPIRE_BEDROLL_RIGHT = "VampireFeedingBedRollRight_Loose";
+        // Sitting
+        inline constexpr const char* VAMPIRE_SITTING_FRONT = "VampireFeedSittingFront";
+        inline constexpr const char* VAMPIRE_SITTING_BACK = "VampireFeedSittingBack";
+
+        // Vampire Lord Standing
+        inline constexpr const char* VAMPIRELORD_STANDING_FRONT = "VampireLordLeftPowerAttackFeedFront";
+        inline constexpr const char* VAMPIRELORD_STANDING_BACK = "VampireLordLeftPowerAttackFeedBack";
+
+        // Cannibal
+        inline constexpr const char* CANIBAL_STANDING_FRONT = "IdleCannibalFeedStanding";
+        inline constexpr const char* CANIBAL_STANDING_CROUCH = "IdleCannibalFeedCrouching";
+
+        // Werewolf
+        inline constexpr const char* WEREWOLF_STANDING_FRONT = "WerewolfPairedFeedingWithHuman";
+        inline constexpr const char* WEREWOLF_CORPSE_FEED = "SpecialFeeding";
+
+        // Combat idle Standing
+        inline constexpr const char* FRONT_KM_A = "IdleVampireStandingFront"; // "1HMKillMoveRepeatStabDowns"; //pa_1HMKillMoveShortA
+
+        // Combat idle back
+        inline constexpr const char* BACK_SNEAK_KM_A ="IdleVampireStandingBack"; // "KillMoveBackStab"; //pa_1HMSneakKillBackA
+    }
+
     enum class Direction { Front, Back, Any };
     enum class Sex { Unisex, Female, Male };
     enum class Type { Normal, Combat };
@@ -54,5 +97,10 @@ namespace Feed {
     private:
         std::vector<AnimationDefinition> animations_;
     };
+
+    // Fallback animation selection (legacy logic for when no OAR animations are loaded)
+    const char* SelectIdleAnimation(int targetState, RE::Actor* target,
+                                    const RE::NiPointer<RE::TESObjectREFR>& furnitureRef, bool isBehind,
+                                    bool& outIsPairedAnim, bool lethal = false);
 
 }
