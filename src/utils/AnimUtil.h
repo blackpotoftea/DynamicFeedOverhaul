@@ -9,49 +9,6 @@
 #include <math.h>
 
 namespace AnimUtil {
-    // Target state constants for feed type calculation
-    // These represent base values multiplied by 10 in OAR graph variable conditions
-    // Format: (TargetState * 10) + VampireHungerStage
-    constexpr int kStanding = 10;
-    constexpr int kSleeping = 20;
-    constexpr int kSitting = 30;
-    constexpr int kCombat = 40;
-    constexpr int kDead = 50;
-
-    // Idle EditorIDs
-    namespace Idles {
-        // Standing
-        inline constexpr const char* VAMPIRE_STANDING_FRONT = "IdleVampireStandingFront";
-        inline constexpr const char* VAMPIRE_STANDING_BACK = "IdleVampireStandingBack";
-        // Bed
-        inline constexpr const char* VAMPIRE_BED_LEFT = "VampireFeedingBedLeft_Loose";
-        inline constexpr const char* VAMPIRE_BED_RIGHT = "VampireFeedingBedRight_Loose";
-        // Bedroll
-        inline constexpr const char* VAMPIRE_BEDROLL_LEFT = "VampireFeedingBedRollLeft_Loose";
-        inline constexpr const char* VAMPIRE_BEDROLL_RIGHT = "VampireFeedingBedRollRight_Loose";
-        // Sitting
-        inline constexpr const char* VAMPIRE_SITTING_FRONT = "VampireFeedSittingFront";
-        inline constexpr const char* VAMPIRE_SITTING_BACK = "VampireFeedSittingBack";
-
-        // Vampire Lord Standing
-        inline constexpr const char* VAMPIRELORD_STANDING_FRONT = "VampireLordLeftPowerAttackFeedFront";
-        inline constexpr const char* VAMPIRELORD_STANDING_BACK = "VampireLordLeftPowerAttackFeedBack";
-
-        // Cannibal
-        inline constexpr const char* CANIBAL_STANDING_FRONT = "IdleCannibalFeedStanding";
-        inline constexpr const char* CANIBAL_STANDING_CROUCH = "IdleCannibalFeedCrouching";
-
-        // Werewolf
-        inline constexpr const char* WEREWOLF_STANDING_FRONT = "WerewolfPairedFeedingWithHuman";
-        inline constexpr const char* WEREWOLF_CORPSE_FEED = "SpecialFeeding";
-
-        // Combat idle Standing
-        inline constexpr const char* FRONT_KM_A = "IdleVampireStandingFront"; // "1HMKillMoveRepeatStabDowns"; //pa_1HMKillMoveShortA
-
-        // Combat idle back
-        inline constexpr const char* BACK_SNEAK_KM_A ="IdleVampireStandingBack"; // "KillMoveBackStab"; //pa_1HMSneakKillBackA
-    }
-
     // Lightweight position and alignment structs
     struct Position {
         float x = 0.0f;
@@ -138,9 +95,18 @@ namespace AnimUtil {
     bool IsInPairedAnimation(RE::Actor* actor);
     int DetermineTargetState(RE::Actor* target, bool& outIsInCombat);
     void ApplyHeightAdjustment(RE::Actor* attacker, RE::Actor* target, float minHeightDiff, float maxHeightDiff);
-    const char* SelectIdleAnimation(int targetState, RE::Actor* target,
-                                    const RE::NiPointer<RE::TESObjectREFR>& furnitureRef, bool isBehind,
-                                    bool& outIsPairedAnim, bool lethal = false);
+
+    // Ground height detection via raycast
+    // Returns detailed hit info from multi-ray fan pattern for accurate ground detection
+    struct GroundHit {
+        bool hit = false;                              // True if ground was detected
+        float groundZ = 0.f;                           // Z coordinate of ground surface
+        RE::NiAVObject* surface = nullptr;             // NiAVObject that was hit
+        RE::TESObjectREFR* ref = nullptr;              // Reference if surface has userData
+        RE::NiPoint3 hitNormal = {0.f, 0.f, 1.f};      // Surface normal (for slope detection)
+    };
+
+    GroundHit GetGroundHeight(RE::Actor* actor);
 
     // Player feed validation (moved from PairedAnimPromptSink)
     bool IsPlayerFeedingRace();  // Check if player race supports feeding (Vampire/Werewolf/VL)

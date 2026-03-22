@@ -1,7 +1,7 @@
 #include "utils/AnimUtil.h"
 #include "feed/TargetState.h"
-#include "feed/CustomFeed.h"
 #include "feed/PairedAnimPromptSink.h"
+#include "feed/AnimationRegistry.h"
 #include "Settings.h"
 #include "papyrus/PapyrusCall.h"
 #include <memory>
@@ -30,6 +30,82 @@ namespace {
         REL::Relocation<func_t> func{RELOCATION_ID(38290, 39256)};
         return func(proc, attacker, smth, idle, forcePlay, resetActionState, target);
     }
+
+    // Helper to get NiAVObject from hkpCdBody
+    RE::NiAVObject* GetAVObjectFromBody(const RE::hkpCdBody* body) {
+        if (!body) return nullptr;
+        using func_t = RE::NiAVObject* (*)(const RE::hkpCdBody*);
+        static REL::Relocation<func_t> func{RELOCATION_ID(76160, 77988)};
+        return func(body);
+    }
+
+    // Ray collector that stores all hits for later processing
+    // Allows caller to find highest hit (for stair detection) rather than closest
+    class RayCollector : public RE::hkpRayHitCollector {
+    public:
+        struct HitResult {
+            RE::NiPoint3 normal;
+            float hitFraction;
+            const RE::hkpCdBody* body;
+
+            RE::NiAVObject* getAVObject() const {
+                return body ? GetAVObjectFromBody(body) : nullptr;
+            }
+        };
+
+        RE::hkpWorldRayCastOutput rayHit;  // 0x10 - matches hkpClosestRayHitCollector layout
+        std::vector<RE::NiAVObject*> objectFilter;
+        std::vector<HitResult> hits;
+
+        RayCollector() {
+            Reset();
+        }
+
+        ~RayCollector() override = default;
+
+        void AddFilter(RE::NiAVObject* obj) {
+            if (obj) objectFilter.push_back(obj);
+        }
+
+        void AddRayHit(const RE::hkpCdBody& body, const RE::hkpShapeRayCastCollectorOutput& hitInfo) override {
+            // Get the root body
+            const RE::hkpCdBody* rootBody = &body;
+            while (rootBody->parent) {
+                rootBody = rootBody->parent;
+            }
+
+            if (!rootBody) return;
+
+            // Check if this object is in the filter list (skip actors we want to ignore)
+            auto* avObject = GetAVObjectFromBody(rootBody);
+            for (const auto* filteredObj : objectFilter) {
+                if (avObject == filteredObj) return;
+            }
+
+            // Store the hit for later processing
+            HitResult hit;
+            hit.normal.x = hitInfo.normal.quad.m128_f32[0];
+            hit.normal.y = hitInfo.normal.quad.m128_f32[1];
+            hit.normal.z = hitInfo.normal.quad.m128_f32[2];
+            hit.hitFraction = hitInfo.hitFraction;
+            hit.body = rootBody;
+
+            // Update early out to allow finding more hits
+            earlyOutHitFraction = hitInfo.hitFraction;
+            hits.push_back(hit);
+        }
+
+        const std::vector<HitResult>& GetHits() const {
+            return hits;
+        }
+
+        void Reset() {
+            hkpRayHitCollector::Reset();
+            rayHit.Reset();
+            hits.clear();
+            objectFilter.clear();
+        }
+    };
 }
 
 namespace AnimUtil {
@@ -609,13 +685,155 @@ namespace AnimUtil {
         // Check dead first - dead actors are never in combat
         if (target->IsDead()) {
             outIsInCombat = false;
-            return AnimUtil::kDead;
+            return Feed::kDead;
         }
         outIsInCombat = target->IsInCombat();
-        if (outIsInCombat) return AnimUtil::kCombat;
-        else if (TargetState::IsSleeping(target)) return AnimUtil::kSleeping;
-        else if (TargetState::IsSitting(target)) return AnimUtil::kSitting;
-        return AnimUtil::kStanding;
+        if (outIsInCombat) return Feed::kCombat;
+        else if (TargetState::IsSleeping(target)) return Feed::kSleeping;
+        else if (TargetState::IsSitting(target)) return Feed::kSitting;
+        return Feed::kStanding;
+    }
+
+    // Helper function to cast a single ground ray and process hits
+    // Returns GroundHit with highest valid ground surface from all collected hits
+    static GroundHit CastGroundRay(RE::bhkWorld* bhkWorld, const RE::NiPoint3& position,
+                                    RayCollector& collector, float startOffset, float searchDepth) {
+        GroundHit result;
+
+        // Havok scale factor
+        constexpr float hkpScale = 0.0142875f;
+
+        // Ray start slightly above position, ray end below
+        RE::NiPoint3 rayStart = { position.x, position.y, position.z + startOffset };
+        RE::NiPoint3 rayDir = { 0.0f, 0.0f, -(startOffset + searchDepth) };
+
+        RE::NiPoint3 from = rayStart * hkpScale;
+        RE::NiPoint3 dir = rayDir * hkpScale;
+
+        // Set up pick data - rayInput.to is zero, direction goes in ray member
+        RE::bhkPickData pickData;
+        pickData.rayInput.from.quad.m128_f32[0] = from.x;
+        pickData.rayInput.from.quad.m128_f32[1] = from.y;
+        pickData.rayInput.from.quad.m128_f32[2] = from.z;
+        pickData.rayInput.from.quad.m128_f32[3] = 1.0f;
+
+        pickData.rayInput.to.quad.m128_f32[0] = 0.0f;
+        pickData.rayInput.to.quad.m128_f32[1] = 0.0f;
+        pickData.rayInput.to.quad.m128_f32[2] = 0.0f;
+        pickData.rayInput.to.quad.m128_f32[3] = 0.0f;
+
+        pickData.ray.quad.m128_f32[0] = dir.x;
+        pickData.ray.quad.m128_f32[1] = dir.y;
+        pickData.ray.quad.m128_f32[2] = dir.z;
+        pickData.ray.quad.m128_f32[3] = 1.0f;
+
+        pickData.rayHitCollectorA8 = reinterpret_cast<RE::hkpClosestRayHitCollector*>(&collector);
+
+        bhkWorld->PickObject(pickData);
+
+        // Process all hits to find the highest valid ground surface
+        const auto& hits = collector.GetHits();
+        for (const auto& hit : hits) {
+            // Filter by normal: must be pointing upward (ground, not wall/ceiling)
+            // normalZ > 0.1 allows slopes up to ~84 degrees
+            if (hit.normal.z < 0.1f) continue;
+
+            // Calculate ground Z from hit fraction
+            float groundZ = rayStart.z + rayDir.z * hit.hitFraction;
+
+            // Only accept hits AT or BELOW position (not ceilings/overhangs above)
+            if (groundZ > position.z + 1.0f) continue;
+
+            // Take the HIGHEST valid ground hit (actor stands on highest surface)
+            if (!result.hit || groundZ > result.groundZ) {
+                result.hit = true;
+                result.groundZ = groundZ;
+                result.hitNormal = hit.normal;
+                result.surface = hit.getAVObject();
+
+                // Try to get reference from surface
+                if (result.surface && result.surface->GetUserData()) {
+                    result.ref = result.surface->GetUserData();
+                }
+            }
+        }
+
+        return result;
+    }
+
+    GroundHit GetGroundHeight(RE::Actor* actor) {
+        GroundHit result;
+
+        if (!actor) {
+            SKSE::log::warn("GetGroundHeight: actor is null");
+            return result;
+        }
+
+        auto* cell = actor->GetParentCell();
+        if (!cell) {
+            SKSE::log::warn("GetGroundHeight: {} has no parent cell", actor->GetName());
+            return result;
+        }
+
+        auto* bhkWorld = cell->GetbhkWorld();
+        if (!bhkWorld) {
+            SKSE::log::warn("GetGroundHeight: no bhkWorld for cell");
+            return result;
+        }
+
+        const auto position = actor->GetPosition();
+
+        // Multi-ray fan pattern configuration
+        constexpr float spread = 20.0f;      // Half shoulder width (~40 unit total spread)
+        constexpr float startOffset = 5.0f;  // Small upward bias to clear minor irregularities
+        constexpr float searchDepth = 150.0f; // Search distance below actor
+
+        // 5-ray offsets: center + 4 compass points
+        struct Offset { float x, y; };
+        const Offset offsets[] = {
+            { 0.0f,    0.0f    },  // center
+            { spread,  0.0f    },  // forward (X+)
+            {-spread,  0.0f    },  // back (X-)
+            { 0.0f,    spread  },  // right (Y+)
+            { 0.0f,   -spread  },  // left (Y-)
+        };
+
+        // Set up collector with actor filter (to avoid self-collision)
+        RayCollector collector;
+        if (auto* actor3D = actor->Get3D()) {
+            collector.AddFilter(actor3D);
+        }
+
+        // Cast all 5 rays and find the best (highest) ground hit
+        GroundHit bestHit;
+        for (const auto& offset : offsets) {
+            RE::NiPoint3 rayPos = { position.x + offset.x, position.y + offset.y, position.z };
+
+            // Reset collector for each ray but keep the filter
+            auto savedFilter = std::move(collector.objectFilter);
+            collector.Reset();
+            collector.objectFilter = std::move(savedFilter);
+
+            GroundHit hit = CastGroundRay(bhkWorld, rayPos, collector, startOffset, searchDepth);
+
+            if (hit.hit) {
+                // Take HIGHEST hit - that's the surface actor is actually standing on
+                if (!bestHit.hit || hit.groundZ > bestHit.groundZ) {
+                    bestHit = hit;
+                }
+            }
+        }
+
+        if (bestHit.hit) {
+            // Calculate slope angle for logging
+            float slopeAngle = std::acos(bestHit.hitNormal.z) * (180.0f / static_cast<float>(M_PI));
+            SKSE::log::debug("GetGroundHeight: {} - groundZ={:.2f}, actorZ={:.2f}, slope={:.1f}deg",
+                actor->GetName(), bestHit.groundZ, position.z, slopeAngle);
+        } else {
+            SKSE::log::debug("GetGroundHeight: {} - no ground detected", actor->GetName());
+        }
+
+        return bestHit;
     }
 
     void ApplyHeightAdjustment(RE::Actor* attacker, RE::Actor* target, float minHeightDiff, float maxHeightDiff) {
@@ -625,6 +843,20 @@ namespace AnimUtil {
 
         SKSE::log::info("ApplyHeightAdjustment: heightDiff={:.2f}, min={:.2f}, max={:.2f}",
             heightDiff, minHeightDiff, maxHeightDiff);
+
+        // Get ground heights using new multi-ray detection
+        GroundHit attackerGround = GetGroundHeight(attacker);
+        GroundHit targetGround = GetGroundHeight(target);
+
+        // Log ground detection results
+        if (attackerGround.hit && targetGround.hit) {
+            float groundHeightDiff = std::fabs(attackerGround.groundZ - targetGround.groundZ);
+            SKSE::log::info("ApplyHeightAdjustment: groundHeightDiff={:.2f} (attacker={:.2f}, target={:.2f})",
+                groundHeightDiff, attackerGround.groundZ, targetGround.groundZ);
+        } else {
+            SKSE::log::warn("ApplyHeightAdjustment: ground detection failed (attacker={}, target={})",
+                attackerGround.hit ? "ok" : "FAILED", targetGround.hit ? "ok" : "FAILED");
+        }
 
         if (heightDiff <= minHeightDiff) {
             SKSE::log::info("ApplyHeightAdjustment: SKIPPED - height diff {:.2f} <= min {:.2f}",
@@ -638,78 +870,21 @@ namespace AnimUtil {
             return;
         }
 
-        float higherZ = std::max(attackerPos.z, targetPos.z);
-        if (attackerPos.z < targetPos.z) {
-            SKSE::log::info("ApplyHeightAdjustment: Moving attacker UP from {:.2f} to {:.2f} (diff: {:.2f})",
-                attackerPos.z, higherZ, heightDiff);
-            attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, higherZ), true);
+        // Use ground heights if available, otherwise fall back to actor Z
+        float attackerZ = attackerGround.hit ? attackerGround.groundZ : attackerPos.z;
+        float targetZ = targetGround.hit ? targetGround.groundZ : targetPos.z;
+        float higherZ = std::max(attackerZ, targetZ);
+
+        if (attackerZ < targetZ) {
+            float newZ = attackerPos.z + (higherZ - attackerZ);
+            SKSE::log::info("ApplyHeightAdjustment: Moving attacker UP from {:.2f} to {:.2f} (ground diff: {:.2f})",
+                attackerPos.z, newZ, higherZ - attackerZ);
+            attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, newZ), true);
         } else {
-            SKSE::log::info("ApplyHeightAdjustment: Moving target UP from {:.2f} to {:.2f} (diff: {:.2f})",
-                targetPos.z, higherZ, heightDiff);
-            target->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, higherZ), true);
-        }
-    }
-
-    const char* SelectIdleAnimation(int targetState, RE::Actor* target,
-                                           const RE::NiPointer<RE::TESObjectREFR>& furnitureRef, bool isBehind,
-                                           bool& outIsPairedAnim, bool lethal) {
-        outIsPairedAnim = true;
-        auto player = RE::PlayerCharacter::GetSingleton();
-
-        // Special handling for Werewolf and Vampire Lord
-        if (player) {
-            if (TargetState::IsWerewolf(player)) {
-                if (targetState == AnimUtil::kDead) {
-                    // Werewolf feeding on corpse - solo animation
-                    outIsPairedAnim = false;
-                    SKSE::log::debug("Player is Werewolf - using corpse devour (solo)");
-                    return Idles::WEREWOLF_CORPSE_FEED;
-                }
-                // Werewolf feeding on alive target - paired animation
-                SKSE::log::debug("Player is Werewolf - using paired feed");
-                return Idles::WEREWOLF_STANDING_FRONT;
-            }
-            if (TargetState::IsVampireLord(player)) {
-                SKSE::log::debug("Player is Vampire Lord - using VL feed");
-                return isBehind ? Idles::VAMPIRELORD_STANDING_BACK : Idles::VAMPIRELORD_STANDING_FRONT;
-            }
-        }
-
-        // Dead targets use bedroll animation (corpse on ground)
-        if (targetState == AnimUtil::kDead) {
-            outIsPairedAnim = false;
-            bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
-            SKSE::log::debug("Dead target - using bedroll {} side (solo idle)", isLeft ? "left" : "right");
-            return isLeft ? Idles::VAMPIRE_BEDROLL_LEFT : Idles::VAMPIRE_BEDROLL_RIGHT;
-        }
-
-        if (targetState == AnimUtil::kSleeping && furnitureRef) {
-            outIsPairedAnim = false;
-            bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
-            bool isBedroll = CustomFeed::IsBedroll(furnitureRef.get());
-
-            if (isBedroll) {
-                SKSE::log::debug("Bedroll {} side (solo idle)", isLeft ? "left" : "right");
-                return isLeft ? Idles::VAMPIRE_BEDROLL_LEFT : Idles::VAMPIRE_BEDROLL_RIGHT;
-            } else {
-                SKSE::log::debug("Bed {} side (solo idle)", isLeft ? "left" : "right");
-                return isLeft ? Idles::VAMPIRE_BED_LEFT : Idles::VAMPIRE_BED_RIGHT;
-            }
-        }
-
-        const char* posStr = isBehind ? "back" : "front";
-
-        if (targetState == AnimUtil::kSitting) {
-            SKSE::log::debug("Sitting {} feed", posStr);
-            return isBehind ? Idles::VAMPIRE_SITTING_BACK : Idles::VAMPIRE_SITTING_FRONT;
-        } else if (lethal) {
-            // Lethal param now carries correct intent (forced by player combat or user choice)
-            SKSE::log::debug("Lethal {} feed (kill move)", posStr);
-            return isBehind ? Idles::BACK_SNEAK_KM_A : Idles::FRONT_KM_A;
-        } else {
-            // Standing or Combat (non-lethal) uses normal animations
-            SKSE::log::debug("Standing {} feed", posStr);
-            return isBehind ? Idles::VAMPIRE_STANDING_BACK : Idles::VAMPIRE_STANDING_FRONT;
+            float newZ = targetPos.z + (higherZ - targetZ);
+            SKSE::log::info("ApplyHeightAdjustment: Moving target UP from {:.2f} to {:.2f} (ground diff: {:.2f})",
+                targetPos.z, newZ, higherZ - targetZ);
+            target->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, newZ), true);
         }
     }
 
