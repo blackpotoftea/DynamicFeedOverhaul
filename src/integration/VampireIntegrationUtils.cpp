@@ -21,7 +21,13 @@ namespace VampireIntegrationUtils {
 
         if (handle.IsValid()) {
             handle.SetPosition(target->GetPosition());
-            handle.SetObjectToFollow(target->Get3D());
+            // Only follow 3D if actor has valid loaded 3D (prevents crash on dismembered NPCs)
+            if (target->Is3DLoaded()) {
+                auto* obj3D = target->Get3D();
+                if (obj3D) {
+                    handle.SetObjectToFollow(obj3D);
+                }
+            }
             handle.Play();
             SKSE::log::debug("VampireIntegrationUtils::PlaySound: Playing sound on {}", target->GetName());
         } else {

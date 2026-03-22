@@ -733,16 +733,31 @@ namespace AnimUtil {
 
         // Process all hits to find the highest valid ground surface
         const auto& hits = collector.GetHits();
-        for (const auto& hit : hits) {
-            // Filter by normal: must be pointing upward (ground, not wall/ceiling)
-            // normalZ > 0.1 allows slopes up to ~84 degrees
-            if (hit.normal.z < 0.1f) continue;
 
+        // Debug: log raw hit count
+        if (hits.empty()) {
+            SKSE::log::trace("CastGroundRay: no hits from raycast at ({:.1f}, {:.1f}, {:.1f})",
+                position.x, position.y, position.z);
+        }
+
+        for (const auto& hit : hits) {
             // Calculate ground Z from hit fraction
             float groundZ = rayStart.z + rayDir.z * hit.hitFraction;
 
+            // Filter by normal: must be pointing upward (ground, not wall/ceiling)
+            // normalZ > 0.1 allows slopes up to ~84 degrees
+            if (hit.normal.z < 0.1f) {
+                SKSE::log::trace("CastGroundRay: SKIP wall/ceiling normalZ={:.2f} at Z={:.1f}",
+                    hit.normal.z, groundZ);
+                continue;
+            }
+
             // Only accept hits AT or BELOW position (not ceilings/overhangs above)
-            if (groundZ > position.z + 1.0f) continue;
+            if (groundZ > position.z + 1.0f) {
+                SKSE::log::trace("CastGroundRay: SKIP overhang groundZ={:.1f} > actorZ={:.1f}+1",
+                    groundZ, position.z);
+                continue;
+            }
 
             // Take the HIGHEST valid ground hit (actor stands on highest surface)
             if (!result.hit || groundZ > result.groundZ) {
@@ -836,6 +851,13 @@ namespace AnimUtil {
         return bestHit;
     }
 
+    // Helper to calculate slope angle in degrees from surface normal
+    static float GetSlopeAngle(const GroundHit& ground) {
+        if (!ground.hit) return 0.0f;
+        // acos(normalZ) gives angle from vertical (0 = flat, 90 = wall)
+        return std::acos(ground.hitNormal.z) * (180.0f / static_cast<float>(M_PI));
+    }
+
     void ApplyHeightAdjustment(RE::Actor* attacker, RE::Actor* target, float minHeightDiff, float maxHeightDiff) {
         auto attackerPos = attacker->GetPosition();
         auto targetPos = target->GetPosition();
@@ -844,48 +866,18 @@ namespace AnimUtil {
         SKSE::log::info("ApplyHeightAdjustment: heightDiff={:.2f}, min={:.2f}, max={:.2f}",
             heightDiff, minHeightDiff, maxHeightDiff);
 
-        // Get ground heights using new multi-ray detection
-        GroundHit attackerGround = GetGroundHeight(attacker);
-        GroundHit targetGround = GetGroundHeight(target);
+        // Simple approach: raise both actors by 10 units and match Z
+        constexpr float raiseAmount = 10.0f;
 
-        // Log ground detection results
-        if (attackerGround.hit && targetGround.hit) {
-            float groundHeightDiff = std::fabs(attackerGround.groundZ - targetGround.groundZ);
-            SKSE::log::info("ApplyHeightAdjustment: groundHeightDiff={:.2f} (attacker={:.2f}, target={:.2f})",
-                groundHeightDiff, attackerGround.groundZ, targetGround.groundZ);
-        } else {
-            SKSE::log::warn("ApplyHeightAdjustment: ground detection failed (attacker={}, target={})",
-                attackerGround.hit ? "ok" : "FAILED", targetGround.hit ? "ok" : "FAILED");
-        }
+        float newAttackerZ = attackerPos.z + raiseAmount;
+        float newTargetZ = targetPos.z + raiseAmount;
+        float higherZ = std::max(newAttackerZ, newTargetZ);
 
-        if (heightDiff <= minHeightDiff) {
-            SKSE::log::info("ApplyHeightAdjustment: SKIPPED - height diff {:.2f} <= min {:.2f}",
-                heightDiff, minHeightDiff);
-            return;
-        }
+        SKSE::log::info("ApplyHeightAdjustment: Raising both to Z={:.2f} (+{:.1f})",
+            higherZ, raiseAmount);
 
-        if (heightDiff > maxHeightDiff) {
-            SKSE::log::warn("ApplyHeightAdjustment: SKIPPED - height diff {:.2f} > max {:.2f}",
-                heightDiff, maxHeightDiff);
-            return;
-        }
-
-        // Use ground heights if available, otherwise fall back to actor Z
-        float attackerZ = attackerGround.hit ? attackerGround.groundZ : attackerPos.z;
-        float targetZ = targetGround.hit ? targetGround.groundZ : targetPos.z;
-        float higherZ = std::max(attackerZ, targetZ);
-
-        if (attackerZ < targetZ) {
-            float newZ = attackerPos.z + (higherZ - attackerZ);
-            SKSE::log::info("ApplyHeightAdjustment: Moving attacker UP from {:.2f} to {:.2f} (ground diff: {:.2f})",
-                attackerPos.z, newZ, higherZ - attackerZ);
-            attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, newZ), true);
-        } else {
-            float newZ = targetPos.z + (higherZ - targetZ);
-            SKSE::log::info("ApplyHeightAdjustment: Moving target UP from {:.2f} to {:.2f} (ground diff: {:.2f})",
-                targetPos.z, newZ, higherZ - targetZ);
-            target->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, newZ), true);
-        }
+        attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, higherZ), true);
+        target->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, higherZ), true);
     }
 
     // Animation graph variable management (moved from PairedAnimPromptSink)
