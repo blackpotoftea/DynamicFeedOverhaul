@@ -469,41 +469,6 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
     CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim, onAnimationResult);
 }
 
-// Minimal test function - bare bones kill move playback
-// void PairedAnimPromptSink::HandleFeedAcceptedTest() {
-//     auto feedTargetPtr = GetTarget();
-//     if (!feedTargetPtr) return;
-
-//     RE::Actor* target = feedTargetPtr.get();
-//     auto* player = RE::PlayerCharacter::GetSingleton();
-//     if (!player) return;
-
-//     HidePrompt();
-//     FeedAnimState::MarkFeedStarted();
-//     AnimEventSink::Register();
-
-//     SKSE::log::info("[TEST] Starting kill move test on target: {}", target->GetName());
-
-//     // Lookup the idle directly
-//     // auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("1HMKillMoveRepeatStabDowns");
-//     // auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("1HMKillMoveM");
-//     // auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("KillMoveSneak1HMThroatSlit");
-//     auto* idle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("KillMoveBackStab");
-//     if (!idle) {
-//         SKSE::log::error("[TEST] Could not find idle '1HMKillMoveRepeatStabDowns'");
-//         return;
-//     }
-
-
-//     SKSE::log::info("[TEST] Found idle FormID: {:08X}", idle->GetFormID());
-//     AnimUtil::RotateTargetToClosest(target, player);
-//     AnimUtil::RotateAttackerToTarget(player, target);
-//     // Play with condition bypass
-//     IdleParser::PlayIdleBypassConditions(player, idle, target);
-
-//     SKSE::log::info("[TEST] PlayIdleBypassConditions called");
-// }
-
 // We have 2 animation systems Vannila Idle and OAR which we set via GraphVariable
 // We need both select idle -> set correct graph variable to match OAR animations
 void PairedAnimPromptSink::HandleFeedAccepted() {
@@ -546,7 +511,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
 
     int vampireStage = PapyrusCall::GetVampireStage();
-    bool useTwoSingle = settings->NonCombat.UseTwoSingleAnimations && targetState == AnimUtil::kStanding;
+    bool useTwoSingle = settings->NonCombat.UseTwoSingleAnimations && targetState == Feed::kStanding;
 
     if (useTwoSingle) {
         // int feedType = 0;
@@ -578,7 +543,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
             SKSE::log::debug("Position task: targetState={}, EnableHeightAdjust={}",
                 targetState, settings->NonCombat.EnableHeightAdjust);
 
-            if (targetState == AnimUtil::kStanding && settings->NonCombat.EnableHeightAdjust) {
+            if (targetState == Feed::kStanding && settings->NonCombat.EnableHeightAdjust) {
                 auto playerPos = player->GetPosition();
                 auto targetPos = target->GetPosition();
                 float heightDiff = std::fabs(targetPos.z - playerPos.z);
@@ -595,7 +560,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
                     playerPos.z, targetPos.z, heightDiff);
             }
 
-            if (targetState == AnimUtil::kStanding && settings->NonCombat.EnableRotation) {
+            if (targetState == Feed::kStanding && settings->NonCombat.EnableRotation) {
                 AnimUtil::RotateTargetToClosest(target, player);
                 AnimUtil::RotateAttackerToTarget(player, target);
             }
@@ -603,7 +568,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
         // Calculate direction for animation selection (can be done immediately)
         bool isBehind = false;
-        if (targetState == AnimUtil::kStanding) {
+        if (targetState == Feed::kStanding) {
             isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
         } else {
             // For sitting/sleeping, just detect direction without rotating
@@ -617,7 +582,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         context.isCombat = playerInCombat;  // Use PLAYER's combat state (forces lethal animations)
         context.isSneaking = player->IsSneaking();
         context.isHungry = (vampireStage >= settings->Animation.HungryThreshold);
-        context.targetIsStanding = (targetState == AnimUtil::kStanding);
+        context.targetIsStanding = (targetState == Feed::kStanding);
         context.isBehind = isBehind;
         context.isLethal = isLethalFeedInProgress_ || playerInCombat;  // User choice OR forced by player combat
 
@@ -663,66 +628,12 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         bool hasOARAnimation = (anim != nullptr && animName != "Default");
 
         bool isPairedAnim = true;
-        const char* idleEditorID = AnimUtil::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim, isLethal);
+        const char* idleEditorID = Feed::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim, isLethal);
 
-        // Use IdleParser to find kill move when:
-        // 1. Combat feed (target in combat), OR
-        // 2. Lethal feed (player held button) with weapon drawn
-        // Only for standing targets (sitting/sleeping use different animations)
-        // bool weaponDrawn = player->AsActorState() && player->AsActorState()->IsWeaponDrawn();
-        // bool useKillMove = settings->Combat.UseIdleManager &&
-        //                   (targetState == AnimUtil::kStanding || targetState == AnimUtil::kCombat) &&
-        //                   (targetState == AnimUtil::kCombat || (isLethal && weaponDrawn));
-
-        // RE::TESIdleForm* killMoveIdle = nullptr;
-
-        // if (useKillMove) {
-        //     SKSE::log::info("[KillMove] Attempting IdleParser selection (combat={}, lethal={}, weaponDrawn={})",
-        //         targetState == AnimUtil::kCombat, isLethal, weaponDrawn);
-
-        //     auto idleContext = IdleParser::BuildIdleContext(player, feedTarget);
-
-        //     SKSE::log::info("[KillMove] Player weapon type: {}", static_cast<int>(idleContext.weaponType));
-
-        //     // Start from NonMountedCombatRightPower to include both front and back kill moves
-        //     // VL_KillmovesRoot -> VL_KillmovesBackRoot contains back kill moves
-        //     // VL_KillmovesRoot -> KillMoveNPCRoot contains front kill moves
-        //     auto graph = IdleParser::BuildIdleGraphFromEditorID("NonMountedCombatRightPower", 20);
-        //     auto result = IdleParser::SelectIdleFromGraph(graph, idleContext, true);  // verbose=true for debugging
-
-        //     if (result.success && result.selectedIdle) {
-        //         SKSE::log::info("[KillMove] Selected: '{}' (FormID: {:08X})",
-        //             result.editorID, result.selectedIdle->GetFormID());
-
-        //         killMoveIdle = result.selectedIdle;
-        //         idleEditorID = result.selectedIdle->GetFormEditorID();
-        //         isPairedAnim = true;
-        //     } else {
-        //         SKSE::log::warn("[KillMove] Selection failed: {} - using default", result.failureReason);
-        //     }
-        // }
 
         AnimUtil::SetFeedGraphVars(player, feedType);
         AnimUtil::SetFeedGraphVars(feedTarget, feedType);
 
-        // // Use PlayIdleBypassConditions for kill moves (bypasses parent conditions)
-        // if (killMoveIdle) {
-        //     SKSE::log::info("[KillMove] Playing '{}' with condition bypass", idleEditorID);
-        //     IdleParser::PlayIdleBypassConditions(player, killMoveIdle, feedTarget);
-
-        //     // Send events and handle integration (same as ExecuteFeed)
-        //     PapyrusCall::SendOnVampireFeedEvent(feedTarget);
-        //     PapyrusCall::SendDAO_VampireFeedEvent(player, feedTarget);
-
-        //     if (!TargetState::IsWerewolf(player)) {
-        //         auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
-        //         if (vampireQuest) {
-        //             PapyrusCall::CallVampireFeed(vampireQuest, feedTarget, isLethal);
-        //         }
-        //     }
-        // } else {
-        //     ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
-        // }
 
         ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
         // Reset lethal flag after use (embrace flag reset by integration)
