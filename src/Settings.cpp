@@ -181,6 +181,7 @@ void Settings::LoadINI() {
     Integration.DeepSacrilegeIntegration = ini.GetBoolValue("Integration", "DeepSacrilegeIntegration", Integration.DeepSacrilegeIntegration);
     Integration.EnableSacrosanctInCombat = ini.GetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat);
     Integration.EnableSacrilegeInCombat = ini.GetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat);
+    Integration.EnableVampireFeedProxy = ini.GetBoolValue("Integration", "EnableVampireFeedProxy", Integration.EnableVampireFeedProxy);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
@@ -391,6 +392,8 @@ void Settings::SaveINI() {
         "; Use C++ integration for Sacrosanct during combat (bypasses AI-driven state issues)");
     ini.SetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat,
         "; Use C++ integration for Sacrilege during combat (bypasses AI-driven state issues)");
+    ini.SetBoolValue("Integration", "EnableVampireFeedProxy", Integration.EnableVampireFeedProxy,
+        "; When VampireFeedProxy.dll is detected, skip vanilla feed events (proxy handles them)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

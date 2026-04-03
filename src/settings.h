@@ -124,6 +124,7 @@ public:
         bool DeepSacrilegeIntegration{ true };      // Use C++ to mimic Sacrilege ProcessFeed (bypasses Papyrus)
         bool EnableSacrosanctInCombat{ true };      // Use C++ integration for Sacrosanct during combat
         bool EnableSacrilegeInCombat{ true };       // Use C++ integration for Sacrilege during combat
+        bool EnableVampireFeedProxy{ true };        // Skip vanilla feed events when VampireFeedProxy.dll is detected
     } Integration;
 
     void LoadINI();
