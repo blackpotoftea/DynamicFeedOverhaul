@@ -189,6 +189,15 @@ namespace CustomFeed {
         //     SKSE::log::debug("[CustomFeed] SetAIDriven(false) called");
         // }
 
+        // Release pacified target
+        auto targetRef = feedTargetHandle_.get();
+        if (targetRef) {
+            auto* target = targetRef->As<RE::Actor>();
+            if (target) {
+                AnimUtil::UndoPacifyActor(target);
+            }
+        }
+
         // Increment dead feed count only if target was already dead when feed started
         // Don't count lethal feeds that killed the target
         if (wasTargetDeadAtStart_) {
