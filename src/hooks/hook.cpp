@@ -1,5 +1,6 @@
 #include "hooks/hook.h"
 #include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedSession.h"
 #include "feed/WitnessDetection.h"
 #include "Settings.h"
 #include "utils/MenuCheck.h"
@@ -25,7 +26,7 @@ namespace {
 
             // 2. Witness Check (only if enabled in settings)
             if (settings->Combat.EnableWitnessDetection) {
-                if (FeedAnimState::IsFeedActive()) {
+                if (FeedSession::IsActive()) {
                     sink->witnessCheckTimer_ += a_delta;
                     if (sink->witnessCheckTimer_ > settings->Combat.WitnessCheckInterval) {
                         sink->witnessCheckTimer_ = 0.0f;

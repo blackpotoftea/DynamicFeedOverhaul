@@ -6,6 +6,7 @@ set(headers ${headers}
     src/hooks/hook.h
     src/feed/TargetState.h
     src/feed/PairedAnimPromptSink.h
+    src/feed/FeedSession.h
     src/feed/FeedIconOverlay.h
     src/feed/WitnessDetection.h
     src/papyrus/PapyrusCall.h

@@ -180,23 +180,10 @@ namespace CustomFeed {
         SKSE::log::info("[CustomFeed] ForceStop called");
     }
 
-    // Called when feed ends normally - restores player control
+    // Called when feed ends normally - handles non-FeedSession cleanup
+    // NOTE: Pacify cleanup is now handled by FeedSession::CleanupSession()
     void OnComplete() {
         SKSE::log::debug("[CustomFeed] OnComplete");
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        // if (player) {
-        //     player->SetAIDriven(false);
-        //     SKSE::log::debug("[CustomFeed] SetAIDriven(false) called");
-        // }
-
-        // Release pacified target
-        auto targetRef = feedTargetHandle_.get();
-        if (targetRef) {
-            auto* target = targetRef->As<RE::Actor>();
-            if (target) {
-                AnimUtil::UndoPacifyActor(target);
-            }
-        }
 
         // Increment dead feed count only if target was already dead when feed started
         // Don't count lethal feeds that killed the target
@@ -210,13 +197,6 @@ namespace CustomFeed {
             }
         }
         wasTargetDeadAtStart_ = false;
-
-        // // Restore weapon/magic drawn state if it was drawn before feeding
-        // if (player && wasWeaponDrawn_) {
-        //     SKSE::log::info("[CustomFeed] OnComplete: Restoring weapon drawn state");
-        //     AnimUtil::redrawWeapon(player);
-        //     wasWeaponDrawn_ = false;  // Reset the flag
-        // }
 
         ClearFeedTarget();
     }

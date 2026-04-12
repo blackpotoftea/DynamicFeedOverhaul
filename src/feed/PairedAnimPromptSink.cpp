@@ -1,5 +1,6 @@
 #include "PCH.h"
 #include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedSession.h"
 #include "Settings.h"
 #include "feed/TargetState.h"
 #include "papyrus/PapyrusCall.h"
@@ -19,78 +20,8 @@
 
 extern std::atomic<SkyPromptAPI::ClientID> g_clientID;
 
-namespace FeedAnimState {
-    // Single atomic state enum prevents race conditions between coupled states
-    enum class State {
-        Idle,     // No feed active
-        Active,   // Feed in progress
-        Ended     // Feed just ended (needs acknowledgment)
-    };
-
-    std::atomic<State> feedState{State::Idle};
-
-    void MarkFeedStarted() {
-        feedState.store(State::Active, std::memory_order_release);
-        SKSE::log::info("========== FEED STARTED ==========");
-
-        // Apply time slowdown if enabled and player is in combat
-        auto* settings = Settings::GetSingleton();
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        bool isCombat = player && player->IsInCombat();
-
-        if (settings->Animation.EnableTimeSlowdown && isCombat) {
-            auto* timer = RE::BSTimer::GetSingleton();
-            if (timer) {
-                timer->SetGlobalTimeMultiplier(settings->Animation.TimeSlowdownMultiplier, true);
-                SKSE::log::info("Combat feed time slowdown applied: {}x", settings->Animation.TimeSlowdownMultiplier);
-            }
-        }
-    }
-
-    void MarkFeedEnded() {
-        feedState.store(State::Ended, std::memory_order_release);
-        SKSE::log::info("========== FEED ENDED ==========");
-
-        // Always reset time multiplier to normal (safe even if not slowed)
-        auto* timer = RE::BSTimer::GetSingleton();
-        if (timer) {
-            timer->SetGlobalTimeMultiplier(1.0f, true);
-        }
-
-        // Clear kill move flag (was set to prevent Quick Loot etc. during animation)
-        // Get target before clearing the reference
-        auto target = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget();
-        if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-            AnimUtil::SetInKillMove(player, false);
-        }
-        if (target) {
-            AnimUtil::SetInKillMove(target.get(), false);
-        }
-
-        // Clear the active feed target (thread-safe)
-        PairedAnimPromptSink::GetSingleton()->SetActiveFeedTarget(nullptr);
-
-        CustomFeed::OnComplete();
-        // disable as require more refactor
-        //TwoSingleFeed::OnComplete();
-        PairedAnimPromptSink::GetSingleton()->RefreshPrompt();
-    }
-
-    bool CheckAndClearFeedEnded() {
-        // Atomically check if ended and transition to idle
-        State expected = State::Ended;
-        bool wasEnded = feedState.compare_exchange_strong(
-            expected, State::Idle,
-            std::memory_order_acq_rel,
-            std::memory_order_acquire
-        );
-        return wasEnded;
-    }
-
-    bool IsFeedActive() {
-        return feedState.load(std::memory_order_acquire) == State::Active;
-    }
-}
+// NOTE: FeedAnimState namespace has been removed - use FeedSession instead
+// All state management is now centralized in FeedSession namespace
 
 // AnimEventSink Implementation
 std::chrono::steady_clock::time_point AnimEventSink::registeredTime_{};
@@ -111,19 +42,21 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
 
     const auto& tag = event->tag;
 
-    if (tag == "PairEnd" || tag == "IdleStop") {
-        SKSE::log::info("{} detected - marking feed ended", tag.c_str());
+    if (tag == "KillMoveStart") {
+        // Check if we're waiting for this event after PlayIdle
+        FeedSession::CheckKillMoveStartDetected();
+    }
+    else if (tag == "PairEnd" || tag == "IdleStop") {
+        SKSE::log::info("{} detected - notifying FeedSession", tag.c_str());
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
             registeredTime_ = std::chrono::steady_clock::time_point{};
         }
 
-        // Move to main thread to avoid race conditions on feedTargetHandle_
+        // Move to main thread - FeedSession::OnAnimationEnded handles all cleanup
         SKSE::GetTaskInterface()->AddTask([]() {
-            FeedAnimState::MarkFeedEnded();
-            AnimEventSink::Unregister();
-            SKSE::log::debug("Animation event sink unregistered (deferred)");
+            FeedSession::OnAnimationEnded();
         });
     } else {
          // Log all events during feed to discover weapon-related events
@@ -155,25 +88,8 @@ void AnimEventSink::Unregister() {
 }
 
 void AnimEventSink::CheckTimeout() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (registeredTime_.time_since_epoch().count() == 0) return;
-
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - registeredTime_).count();
-    
-    float timeout = Settings::GetSingleton()->General.AnimationTimeout;
-
-    if (elapsed >= timeout) {
-        SKSE::log::warn("Animation event timeout ({:.1f}s) - forcing prompt refresh", timeout);
-        registeredTime_ = std::chrono::steady_clock::time_point{}; // Reset
-        lock.unlock(); // Release lock before calling external functions that might call back or take time
-
-        // Move to main thread to avoid race conditions on feedTargetHandle_
-        SKSE::GetTaskInterface()->AddTask([]() {
-            FeedAnimState::MarkFeedEnded();
-            AnimEventSink::Unregister();
-        });
-    }
+    // Delegate to FeedSession which tracks its own start time
+    FeedSession::CheckTimeout();
 }
 
 // PairedAnimPromptSink Implementation
@@ -365,124 +281,8 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
 
 
 
-void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal, bool hasOARAnimation) {
-    auto* settings = Settings::GetSingleton();
-
-    // if (settings->NonCombat.UseTwoSingleAnimations && isPairedAnim) {
-    //     SKSE::log::info("Using two-single animation mode");
-    //     // temporary disabled
-    //     // if (TwoSingleFeed::PlayTwoSingleFeed(target)) {
-    //     //     PapyrusCall::SendOnVampireFeedEvent(target);
-    //     //     auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
-    //     //     if (vampireQuest) {
-    //     //         PapyrusCall::CallVampireFeed(vampireQuest, target);
-    //     //     } else {
-    //     //         SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
-    //     //     }
-    //     //     return;
-    //     // }
-    //     SKSE::log::warn("Two-single feed failed, falling back to paired animation");
-    // }
-
-
-    SKSE::log::info("Playing feed idle '{}' (paired={}, lethal={})", idleEditorID, isPairedAnim, isLethal);
-
-    // Create callback that runs AFTER animation starts successfully (on game thread)
-    // This ensures integration logic runs only when animation is actually playing
-    auto onAnimationResult = [isLethal, hasOARAnimation](bool success, RE::Actor* callbackTarget) {
-        if (!success) {
-            SKSE::log::warn("CustomFeed failed - animation did not start");
-            return;
-        }
-
-        SKSE::log::info("Animation started successfully - running integration");
-
-        auto* player = RE::PlayerCharacter::GetSingleton();
-
-        // Check if VampireFeedProxy handles vampire feed - if so, skip vanilla feed calls
-        auto* settings = Settings::GetSingleton();
-        bool proxyHandlesFeed = settings->Integration.EnableVampireFeedProxy &&
-                                VampireFeedProxyIntegration::IsAvailable();
-
-        if (proxyHandlesFeed) {
-            SKSE::log::info("VampireFeedProxy detected - skipping vanilla vampire feed event");
-        } else {
-            PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
-        }
-
-        // Send custom DAO_VampireFeed event with attacker and target (always send our custom event)
-        if (player) {
-            PapyrusCall::SendDAO_VampireFeedEvent(player, callbackTarget);
-        }
-
-        // Only call vampire script if NOT a werewolf AND proxy is not handling it
-        if (player && !TargetState::IsWerewolf(player) && !proxyHandlesFeed) {
-            auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
-            if (vampireQuest) {
-                // If lethal, the kill move animation handles the kill - don't double-kill in integration
-                bool animationHandlesKill = isLethal;
-                PapyrusCall::CallVampireFeed(vampireQuest, callbackTarget, isLethal, animationHandlesKill);
-            } else {
-                SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
-            }
-        }
-        // Werewolf corpse feeding
-        else if (player && TargetState::IsWerewolf(player) && callbackTarget && callbackTarget->IsDead()) {
-            SKSE::log::info("Werewolf corpse feed - applying effects");
-
-            // 1. Apply PlayerWerewolfFeedVictimSpell to player
-            auto* feedSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("PlayerWerewolfFeedVictimSpell");
-            if (feedSpell) {
-                VampireIntegrationUtils::CastSpell(feedSpell, player, player);
-                SKSE::log::debug("Applied PlayerWerewolfFeedVictimSpell");
-            } else {
-                SKSE::log::warn("PlayerWerewolfFeedVictimSpell not found");
-            }
-
-            // 2. Call PlayerWerewolfChangeScript.Feed()
-            auto* werewolfQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerWerewolfQuest");
-            if (werewolfQuest) {
-                VampireIntegrationUtils::CallPapyrusMethod(werewolfQuest, "PlayerWerewolfChangeScript", "Feed");
-                SKSE::log::debug("Called PlayerWerewolfChangeScript.Feed()");
-            } else {
-                SKSE::log::warn("PlayerWerewolfQuest not found");
-            }
-        }
-
-        // Integration-specific post-feed handling
-        PapyrusCall::VampireIntegration integration = PapyrusCall::DetectVampireIntegration();
-        switch (integration) {
-            case PapyrusCall::VampireIntegration::Sacrosanct:
-                SKSE::log::debug("Post-feed: Sacrosanct integration active - letting Sacrosanct handle kill");
-                // Sacrosanct handles killing via ProcessFeed call above
-                // No additional action needed
-                break;
-
-            case PapyrusCall::VampireIntegration::BetterVampires:
-                SKSE::log::debug("Post-feed: Better Vampires integration active");
-                // Better Vampires may handle killing differently
-                // No additional action needed for now
-                break;
-
-            case PapyrusCall::VampireIntegration::Vanilla:
-            default:
-                SKSE::log::debug("Post-feed: Vanilla vampire system active");
-                // Only kill if:
-                // 1. User wants lethal feed
-                // 2. NO OAR combat animation found (if OAR anim exists, kill is baked in)
-                if (isLethal && callbackTarget && !hasOARAnimation) {
-                    SKSE::log::info("No OAR animation found - manually killing target after animation");
-                    AnimUtil::KillTarget(callbackTarget);
-                } else if (isLethal && hasOARAnimation) {
-                    SKSE::log::info("OAR combat animation found - letting animation handle kill");
-                }
-                break;
-        }
-    };
-
-    // PlayPairedFeed now takes callback - integration runs after animation starts
-    CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim, onAnimationResult);
-}
+// NOTE: ExecuteFeed has been replaced by FeedSession::Start()
+// Integration logic is now inline in HandleFeedAccepted's onAnimationStarted callback
 
 // We have 2 animation systems Vannila Idle and OAR which we set via GraphVariable
 // We need both select idle -> set correct graph variable to match OAR animations
@@ -494,21 +294,11 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     RE::Actor* feedTarget = feedTargetPtr.get();
 
     auto* settings = Settings::GetSingleton();
-
-    // Store the feed target for witness detection (thread-safe)
-    SetActiveFeedTarget(feedTarget);
-
-    HidePrompt();
-
-    FeedAnimState::MarkFeedStarted();
-    AnimEventSink::Register();
-
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (!player) return;
-    
-    // Mark player and target as in kill move to prevent Quick Loot and other mods from interfering
-    AnimUtil::SetInKillMove(player, true);
-    AnimUtil::SetInKillMove(feedTarget, true);
+
+    // Hide prompt immediately
+    HidePrompt();
 
     auto furnitureRef = TargetState::GetFurnitureReference(feedTarget);
 
@@ -516,34 +306,23 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         feedTarget->GetName(), feedTarget->GetFormID());
 
     if (settings->IconOverlay.EnableIconOverlay) {
-        // Trigger bite animation instead of just stopping
         FeedIconOverlay::GetSingleton()->TriggerFeedAnimation();
     }
 
-    bool isInCombat = false;  // Target's combat state
+    // Determine target state and combat
+    bool isInCombat = false;
     int targetState = AnimUtil::DetermineTargetState(feedTarget, isInCombat);
-
-    // Player's combat state forces lethal feed
     bool playerInCombat = player->IsInCombat();
     SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
-
-    // Pacify target during combat to prevent attack interruption
-    if (isInCombat || playerInCombat) {
-        AnimUtil::PacifyActor(feedTarget);
-    }
 
     int vampireStage = PapyrusCall::GetVampireStage();
     bool useTwoSingle = settings->NonCombat.UseTwoSingleAnimations && targetState == Feed::kStanding;
 
     if (useTwoSingle) {
-        // int feedType = 0;
-
-        // AnimUtil::SetFeedGraphVars(player, feedType);
-        // AnimUtil::SetFeedGraphVars(feedTarget, feedType);
-
-        // ExecuteFeed(nullptr, feedTarget, true);
+        // TwoSingle mode - currently disabled
+        // TODO: implement with FeedSession
     } else {
-        // Execute all positioning/rotation in a single main-thread task
+        // Queue positioning task (runs before FeedSession setup task)
         auto playerHandle = player->CreateRefHandle();
         auto targetHandle = feedTarget->CreateRefHandle();
 
@@ -574,7 +353,6 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
                 AnimUtil::ApplyHeightAdjustment(player, target, settings->NonCombat.MinHeightDiff, settings->NonCombat.MaxHeightDiff);
 
-                // Log AFTER adjustment
                 playerPos = player->GetPosition();
                 targetPos = target->GetPosition();
                 heightDiff = std::fabs(targetPos.z - playerPos.z);
@@ -588,28 +366,21 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
             }
         });
 
-        // Calculate direction for animation selection (can be done immediately)
-        bool isBehind = false;
-        if (targetState == Feed::kStanding) {
-            isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
-        } else {
-            // For sitting/sleeping, just detect direction without rotating
-            isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
-        }
+        // Calculate direction for animation selection
+        bool isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
 
-        // --- New Registry Logic ---
+        // --- Animation Registry Logic ---
         Feed::FeedContext context;
         context.player = player;
         context.target = feedTarget;
-        context.isCombat = playerInCombat;  // Use PLAYER's combat state (forces lethal animations)
+        context.isCombat = playerInCombat;
         context.isSneaking = player->IsSneaking();
         context.isHungry = (vampireStage >= settings->Animation.HungryThreshold);
         context.targetIsStanding = (targetState == Feed::kStanding);
         context.isBehind = isBehind;
-        context.isLethal = isLethalFeedInProgress_ || playerInCombat;  // User choice OR forced by player combat
+        context.isLethal = isLethalFeedInProgress_ || playerInCombat;
 
         const Feed::AnimationDefinition* anim = nullptr;
-
         if (settings->General.DebugAnimationCycle) {
             anim = Feed::AnimationRegistry::GetSingleton()->GetNextDebugAnimation(context);
         } else {
@@ -638,27 +409,117 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
             SKSE::log::info("Lethal feed forced - player in combat");
         }
 
-        if (settings->General.ForceFeedType > 0){
+        if (settings->General.ForceFeedType > 0) {
             feedType = settings->General.ForceFeedType;
-            SKSE::log::info("Animation override set ");
+            SKSE::log::info("Animation override set");
         }
-
 
         SKSE::log::info("Registry match: {} (Type: {}, Lethal: {})", animName, feedType, isLethal);
 
-        // Check if we found a valid OAR animation (not "Default")
+        // Check if we found a valid OAR animation
         bool hasOARAnimation = (anim != nullptr && animName != "Default");
 
         bool isPairedAnim = true;
         const char* idleEditorID = Feed::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim, isLethal);
 
+        // Lookup idle form
+        auto* feedIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(idleEditorID);
+        if (!feedIdle) {
+            SKSE::log::error("Idle '{}' not found - cannot start feed", idleEditorID);
+            ShowPrompt(feedTarget);  // Restore prompt on failure
+            isLethalFeedInProgress_ = false;
+            return;
+        }
 
-        AnimUtil::SetFeedGraphVars(player, feedType);
-        AnimUtil::SetFeedGraphVars(feedTarget, feedType);
+        // Create integration callback (runs when animation starts successfully)
+        auto onAnimationStarted = [isLethal, hasOARAnimation](RE::Actor* callbackTarget) {
+            SKSE::log::info("Animation started successfully - running integration");
 
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            auto* settings = Settings::GetSingleton();
 
-        ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
-        // Reset lethal flag after use (embrace flag reset by integration)
+            // Check if VampireFeedProxy handles vampire feed
+            bool proxyHandlesFeed = settings->Integration.EnableVampireFeedProxy &&
+                                    VampireFeedProxyIntegration::IsAvailable();
+
+            if (proxyHandlesFeed) {
+                SKSE::log::info("VampireFeedProxy detected - skipping vanilla vampire feed event");
+            } else {
+                PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
+            }
+
+            // Send custom DAO_VampireFeed event
+            if (player) {
+                PapyrusCall::SendDAO_VampireFeedEvent(player, callbackTarget);
+            }
+
+            // Vampire script handling
+            if (player && !TargetState::IsWerewolf(player) && !proxyHandlesFeed) {
+                auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
+                if (vampireQuest) {
+                    bool animationHandlesKill = isLethal;
+                    PapyrusCall::CallVampireFeed(vampireQuest, callbackTarget, isLethal, animationHandlesKill);
+                } else {
+                    SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
+                }
+            }
+            // Werewolf corpse feeding
+            else if (player && TargetState::IsWerewolf(player) && callbackTarget && callbackTarget->IsDead()) {
+                SKSE::log::info("Werewolf corpse feed - applying effects");
+
+                auto* feedSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("PlayerWerewolfFeedVictimSpell");
+                if (feedSpell) {
+                    VampireIntegrationUtils::CastSpell(feedSpell, player, player);
+                    SKSE::log::debug("Applied PlayerWerewolfFeedVictimSpell");
+                }
+
+                auto* werewolfQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerWerewolfQuest");
+                if (werewolfQuest) {
+                    VampireIntegrationUtils::CallPapyrusMethod(werewolfQuest, "PlayerWerewolfChangeScript", "Feed");
+                    SKSE::log::debug("Called PlayerWerewolfChangeScript.Feed()");
+                }
+            }
+
+            // Integration-specific post-feed handling
+            PapyrusCall::VampireIntegration integration = PapyrusCall::DetectVampireIntegration();
+            if (integration == PapyrusCall::VampireIntegration::Vanilla) {
+                if (isLethal && callbackTarget && !hasOARAnimation) {
+                    SKSE::log::info("No OAR animation found - manually killing target");
+                    AnimUtil::KillTarget(callbackTarget);
+                } else if (isLethal && hasOARAnimation) {
+                    SKSE::log::info("OAR animation found - letting animation handle kill");
+                }
+            }
+        };
+
+        // Create completion callback
+        auto onSessionComplete = [](bool success, RE::Actor* target) {
+            if (!success) {
+                SKSE::log::warn("Feed session failed");
+            }
+            // FeedSession handles all cleanup - nothing else needed here
+        };
+
+        // Start the feed session - handles all setup (kill move, pacify, graph vars, event sink)
+        SKSE::log::info("Starting FeedSession: idle='{}' (paired={}, feedType={})",
+            idleEditorID, isPairedAnim, feedType);
+
+        bool started = FeedSession::Start(
+            player,
+            feedTarget,
+            feedIdle,
+            isPairedAnim,
+            feedType,
+            onAnimationStarted,
+            onSessionComplete
+        );
+
+        if (!started) {
+            SKSE::log::warn("Failed to start FeedSession");
+            ShowPrompt(feedTarget);  // Restore prompt on failure
+        }
+
+        // Reset lethal flag after use
         isLethalFeedInProgress_ = false;
     }
 }
@@ -795,8 +656,8 @@ bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
         return true;
     }
 
-    if (FeedAnimState::IsFeedActive()) {
-        SKSE::log::debug("IsExcluded: feed already active");
+    if (FeedSession::IsActive()) {
+        SKSE::log::debug("IsExcluded: feed session already active");
         return true;
     }
     
@@ -964,10 +825,10 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
     }
 
     // Check animation event timeout (safety net)
-    AnimEventSink::CheckTimeout();
+    FeedSession::CheckTimeout();
 
     // Check if feed animation just ended - force resend prompt
-    bool feedJustEnded = FeedAnimState::CheckAndClearFeedEnded();
+    bool feedJustEnded = FeedSession::CheckAndClearFeedEnded();
 
     bool isValidTarget = false;
     // Check if looking at a valid feed target

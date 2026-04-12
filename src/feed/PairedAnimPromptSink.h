@@ -21,12 +21,8 @@ struct PromptDef {
     std::function<void(RE::Actor* target, bool holdComplete)> onAccept;
 };
 
-namespace FeedAnimState {
-    void MarkFeedStarted();
-    void MarkFeedEnded();
-    bool CheckAndClearFeedEnded();
-    bool IsFeedActive();
-}
+// NOTE: FeedAnimState namespace removed - use FeedSession instead
+// #include "feed/FeedSession.h" for FeedSession::IsActive(), etc.
 
 class AnimEventSink : public RE::BSTEventSink<RE::BSAnimationGraphEvent> {
 public:
@@ -103,7 +99,7 @@ private:
 
     void RegisterCorePromptCallback();
 
-    static void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal = false, bool hasOARAnimation = false);
+    // NOTE: ExecuteFeed removed - replaced by FeedSession::Start()
 
     void HandleFeedAcceptedTest();  // Minimal test for kill move playback
     void HandleTimingOut();
