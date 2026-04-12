@@ -180,6 +180,11 @@ namespace AnimUtil {
         // Stop any ongoing attack/stagger animations
         actor->NotifyAnimationGraph("attackStop");
         actor->NotifyAnimationGraph("staggerStop");
+        // actor->NotifyAnimationGraph("blockStop");
+        // actor->NotifyAnimationGraph("recoilStop");
+        // actor->NotifyAnimationGraph("bashStop");
+        // actor->NotifyAnimationGraph("InterruptCast");
+        // actor->NotifyAnimationGraph("IdleForceDefaultState");
 
         // Handle knocked-down state - force actor to normal state if getting up
         auto* actorState = actor->AsActorState();
@@ -198,6 +203,7 @@ namespace AnimUtil {
     // Play idle animation (thread-safe)
     // callbackTarget: actor to pass to callback (for integration), may differ from animation target
     // isPaired: if true, use callbackTarget for PlayIdle; if false, play solo animation but still pass target to callback
+    // TODO refacotr condiotn and status that applie, at the moment it's all over the places
     void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* callbackTarget,
                   PlayIdleCallback callback, bool isPaired) {
         if (!actor || !idle) {
@@ -218,6 +224,32 @@ namespace AnimUtil {
         SKSE::log::debug("[AnimUtil::playIdle] Queuing idle {:X} for {} (callbackTarget: {}, isPaired: {})",
             idleFormID, actorName, callbackTargetName, isPaired);
 
+        // Task 1: Prepare actors for paired idle (clear stagger/attack/knockdown states)
+        SKSE::GetTaskInterface()->AddTask([actorHandle, callbackTargetHandle, actorName, isPaired] {
+            if (!isPaired) return;  // Skip preparation for non-paired animations
+
+            auto refPtr = actorHandle.get();
+            if (!refPtr) return;
+
+            auto* a = refPtr->As<RE::Actor>();
+            if (!a) return;
+
+            RE::Actor* callbackTargetActor = nullptr;
+            if (callbackTargetHandle) {
+                auto callbackTargetRefPtr = callbackTargetHandle.get();
+                if (callbackTargetRefPtr) {
+                    callbackTargetActor = callbackTargetRefPtr->As<RE::Actor>();
+                }
+            }
+
+            if (callbackTargetActor) {
+                SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
+                PrepareActorForPairedIdle(a);
+                PrepareActorForPairedIdle(callbackTargetActor);
+            }
+        });
+
+        // Task 2: Play the actual idle animation
         SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, callbackTargetHandle, actorName, callbackTargetName, callback, isPaired] {
             // 1. Resolve the handle to get NiPointer<TESObjectREFR>
             auto refPtr = actorHandle.get();
@@ -262,13 +294,6 @@ namespace AnimUtil {
                         animTarget = callbackTargetRefPtr.get();
                     }
                 }
-            }
-
-            // Preprocess for paired animations - clear stagger/attack/knockdown states
-            if (isPaired && callbackTargetActor) {
-                SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
-                PrepareActorForPairedIdle(a);
-                PrepareActorForPairedIdle(callbackTargetActor);
             }
 
             auto* process = a->GetActorRuntimeData().currentProcess;
