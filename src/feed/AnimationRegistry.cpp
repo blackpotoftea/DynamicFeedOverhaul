@@ -126,8 +126,9 @@ namespace Feed {
             if (anim.direction == Direction::Front && context.isBehind) continue;
             if (anim.direction == Direction::Back && !context.isBehind) continue;
 
-            // 4. Hunger filter: Sated player can't use hungry anims, but hungry player can use both
-            if (anim.isHungry && !context.isHungry) continue;
+            // 4. Hunger filter: In combat, allow all animations for variety
+            //    Outside combat: Sated player can't use hungry anims, but hungry player can use both
+            if (anim.isHungry && !context.isHungry && !shouldUseCombat) continue;
 
             // 5. Sex filter: Skip gender-specific anims that don't match player (Unisex always passes)
             if (anim.sex != Sex::Unisex && anim.sex != playerSex) continue;
@@ -137,43 +138,43 @@ namespace Feed {
 
         if (candidates.empty()) return nullptr;
 
-        // Weighted Selection / Random
-        // Priority: Specific Gender > Unisex
-        // Priority: Hungry > Sated (if hungry)
-        
-        // Filter candidates for best match
-        std::vector<const AnimationDefinition*> bestCandidates;
-        int bestScore = -1;
-
-        for (const auto* cand : candidates) {
-            int score = 0;
-
-            // Prioritize lethal animations if user wants lethal feed
-            if (context.isLethal && cand->isLethal) score += 10; // Highest priority for lethal match
-
-            if (cand->sex == playerSex) score += 2; // Specific gender match
-            if (cand->sex == Sex::Unisex) score += 1;
-
-            if (context.isHungry && cand->isHungry) score += 2; // Prefer hungry anims if hungry
-            if (!cand->isHungry) score += 1;
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestCandidates.clear();
-                bestCandidates.push_back(cand);
-            } else if (score == bestScore) {
-                bestCandidates.push_back(cand);
-            }
-        }
-
-        if (bestCandidates.empty()) return nullptr;
-
-        // Pick random from best (thread-safe)
+        // Thread-safe random generator
         thread_local std::random_device rd;
         thread_local std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, static_cast<int>(bestCandidates.size() - 1));
 
-        return bestCandidates[dis(gen)];
+        // Weighted selection: In combat, keep hungry animations "fresh" by making them rarer
+        // Outside combat or when player is hungry, use uniform random
+        if (shouldUseCombat && !context.isHungry) {
+            // Combat + sated player: Weight non-hungry animations higher (70/30 split roughly)
+            std::vector<double> weights;
+            weights.reserve(candidates.size());
+
+            for (const auto* cand : candidates) {
+                double weight = 1.0;
+
+                // Non-hungry animations: higher weight (more common)
+                // Hungry animations: lower weight (kept fresh/surprising)
+                if (cand->isHungry) {
+                    weight = 0.3;  // ~30% relative chance
+                } else {
+                    weight = 1.0;  // Base weight
+                }
+
+                // Slight preference for gender-specific animations
+                if (cand->sex == playerSex) {
+                    weight *= 1.2;
+                }
+
+                weights.push_back(weight);
+            }
+
+            std::discrete_distribution<> dis(weights.begin(), weights.end());
+            return candidates[dis(gen)];
+        }
+
+        // Default: Uniform random selection
+        std::uniform_int_distribution<> dis(0, static_cast<int>(candidates.size() - 1));
+        return candidates[dis(gen)];
     }
 
     const AnimationDefinition* AnimationRegistry::GetNextDebugAnimation(const FeedContext& context) {
