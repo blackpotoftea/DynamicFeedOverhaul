@@ -104,11 +104,22 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 	}
 }
 
+// Stringification macros for compile-time defines
+#ifndef GIT_SHA1
+    #define GIT_SHA1 "unknown"
+#endif
+#ifndef GIT_SHA1_FULL
+    #define GIT_SHA1_FULL "unknown"
+#endif
+#ifndef PROJECT_VERSION
+    #define PROJECT_VERSION "0.0.0"
+#endif
+
 SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
 	SetupLog();
 
-    SKSE::log::info("Dynamic Feed Overhaul loaded");
+    SKSE::log::info("Dynamic Feed Overhaul v{} ({})", PROJECT_VERSION, GIT_SHA1);
 
     // Load settings from INI
     Settings::GetSingleton()->LoadINI();

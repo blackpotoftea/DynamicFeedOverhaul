@@ -282,6 +282,7 @@ namespace PapyrusCall {
         VampireIntegration integration = DetectVampireIntegration();
 
         switch (integration) {
+
             case VampireIntegration::Sacrosanct: {
                 auto* settings = Settings::GetSingleton();
                 bool isCombatFeed = target->IsInCombat();

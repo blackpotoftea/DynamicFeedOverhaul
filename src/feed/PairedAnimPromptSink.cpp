@@ -360,6 +360,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
                     playerPos.z, targetPos.z, heightDiff);
             }
 
+            // TODO review flag we shouldn't do OR as we want stnading combat sepprate state, like victim in combat state but not standing
             if ((targetState == Feed::kStanding || targetState == Feed::kCombat) && settings->NonCombat.EnableRotation) {
                 AnimUtil::RotateTargetToClosest(target, player);
                 AnimUtil::RotateAttackerToTarget(player, target);
@@ -422,6 +423,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         bool isPairedAnim = true;
         const char* idleEditorID = Feed::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim, isLethal);
 
+
         // Lookup idle form
         auto* feedIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(idleEditorID);
         if (!feedIdle) {
@@ -434,7 +436,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // Create integration callback (runs when animation starts successfully)
         auto onAnimationStarted = [isLethal, hasOARAnimation](RE::Actor* callbackTarget) {
             SKSE::log::info("Animation started successfully - running integration");
-
+            
             auto* player = RE::PlayerCharacter::GetSingleton();
             auto* settings = Settings::GetSingleton();
 
@@ -499,6 +501,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
             }
             // FeedSession handles all cleanup - nothing else needed here
         };
+
 
         // Start the feed session - handles all setup (kill move, pacify, graph vars, event sink)
         SKSE::log::info("Starting FeedSession: idle='{}' (paired={}, feedType={})",
@@ -747,6 +750,18 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
     if (AnimUtil::IsJumping(player)) {
         SKSE::log::debug("IsValidFeedTarget: false - player is jumping");
         return false;
+    }
+    // TODO Move health varaible to Settings
+    // 0.85. Check if player is dead/dying (health <= 0)
+    if (settings->PromptDisplay.HidePromptWhenPlayerDead) {
+        auto* avOwner = player->AsActorValueOwner();
+        if (avOwner) {
+            float health = avOwner->GetActorValue(RE::ActorValue::kHealth);
+            if (health <= 0.0f) {
+                SKSE::log::debug("IsValidFeedTarget: false - player health is 0");
+                return false;
+            }
+        }
     }
 
     // 0.9. Check if target is swimming or riding

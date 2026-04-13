@@ -24,6 +24,8 @@ namespace {
                 sink->OnPeriodicValidation();
             }
 
+            // TODO refactor wintess if there only npc and we are attacking there no point checking anytihg
+            // review errror and warn [PlayerUpdateHook] Feed active but target is null what's point of this?
             // 2. Witness Check (only if enabled in settings)
             if (settings->Combat.EnableWitnessDetection) {
                 if (FeedSession::IsActive()) {

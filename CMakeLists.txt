@@ -5,6 +5,46 @@ cmake_minimum_required(VERSION 3.21)
 # Set your project name. This will be the name of your SKSE .dll file.
 project(DynamicFeedOverhaul VERSION 0.0.1 LANGUAGES CXX)
 
+# Get Git version info
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE GIT_SHA1
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE GIT_SHA1_FULL
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" status --porcelain
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE GIT_DIRTY
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(GIT_DIRTY)
+        set(GIT_SHA1 "${GIT_SHA1}-dirty")
+    endif()
+else()
+    set(GIT_SHA1 "unknown")
+    set(GIT_SHA1_FULL "unknown")
+endif()
+message(STATUS "Git SHA1: ${GIT_SHA1}")
+
+# Configure version resource file for DLL properties
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/version.rc.in"
+    "${CMAKE_BINARY_DIR}/version.rc"
+    @ONLY
+)
+
 #
 
 # YOU DO NOT NEED TO EDIT ANYTHING BELOW HERE
@@ -40,10 +80,15 @@ find_package(directxtk CONFIG REQUIRED)
 find_path(SkyPromptAPI_INCLUDE_DIRS "SkyPrompt/API.hpp")
 include(cmake/headerlist.cmake)
 include(cmake/sourcelist.cmake)
-add_commonlibsse_plugin(${PROJECT_NAME} SOURCES ${headers} ${sources}) # <--- specifies plugin.cpp
+add_commonlibsse_plugin(${PROJECT_NAME} SOURCES ${headers} ${sources} "${CMAKE_BINARY_DIR}/version.rc") # <--- specifies plugin.cpp + version resource
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
-target_compile_definitions(${PROJECT_NAME} PRIVATE UNICODE _UNICODE NOMINMAX) # <--- fix Windows API issues
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    UNICODE _UNICODE NOMINMAX
+    GIT_SHA1="${GIT_SHA1}"
+    GIT_SHA1_FULL="${GIT_SHA1_FULL}"
+    PROJECT_VERSION="${PROJECT_VERSION}"
+) # <--- fix Windows API issues + version info
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/PCH.h) # <--- PCH.h is required!
 
 target_include_directories(

@@ -112,6 +112,7 @@ void Settings::LoadINI() {
     PromptDisplay.FacingAngleThreshold = static_cast<float>(ini.GetDoubleValue("PromptDisplay", "FacingAngleThreshold", PromptDisplay.FacingAngleThreshold));
     PromptDisplay.RelaxedCombatTargeting = ini.GetBoolValue("PromptDisplay", "RelaxedCombatTargeting", PromptDisplay.RelaxedCombatTargeting);
     PromptDisplay.MaxTargetDistance = static_cast<float>(ini.GetDoubleValue("PromptDisplay", "MaxTargetDistance", PromptDisplay.MaxTargetDistance));
+    PromptDisplay.HidePromptWhenPlayerDead = ini.GetBoolValue("PromptDisplay", "HidePromptWhenPlayerDead", PromptDisplay.HidePromptWhenPlayerDead);
 
     // NonCombat
     NonCombat.AllowStanding = ini.GetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding);
@@ -189,8 +190,8 @@ void Settings::LoadINI() {
         General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelayIdleSeconds);
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}, SecondaryKey=0x{:X}, SecondaryGamepadKey=0x{:X}",
         Input.FeedKey, Input.FeedGamepadKey, Input.SecondaryKey, Input.SecondaryGamepadKey);
-    SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
-        PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
+    SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}, HidePromptWhenPlayerDead={}",
+        PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold, PromptDisplay.HidePromptWhenPlayerDead);
     SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, EnableLevelCheck={}, MaxLevelDiff={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
@@ -268,6 +269,8 @@ void Settings::SaveINI() {
         "; Disable player facing requirement during combat (easier target selection in combat)");
     ini.SetDoubleValue("PromptDisplay", "MaxTargetDistance", PromptDisplay.MaxTargetDistance,
         "; Maximum distance to target for feed prompt to show (units, 250 = ~5 meters)");
+    ini.SetBoolValue("PromptDisplay", "HidePromptWhenPlayerDead", PromptDisplay.HidePromptWhenPlayerDead,
+        "; Don't show feed prompt when player health is 0 (dead/dying state)");
 
     // NonCombat
     ini.SetBoolValue("NonCombat", "AllowStanding", NonCombat.AllowStanding,

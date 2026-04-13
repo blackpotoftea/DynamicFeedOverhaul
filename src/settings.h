@@ -43,6 +43,7 @@ public:
         float FacingAngleThreshold{ 90.0f };  // Max angle (degrees) from player heading to target
         bool RelaxedCombatTargeting{ true };  // Disable facing requirement during combat
         float MaxTargetDistance{ 150.0f };    // Maximum distance to target for prompt to show (units)
+        bool HidePromptWhenPlayerDead{ false };  // Don't show prompt if player health is 0
     } PromptDisplay;
 
     // Non-combat feeding settings

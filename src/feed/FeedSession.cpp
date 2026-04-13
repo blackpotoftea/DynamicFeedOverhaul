@@ -4,6 +4,7 @@
 #include "feed/CustomFeed.h"
 #include "utils/AnimUtil.h"
 #include "Settings.h"
+#include <thread>
 
 namespace FeedSession {
 
@@ -30,9 +31,14 @@ namespace FeedSession {
         // KillMoveStart detection tracking
         std::atomic<bool> g_WaitingForKillMoveStart{false};
         std::chrono::steady_clock::time_point g_PlayIdleTime{};
+        constexpr int KILLMOVE_START_TIMEOUT_MS = 10;  // Time to wait for KillMoveStart before retry
 
-        // Configuration (can be made configurable later)
-        RetryConfig g_RetryConfig;
+        // Configuration - retry enabled (10 attempts * 50ms = 500ms max)
+        RetryConfig g_RetryConfig{
+            .maxAttempts = 10,
+            .retryDelayMs = 50,
+            .retryOnPlayIdleFalse = true
+        };
     }
 
     //=========================================================================
@@ -45,6 +51,7 @@ namespace FeedSession {
         void AttemptPlayIdle();
         void CleanupSession(const std::string& reason);
         void OnTimeout();
+        void CheckKillMoveStartTimeout(int attemptNum);
 
         // Cleanup based on SetupFlags - undoes exactly what was set up
         void CleanupSession(const std::string& reason) {
@@ -156,14 +163,12 @@ namespace FeedSession {
         // Attempt to play the idle animation
         void AttemptPlayIdle() {
             SessionData session;
-            OnAnimationStarted onStarted;
 
             {
                 std::lock_guard<std::mutex> lock(g_SessionMutex);
                 session = g_Session;
                 session.attemptNumber++;
                 g_Session.attemptNumber = session.attemptNumber;
-                onStarted = g_OnStarted;
             }
 
             SKSE::log::info("[FeedSession] PlayIdle attempt {}/{}",
@@ -209,41 +214,57 @@ namespace FeedSession {
                 return;
             }
 
+            // Get onStarted callback for solo animations (paired uses CheckKillMoveStartDetected)
+            OnAnimationStarted onStarted;
+            {
+                std::lock_guard<std::mutex> lock(g_SessionMutex);
+                onStarted = g_OnStarted;
+            }
+
             // Create PlayIdle callback
-            auto playIdleCallback = [onStarted, attemptNum = session.attemptNumber](bool success, RE::Actor* callbackTarget) {
+            // For PAIRED: onStarted callback is invoked in CheckKillMoveStartDetected() when KillMoveStart fires
+            // For SOLO: onStarted callback is invoked here immediately (no KillMoveStart event for solo)
+            bool isPaired = session.isPaired;
+            auto playIdleCallback = [attemptNum = session.attemptNumber, isPaired, onStarted](bool success, RE::Actor* callbackTarget) {
                 if (success) {
                     g_State.store(State::Playing);
-                    SKSE::log::info("[FeedSession] Animation started successfully on attempt {}", attemptNum);
+                    SKSE::log::info("[FeedSession] PlayIdle returned true on attempt {}", attemptNum);
 
-                    // Invoke start callback (integration logic)
-                    if (onStarted) {
+                    // For solo animations, invoke callback immediately (no KillMoveStart event)
+                    if (!isPaired && onStarted) {
+                        SKSE::log::info("[FeedSession] Solo animation - running integration callback immediately");
                         onStarted(callbackTarget);
                     }
+                    // For paired, integration callback will be invoked when KillMoveStart is detected
                 } else {
-                    // Check if we should retry (currently disabled)
-                    if (g_RetryConfig.retryOnPlayIdleFalse &&
-                        attemptNum < g_RetryConfig.maxAttempts) {
-
-                        g_State.store(State::Retrying);
-                        SKSE::log::warn("[FeedSession] PlayIdle failed, would retry... (disabled)");
-
-                        // Retry logic placeholder - currently just fail
-                        // In future: schedule delayed retry via thread + AddTask
-                    }
-
-                    // For now, always fail on PlayIdle failure
+                    // PlayIdle returned false - immediate failure
                     g_State.store(State::Failed);
-                    CleanupSession(fmt::format("PlayIdle failed on attempt {}", attemptNum));
+                    CleanupSession(fmt::format("PlayIdle returned false on attempt {}", attemptNum));
                 }
             };
 
-            // Set waiting flag for KillMoveStart detection
-            g_WaitingForKillMoveStart.store(true);
-            g_PlayIdleTime = std::chrono::steady_clock::now();
-            SKSE::log::debug("[FeedSession] Waiting for KillMoveStart event...");
+            // Only do KillMoveStart detection for paired animations
+            if (session.isPaired) {
+                g_WaitingForKillMoveStart.store(true);
+                g_PlayIdleTime = std::chrono::steady_clock::now();
+                SKSE::log::debug("[FeedSession] Waiting for KillMoveStart event (paired animation)...");
+            } else {
+                SKSE::log::debug("[FeedSession] Solo animation - skipping KillMoveStart detection");
+            }
 
             // Play the idle (AnimUtil::playIdle is generic - no feed-specific cleanup)
             AnimUtil::playIdle(player, idle, target, playIdleCallback, session.isPaired);
+
+            // Schedule KillMoveStart timeout check - ONLY for paired animations
+            if (session.isPaired) {
+                int currentAttempt = session.attemptNumber;
+                std::thread([currentAttempt]() {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(KILLMOVE_START_TIMEOUT_MS));
+                    SKSE::GetTaskInterface()->AddTask([currentAttempt]() {
+                        CheckKillMoveStartTimeout(currentAttempt);
+                    });
+                }).detach();
+            }
         }
 
         // Internal timeout handler
@@ -253,6 +274,39 @@ namespace FeedSession {
                 SKSE::log::warn("[FeedSession] Timeout triggered in state {}", static_cast<int>(current));
                 g_State.store(State::Failed);
                 CleanupSession("Session timeout");
+            }
+        }
+
+        // KillMoveStart timeout check - called after delay to detect failed animation start
+        void CheckKillMoveStartTimeout(int attemptNum) {
+            // Only act if still waiting for KillMoveStart
+            if (!g_WaitingForKillMoveStart.load()) {
+                return;  // Already detected or session ended
+            }
+
+            // Check if we're still in a state that expects animation
+            State current = g_State.load();
+            if (current != State::Playing) {
+                return;  // Session already failed/ended
+            }
+
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - g_PlayIdleTime).count();
+
+            SKSE::log::warn("[FeedSession] KillMoveStart timeout after {}ms - animation failed to start", elapsed);
+
+            // Clear waiting flag
+            g_WaitingForKillMoveStart.store(false);
+
+            // Check retry config
+            if (g_RetryConfig.retryOnPlayIdleFalse && attemptNum < g_RetryConfig.maxAttempts) {
+                SKSE::log::info("[FeedSession] Retrying PlayIdle (attempt {}/{})",
+                    attemptNum + 1, g_RetryConfig.maxAttempts);
+                AttemptPlayIdle();  // Retry
+            } else {
+                SKSE::log::error("[FeedSession] Max retries reached or retry disabled - failing session");
+                g_State.store(State::Failed);
+                CleanupSession("KillMoveStart timeout - animation failed to start");
             }
         }
 
@@ -351,22 +405,27 @@ namespace FeedSession {
             {
                 std::lock_guard<std::mutex> lock(g_SessionMutex);
 
-                // Set kill move flags
-                AnimUtil::SetInKillMove(player, true);
-                g_SetupFlags.playerKillMoveSet = true;
-                SKSE::log::debug("[FeedSession] Set player kill move flag");
+                // Set kill move flags - ONLY for paired animations
+                // Solo animations don't need kill move flags (player only, no sync needed)
+                if (isPaired) {
+                    AnimUtil::SetInKillMove(player, true);
+                    g_SetupFlags.playerKillMoveSet = true;
+                    SKSE::log::debug("[FeedSession] Set player kill move flag");
 
-                if (target) {
-                    AnimUtil::SetInKillMove(target, true);
-                    g_SetupFlags.targetKillMoveSet = true;
-                    SKSE::log::debug("[FeedSession] Set target kill move flag");
-                }
+                    if (target) {
+                        AnimUtil::SetInKillMove(target, true);
+                        g_SetupFlags.targetKillMoveSet = true;
+                        SKSE::log::debug("[FeedSession] Set target kill move flag");
+                    }
 
-                // Pacify if in combat
-                if (target && (targetInCombat || playerInCombat)) {
-                    AnimUtil::PacifyActor(target);
-                    g_SetupFlags.targetPacified = true;
-                    SKSE::log::debug("[FeedSession] Pacified target");
+                    // Pacify if in combat - ONLY for paired animations
+                    if (target && (targetInCombat || playerInCombat)) {
+                        AnimUtil::PacifyActor(target);
+                        g_SetupFlags.targetPacified = true;
+                        SKSE::log::debug("[FeedSession] Pacified target");
+                    }
+                } else {
+                    SKSE::log::debug("[FeedSession] Solo animation - skipping kill move flags and pacify");
                 }
 
                 // Set graph variables
@@ -375,7 +434,7 @@ namespace FeedSession {
                     AnimUtil::SetFeedGraphVars(target, feedType);
                 }
                 g_SetupFlags.graphVarsSet = true;
-                SKSE::log::debug("[FeedSession] Set feed graph vars (feedType={})", feedType);
+            
 
                 // Register animation event sink
                 AnimEventSink::Register();
@@ -483,6 +542,22 @@ namespace FeedSession {
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - g_PlayIdleTime).count();
             SKSE::log::info("[FeedSession] KillMoveStart detected after {}ms", elapsed);
+
+            // NOW invoke the integration callback - animation actually started
+            OnAnimationStarted onStarted;
+            RE::Actor* target = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(g_SessionMutex);
+                onStarted = g_OnStarted;
+                if (auto ref = g_Session.targetHandle.get()) {
+                    target = ref->As<RE::Actor>();
+                }
+            }
+            if (onStarted) {
+                SKSE::log::info("[FeedSession] Running integration callback");
+                onStarted(target);
+            }
+
             return true;
         }
         return false;
