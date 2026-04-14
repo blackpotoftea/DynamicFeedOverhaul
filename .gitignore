@@ -6,4 +6,5 @@ build
 cmake-build*
 .claude/
 vcpkg_installed
-interanl_docs/**
+interanl_docs/
+**interanl_docs/

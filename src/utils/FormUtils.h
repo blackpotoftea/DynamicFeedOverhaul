@@ -45,6 +45,7 @@ namespace FormUtils {
     }
 
     // Check if actor has a keyword by FormID and plugin name (uses cache)
+    // Checks the actor first, then falls back to race (for vampire keyword in vanilla Skyrim)
     inline bool HasKeyword(RE::Actor* actor, RE::FormID keywordID, const std::string& pluginName) {
         if (!actor) return false;
 
@@ -58,6 +59,12 @@ namespace FormUtils {
 
         if (!keyword) return false;
 
+        // Check actor directly first (vanilla vampirism adds keyword to actor, not race)
+        if (actor->HasKeyword(keyword)) {
+            return true;
+        }
+
+        // Fall back to race check (some mods add keywords to vampire races)
         auto race = actor->GetRace();
         if (!race) return false;
 

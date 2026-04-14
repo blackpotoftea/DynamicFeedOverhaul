@@ -45,7 +45,10 @@ namespace TargetState {
 
     // Check if actor is a vampire
     bool IsVampire(RE::Actor* actor) {
-        return FormUtils::HasKeyword(actor, 0x000A82BB, "Skyrim.esm");
+        if (!actor) return false;
+        bool result = FormUtils::HasKeyword(actor, 0x000A82BB, "Skyrim.esm");
+        SKSE::log::debug("IsVampire: {}={}", actor->GetName(), result);
+        return result;
     }
 
     // Check if actor is a werewolf
