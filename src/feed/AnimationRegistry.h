@@ -20,19 +20,13 @@ namespace Feed {
         // Standing
         inline constexpr const char* VAMPIRE_STANDING_FRONT = "IdleVampireStandingFront";
         inline constexpr const char* VAMPIRE_STANDING_BACK = "IdleVampireStandingBack";
-        // Bed
-        inline constexpr const char* VAMPIRE_BED_LEFT = "IdleSilentBow";
-        inline constexpr const char* VAMPIRE_BED_RIGHT = "IdleSilentBow";
-        // Bedroll
-        inline constexpr const char* VAMPIRE_BEDROLL_LEFT = "IdleSilentBow";
-        inline constexpr const char* VAMPIRE_BEDROLL_RIGHT = "IdleSilentBow";
 
-        // // Bed
-        // inline constexpr const char* VAMPIRE_BED_LEFT = "VampireFeedingBedLeft_Loose";
-        // inline constexpr const char* VAMPIRE_BED_RIGHT = "VampireFeedingBedRight_Loose";
-        // // Bedroll
-        // inline constexpr const char* VAMPIRE_BEDROLL_LEFT = "VampireFeedingBedRollLeft_Loose";
-        // inline constexpr const char* VAMPIRE_BEDROLL_RIGHT = "VampireFeedingBedRollRight_Loose";
+        // Bed
+        inline constexpr const char* VAMPIRE_BED_LEFT = "VampireFeedingBedLeft_Loose";
+        inline constexpr const char* VAMPIRE_BED_RIGHT = "VampireFeedingBedRight_Loose";
+        // Bedroll
+        inline constexpr const char* VAMPIRE_BEDROLL_LEFT = "VampireFeedingBedRollLeft_Loose";
+        inline constexpr const char* VAMPIRE_BEDROLL_RIGHT = "VampireFeedingBedRollRight_Loose";
 
         // Sitting
         inline constexpr const char* VAMPIRE_SITTING_FRONT = "VampireFeedSittingFront";

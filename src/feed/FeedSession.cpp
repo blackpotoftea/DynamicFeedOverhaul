@@ -33,6 +33,15 @@ namespace FeedSession {
         std::chrono::steady_clock::time_point g_PlayIdleTime{};
         constexpr int KILLMOVE_START_TIMEOUT_MS = 10;  // Time to wait for KillMoveStart before retry
 
+        // Weapon sheathe waiting - polls weapon state until sheathed
+        std::atomic<bool> g_WaitingForWeaponSheathe{false};
+        std::chrono::steady_clock::time_point g_SheatheStartTime{};
+        constexpr int WEAPON_SHEATHE_TIMEOUT_MS = 1000;  // 1 second timeout for sheathe
+        constexpr int WEAPON_SHEATHE_POLL_MS = 50;       // Poll every 50ms
+
+        // Track if we sheathed weapon so we can redraw after animation
+        std::atomic<bool> g_WeaponWasSheathedForAnimation{false};
+
         // Configuration - retry enabled (10 attempts * 50ms = 500ms max)
         RetryConfig g_RetryConfig{
             .maxAttempts = 10,
@@ -52,6 +61,7 @@ namespace FeedSession {
         void CleanupSession(const std::string& reason);
         void OnTimeout();
         void CheckKillMoveStartTimeout(int attemptNum);
+        void PollWeaponSheatheState();
 
         // Cleanup based on SetupFlags - undoes exactly what was set up
         void CleanupSession(const std::string& reason) {
@@ -74,6 +84,7 @@ namespace FeedSession {
             // Perform cleanup on main thread
             auto playerHandle = session.playerHandle;
             auto targetHandle = session.targetHandle;
+            bool shouldRedrawWeapon = g_WeaponWasSheathedForAnimation.exchange(false);
 
             SKSE::GetTaskInterface()->AddTask([=]() mutable {
                 SKSE::log::info("========== FEED ENDED ==========");
@@ -121,6 +132,16 @@ namespace FeedSession {
                     SKSE::log::debug("[FeedSession] Unregistered animation event sink");
                 }
 
+                // Redraw weapon if we sheathed it for the animation
+                if (shouldRedrawWeapon) {
+                    if (auto ref = playerHandle.get()) {
+                        if (auto* player = ref->As<RE::Actor>()) {
+                            player->DrawWeaponMagicHands(true);
+                            SKSE::log::info("[FeedSession] Redrawing weapon after animation");
+                        }
+                    }
+                }
+
                 // Call CustomFeed::OnComplete for dead feed counter etc.
                 CustomFeed::OnComplete();
 
@@ -154,6 +175,9 @@ namespace FeedSession {
                     std::chrono::steady_clock::now() - g_PlayIdleTime).count();
                 SKSE::log::warn("[FeedSession] KillMoveStart NOT detected ({}ms elapsed)", elapsed);
             }
+
+            // Clear sheathe waiting flag if still set
+            g_WaitingForWeaponSheathe.store(false);
 
             // Set ended flag for prompt refresh logic
             g_FeedEndedFlag.store(true);
@@ -310,6 +334,68 @@ namespace FeedSession {
             }
         }
 
+        // Poll weapon state until sheathed, then proceed with animation
+        void PollWeaponSheatheState() {
+            if (!g_WaitingForWeaponSheathe.load()) {
+                return;  // No longer waiting
+            }
+
+            // Check timeout
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - g_SheatheStartTime).count();
+
+            if (elapsed >= WEAPON_SHEATHE_TIMEOUT_MS) {
+                SKSE::log::warn("[FeedSession] Sheathe timeout ({}ms) - proceeding anyway", elapsed);
+                g_WaitingForWeaponSheathe.store(false);
+                AttemptPlayIdle();
+                return;
+            }
+
+            // Check if weapon is now sheathed
+            SessionData session;
+            {
+                std::lock_guard<std::mutex> lock(g_SessionMutex);
+                session = g_Session;
+            }
+
+            auto playerRef = session.playerHandle.get();
+            if (!playerRef) {
+                SKSE::log::error("[FeedSession] Player handle invalid during sheathe poll");
+                g_WaitingForWeaponSheathe.store(false);
+                g_State.store(State::Failed);
+                CleanupSession("Player handle invalid during sheathe poll");
+                return;
+            }
+
+            auto* player = playerRef->As<RE::Actor>();
+            if (!player) {
+                SKSE::log::error("[FeedSession] Player cast failed during sheathe poll");
+                g_WaitingForWeaponSheathe.store(false);
+                g_State.store(State::Failed);
+                CleanupSession("Player cast failed during sheathe poll");
+                return;
+            }
+
+            auto* playerState = player->AsActorState();
+            auto weaponState = playerState ? playerState->GetWeaponState() : RE::WEAPON_STATE::kSheathed;
+
+            if (weaponState == RE::WEAPON_STATE::kSheathed) {
+                SKSE::log::info("[FeedSession] Weapon sheathed after {}ms - proceeding with animation", elapsed);
+                g_WaitingForWeaponSheathe.store(false);
+                AttemptPlayIdle();
+                return;
+            }
+
+            // Still sheathing - poll again
+            SKSE::log::debug("[FeedSession] Weapon state: {} - polling again...", static_cast<int>(weaponState));
+            std::thread([]() {
+                std::this_thread::sleep_for(std::chrono::milliseconds(WEAPON_SHEATHE_POLL_MS));
+                SKSE::GetTaskInterface()->AddTask([]() {
+                    PollWeaponSheatheState();
+                });
+            }).detach();
+        }
+
     }  // anonymous namespace
 
     //=========================================================================
@@ -453,7 +539,32 @@ namespace FeedSession {
                 }
             }
 
-            // Attempt to play the animation
+            // For solo animations, sheathe weapon first if drawn
+            // Paired animations handle weapon state differently
+            if (!isPaired) {
+                auto* playerState = player->AsActorState();
+                if (playerState && playerState->IsWeaponDrawn()) {
+                    SKSE::log::info("[FeedSession] Solo animation - weapon drawn, sheathing with native function");
+
+                    g_WaitingForWeaponSheathe.store(true);
+                    g_WeaponWasSheathedForAnimation.store(true);  // Track so we redraw after animation
+                    g_SheatheStartTime = std::chrono::steady_clock::now();
+
+                    // Call native sheathe function
+                    player->DrawWeaponMagicHands(false);
+
+                    // Start polling for weapon state to become sheathed
+                    std::thread([]() {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(WEAPON_SHEATHE_POLL_MS));
+                        SKSE::GetTaskInterface()->AddTask([]() {
+                            PollWeaponSheatheState();
+                        });
+                    }).detach();
+                    return;
+                }
+            }
+
+            // Proceed with animation
             AttemptPlayIdle();
         });
 
