@@ -7,4 +7,8 @@ namespace UI {
     namespace Debug {
         void __stdcall Render();
     }
+
+    namespace Settings {
+        void __stdcall Render();
+    }
 }
