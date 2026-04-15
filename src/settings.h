@@ -14,7 +14,7 @@ public:
     // General settings
     struct {
         bool EnableMod{ true };
-        bool DebugLogging{ false };
+        int DebugLevel{ 0 };              // 0=Info, 1=Debug, 2=Trace
         bool EnableWerewolf{ false };     // Enable for Werewolf form
         bool EnableVampireLord{ true };  // Enable for Vampire Lord form
         bool ForceVampire{ false };  // Debug: skip vampire check

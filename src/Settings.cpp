@@ -77,17 +77,24 @@ void Settings::LoadINI() {
 
     // General
     General.EnableMod = ini.GetBoolValue("General", "EnableMod", General.EnableMod);
-    General.DebugLogging = ini.GetBoolValue("General", "DebugLogging", General.DebugLogging);
+    General.DebugLevel = static_cast<int>(ini.GetLongValue("General", "DebugLevel", General.DebugLevel));
     General.EnableWerewolf = ini.GetBoolValue("General", "EnableWerewolf", General.EnableWerewolf);
     General.EnableVampireLord = ini.GetBoolValue("General", "EnableVampireLord", General.EnableVampireLord);
 
     // Update log level based on INI setting
-    if (General.DebugLogging) {
-        spdlog::set_level(spdlog::level::trace);
-        spdlog::flush_on(spdlog::level::trace);
-    } else {
-        spdlog::set_level(spdlog::level::info);
-        spdlog::flush_on(spdlog::level::info);
+    switch (General.DebugLevel) {
+        case 2:
+            spdlog::set_level(spdlog::level::trace);
+            spdlog::flush_on(spdlog::level::trace);
+            break;
+        case 1:
+            spdlog::set_level(spdlog::level::debug);
+            spdlog::flush_on(spdlog::level::debug);
+            break;
+        default:
+            spdlog::set_level(spdlog::level::info);
+            spdlog::flush_on(spdlog::level::info);
+            break;
     }
 
     General.ForceVampire = ini.GetBoolValue("General", "ForceVampire", General.ForceVampire);
@@ -185,8 +192,8 @@ void Settings::LoadINI() {
     Integration.EnableVampireFeedProxy = ini.GetBoolValue("Integration", "EnableVampireFeedProxy", Integration.EnableVampireFeedProxy);
 
     SKSE::log::info("Settings loaded:");
-    SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
-        General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
+    SKSE::log::info("  [General] EnableMod={}, DebugLevel={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
+        General.EnableMod, General.DebugLevel, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
         General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelayIdleSeconds);
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}, SecondaryKey=0x{:X}, SecondaryGamepadKey=0x{:X}",
         Input.FeedKey, Input.FeedGamepadKey, Input.SecondaryKey, Input.SecondaryGamepadKey);
@@ -223,8 +230,8 @@ void Settings::SaveINI() {
     // General
     ini.SetBoolValue("General", "EnableMod", General.EnableMod,
         "; Enable or disable the entire mod");
-    ini.SetBoolValue("General", "DebugLogging", General.DebugLogging,
-        "; Enable detailed debug logging");
+    ini.SetLongValue("General", "DebugLevel", General.DebugLevel,
+        "; Logging verbosity: 0=Info (default), 1=Debug, 2=Trace (most verbose)");
     ini.SetBoolValue("General", "EnableWerewolf", General.EnableWerewolf,
         "; Enable for Werewolf form (EXPERIMENTAL: May be buggy and needs more work)");
     ini.SetBoolValue("General", "EnableVampireLord", General.EnableVampireLord,

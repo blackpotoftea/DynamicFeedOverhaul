@@ -47,7 +47,7 @@ namespace TargetState {
     bool IsVampire(RE::Actor* actor) {
         if (!actor) return false;
         bool result = FormUtils::HasKeyword(actor, 0x000A82BB, "Skyrim.esm");
-        SKSE::log::debug("IsVampire: {}={}", actor->GetName(), result);
+        SKSE::log::trace("IsVampire: {}={}", actor->GetName(), result);
         return result;
     }
 

@@ -545,11 +545,14 @@ namespace AnimUtil {
         process->runDetection = false;
         process->ClearCachedFactionFightReactions();
         process->StopCombatAndAlarmOnActor(actor, false);
-        
+        // actor->StopCombat();
+        // actor->EvaluatePackage(false, true);
+        // actor->EvaluatePackage(true, true);
+        // actor->UpdateCombat();
         process->runDetection = detection;
 
         // Restrain actor to prevent any movement/attacks during feed
-        // setRestrained(actor, true);
+        setRestrained(actor, true);
 
         SKSE::log::info("[AnimUtil::PacifyActor] {:X} ({}) has been pacified",
             actor->GetFormID(), actor->GetName());
@@ -743,7 +746,7 @@ namespace AnimUtil {
         // Always log vampire stage for debugging (vampires and vampire lords)
         if (isVampire || isVampireLord) {
             int vampireStage = PapyrusCall::GetVampireStage();
-            SKSE::log::info("CanPlayerFeed: vampireStage={}, isVampireLord={}", vampireStage, isVampireLord);
+            SKSE::log::trace("CanPlayerFeed: vampireStage={}, isVampireLord={}", vampireStage, isVampireLord);
         }
 
         if (isVampire && !isVampireLord && !isWerewolf && settings->General.CheckHungerStage) {
@@ -753,9 +756,9 @@ namespace AnimUtil {
             }
 
             int vampireStage = PapyrusCall::GetVampireStage();
-            SKSE::log::debug("CanPlayerFeed: vampireStage={}, minRequired={}", vampireStage, settings->General.MinHungerStage);
+            SKSE::log::trace("CanPlayerFeed: vampireStage={}, minRequired={}", vampireStage, settings->General.MinHungerStage);
             if (vampireStage < settings->General.MinHungerStage) {
-                SKSE::log::debug("CanPlayerFeed: false - hunger stage {} < min {}", vampireStage, settings->General.MinHungerStage);
+                SKSE::log::trace("CanPlayerFeed: false - hunger stage {} < min {}", vampireStage, settings->General.MinHungerStage);
                 return false;
             }
         }

@@ -649,18 +649,18 @@ RE::NiPointer<RE::Actor> PairedAnimPromptSink::GetTarget() const {
 
 bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
     if (!actor) {
-        SKSE::log::debug("IsExcluded: actor is null");
+        SKSE::log::trace("IsExcluded: actor is null");
         return true;
     }
 
     auto* settings = Settings::GetSingleton();
     if (!settings->General.EnableMod) {
-        SKSE::log::debug("IsExcluded: mod disabled");
+        SKSE::log::trace("IsExcluded: mod disabled");
         return true;
     }
 
     if (FeedSession::IsActive()) {
-        SKSE::log::debug("IsExcluded: feed session already active");
+        SKSE::log::trace("IsExcluded: feed session already active");
         return true;
     }
     
@@ -668,7 +668,7 @@ bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
     if (FeedFiltering::IsExcludedByFilters(actor)) return true;
 
     bool isInCombat = actor->IsInCombat();
-    SKSE::log::debug("IsExcluded check: {} | InCombat: {}", actor->GetName(), isInCombat);
+    SKSE::log::trace("IsExcluded check: {} | InCombat: {}", actor->GetName(), isInCombat);
 
     if (isInCombat) {
         if (FeedFiltering::IsExcludedCombat(actor)) return true;
@@ -679,11 +679,11 @@ bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
     // Graph vars checks (slow)
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (player && AnimUtil::IsInPairedAnimation(player)) {
-        SKSE::log::debug("Excluded: player is in paired animation");
+        SKSE::log::trace("Excluded: player is in paired animation");
         return true;
     }
     if (AnimUtil::IsInPairedAnimation(actor)) {
-        SKSE::log::debug("Excluded: {} is in paired animation", actor->GetName());
+        SKSE::log::trace("Excluded: {} is in paired animation", actor->GetName());
         return true;
     }
     

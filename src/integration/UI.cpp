@@ -101,7 +101,11 @@ void __stdcall UI::Settings::Render() {
     // General Settings
     if (ImGuiMCP::CollapsingHeader("General")) {
         changed |= ImGuiMCP::Checkbox("Enable Mod", &settings->General.EnableMod);
-        changed |= ImGuiMCP::Checkbox("Debug Logging", &settings->General.DebugLogging);
+        const char* debugLevels[] = {"Info", "Debug", "Trace"};
+        if (ImGuiMCP::Combo("Debug Level", &settings->General.DebugLevel, debugLevels, 3)) {
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("0=Info (default), 1=Debug (moderate), 2=Trace (verbose)");
         changed |= ImGuiMCP::Checkbox("Enable Werewolf", &settings->General.EnableWerewolf);
         ImGuiMCP::SetItemTooltip("Enable feeding for Werewolf form (EXPERIMENTAL)");
         changed |= ImGuiMCP::Checkbox("Enable Vampire Lord", &settings->General.EnableVampireLord);
