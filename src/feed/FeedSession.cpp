@@ -48,6 +48,9 @@ namespace FeedSession {
             .retryDelayMs = 50,
             .retryOnPlayIdleFalse = true
         };
+
+        // Session generation - incremented on cleanup to invalidate pending thread callbacks
+        std::atomic<int> g_SessionGeneration{0};
     }
 
     //=========================================================================
@@ -65,6 +68,9 @@ namespace FeedSession {
 
         // Cleanup based on SetupFlags - undoes exactly what was set up
         void CleanupSession(const std::string& reason) {
+            // Invalidate any pending thread callbacks immediately
+            g_SessionGeneration++;
+
             SKSE::log::info("[FeedSession] CleanupSession: {}", reason);
 
             // Capture data under lock
@@ -282,10 +288,14 @@ namespace FeedSession {
             // Schedule KillMoveStart timeout check - ONLY for paired animations
             if (session.isPaired) {
                 int currentAttempt = session.attemptNumber;
-                std::thread([currentAttempt]() {
+                int generation = g_SessionGeneration.load();
+                std::thread([currentAttempt, generation]() {
                     std::this_thread::sleep_for(std::chrono::milliseconds(KILLMOVE_START_TIMEOUT_MS));
-                    SKSE::GetTaskInterface()->AddTask([currentAttempt]() {
-                        CheckKillMoveStartTimeout(currentAttempt);
+                    SKSE::GetTaskInterface()->AddTask([currentAttempt, generation]() {
+                        // Only execute if session hasn't been reset
+                        if (g_SessionGeneration.load() == generation) {
+                            CheckKillMoveStartTimeout(currentAttempt);
+                        }
                     });
                 }).detach();
             }
@@ -388,10 +398,14 @@ namespace FeedSession {
 
             // Still sheathing - poll again
             SKSE::log::debug("[FeedSession] Weapon state: {} - polling again...", static_cast<int>(weaponState));
-            std::thread([]() {
+            int generation = g_SessionGeneration.load();
+            std::thread([generation]() {
                 std::this_thread::sleep_for(std::chrono::milliseconds(WEAPON_SHEATHE_POLL_MS));
-                SKSE::GetTaskInterface()->AddTask([]() {
-                    PollWeaponSheatheState();
+                SKSE::GetTaskInterface()->AddTask([generation]() {
+                    // Only execute if session hasn't been reset
+                    if (g_SessionGeneration.load() == generation) {
+                        PollWeaponSheatheState();
+                    }
                 });
             }).detach();
         }
@@ -554,10 +568,14 @@ namespace FeedSession {
                     player->DrawWeaponMagicHands(false);
 
                     // Start polling for weapon state to become sheathed
-                    std::thread([]() {
+                    int generation = g_SessionGeneration.load();
+                    std::thread([generation]() {
                         std::this_thread::sleep_for(std::chrono::milliseconds(WEAPON_SHEATHE_POLL_MS));
-                        SKSE::GetTaskInterface()->AddTask([]() {
-                            PollWeaponSheatheState();
+                        SKSE::GetTaskInterface()->AddTask([generation]() {
+                            // Only execute if session hasn't been reset
+                            if (g_SessionGeneration.load() == generation) {
+                                PollWeaponSheatheState();
+                            }
                         });
                     }).detach();
                     return;

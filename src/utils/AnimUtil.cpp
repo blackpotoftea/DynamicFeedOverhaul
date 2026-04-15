@@ -545,10 +545,11 @@ namespace AnimUtil {
         process->runDetection = false;
         process->ClearCachedFactionFightReactions();
         process->StopCombatAndAlarmOnActor(actor, false);
+        
         process->runDetection = detection;
 
         // Restrain actor to prevent any movement/attacks during feed
-        setRestrained(actor, true);
+        // setRestrained(actor, true);
 
         SKSE::log::info("[AnimUtil::PacifyActor] {:X} ({}) has been pacified",
             actor->GetFormID(), actor->GetName());
