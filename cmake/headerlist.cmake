@@ -14,4 +14,5 @@ set(headers ${headers}
     src/integration/PoiseIntegration.h
     src/utils/MenuCheck.h
     src/feed/AnimationRegistry.h
+    src/integration/UI.h
 )

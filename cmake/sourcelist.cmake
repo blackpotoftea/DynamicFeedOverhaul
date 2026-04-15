@@ -18,4 +18,5 @@ set(sources ${sources}
     src/utils/MenuCheck.cpp
     src/feed/TargetState.cpp
     src/feed/AnimationRegistry.cpp
+    src/integration/UI.cpp
 )
