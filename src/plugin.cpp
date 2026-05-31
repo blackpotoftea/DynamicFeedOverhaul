@@ -9,6 +9,7 @@
 #include "integration/PoiseIntegration.h"
 #include "integration/SacrosanctIntegration.h"
 #include "integration/SacrilegeIntegration.h"
+#include "integration/VampireFeedProxyIntegration.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
 #include "utils/AnimUtil.h"
@@ -55,6 +56,18 @@ void OnDataLoaded()
         SKSE::log::info("No vampire overhaul detected - using vanilla vampire feed system");
     } else if (hasSacrosanct && hasSacrilege) {
         SKSE::log::warn("Multiple vampire overhauls detected - this may cause conflicts!");
+    }
+
+    // VampireFeedProxy.dll detection - if present and enabled, skip vanilla feed events (proxy handles them)
+    auto* settings = Settings::GetSingleton();
+    if (VampireFeedProxyIntegration::Initialize()) {
+        if (settings->Integration.EnableVampireFeedProxy) {
+            SKSE::log::info("VampireFeedProxy detected - vanilla feed events will be skipped");
+        } else {
+            SKSE::log::info("VampireFeedProxy detected but integration disabled - vanilla feed events will be sent");
+        }
+    } else {
+        SKSE::log::info("VampireFeedProxy not detected - vanilla feed events will be sent");
     }
 
     if (SKSEMenuFramework::IsInstalled()) {

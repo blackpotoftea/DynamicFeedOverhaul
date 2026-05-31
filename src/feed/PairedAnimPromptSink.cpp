@@ -9,6 +9,7 @@
 #include "feed/FeedIconOverlay.h"
 #include "integration/OStimIntegration.h"
 #include "integration/VampireIntegrationUtils.h"
+#include "integration/VampireFeedProxyIntegration.h"
 #include "utils/MenuCheck.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/AnimUtil.h"
@@ -393,15 +394,24 @@ void PairedAnimPromptSink::ExecuteFeed(const char* idleEditorID, RE::Actor* targ
 
         auto* player = RE::PlayerCharacter::GetSingleton();
 
-        PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
+        // Check if VampireFeedProxy handles vampire feed - if so, skip vanilla feed calls
+        auto* settings = Settings::GetSingleton();
+        bool proxyHandlesFeed = settings->Integration.EnableVampireFeedProxy &&
+                                VampireFeedProxyIntegration::IsAvailable();
 
-        // Send custom DAO_VampireFeed event with attacker and target
+        if (proxyHandlesFeed) {
+            SKSE::log::info("VampireFeedProxy detected - skipping vanilla vampire feed event");
+        } else {
+            PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
+        }
+
+        // Send custom DAO_VampireFeed event with attacker and target (always send our custom event)
         if (player) {
             PapyrusCall::SendDAO_VampireFeedEvent(player, callbackTarget);
         }
 
-        // Only call vampire script if NOT a werewolf
-        if (player && !TargetState::IsWerewolf(player)) {
+        // Only call vampire script if NOT a werewolf AND proxy is not handling it
+        if (player && !TargetState::IsWerewolf(player) && !proxyHandlesFeed) {
             auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
             if (vampireQuest) {
                 // If lethal, the kill move animation handles the kill - don't double-kill in integration
@@ -478,6 +488,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     // Safe to use raw pointer now - NiPointer keeps it alive for entire function scope
     RE::Actor* feedTarget = feedTargetPtr.get();
 
+    auto* settings = Settings::GetSingleton();
+
     // Store the feed target for witness detection (thread-safe)
     SetActiveFeedTarget(feedTarget);
 
@@ -492,7 +504,6 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     // Mark player as in kill move to prevent Quick Loot and other mods from interfering
     AnimUtil::SetInKillMove(player, true);
 
-    auto* settings = Settings::GetSingleton();
     auto furnitureRef = TargetState::GetFurnitureReference(feedTarget);
 
     SKSE::log::info("Feed ACCEPTED on target: {} (FormID: {:X})",
