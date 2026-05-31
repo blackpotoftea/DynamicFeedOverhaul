@@ -74,6 +74,11 @@ public:
     void OnPeriodicValidation();
     void RefreshPrompt();
 
+    // Per-frame tick: resolves the pending-target delay so the prompt fires
+    // exactly after PromptDelay*Seconds elapses, since the crosshair event
+    // is edge-triggered and would not re-fire for the same target.
+    void TickPendingPrompt();
+
     // Target being fed on during active feed (accessed by witness detection hook)
     // Thread-safe access via GetActiveFeedTarget() / SetActiveFeedTarget()
     RE::NiPointer<RE::Actor> GetActiveFeedTarget() const;

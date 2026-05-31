@@ -23,4 +23,28 @@ namespace CustomFeed {
                         FeedCallback callback = nullptr);
     void ForceStop();
     void OnComplete();
+
+    // Per-actor feed policy bundle. Centralizes mutations that were previously
+    // scattered across HandleFeedAccepted, MarkFeedEnded, and OnComplete.
+    struct FeedStateContext {
+        RE::Actor* player;
+        RE::Actor* target;
+        int  feedType;
+        int  targetState;       // Feed::kStanding | kCombat | kSitting | kSleeping
+        bool playerInCombat;
+        bool targetInCombat;
+        bool enableHeightAdjust;
+        bool enableRotation;
+        float minHeightDiff;
+        float maxHeightDiff;
+    };
+
+    // Apply all per-actor feed setup mutations (kill-move flag, pacify if combat,
+    // height/rotation if standing, graph vars). Must run on main thread; both actors
+    // in ctx must be alive for the duration of the call.
+    void EnterFeedState(const FeedStateContext& ctx);
+
+    // Undo everything EnterFeedState applied. Resolves target via feedTargetHandle_.
+    // Safe to call even if EnterFeedState was never called (each step early-returns).
+    void ExitFeedState();
 }

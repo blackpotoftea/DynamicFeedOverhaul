@@ -57,17 +57,9 @@ namespace FeedAnimState {
             timer->SetGlobalTimeMultiplier(1.0f, true);
         }
 
-        // Clear kill move flag (was set to prevent Quick Loot etc. during animation)
-        // Get target before clearing the reference
-        auto target = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget();
-        if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-            AnimUtil::SetInKillMove(player, false);
-        }
-        if (target) {
-            AnimUtil::SetInKillMove(target.get(), false);
-        }
-
-        // Clear the active feed target (thread-safe)
+        // Clear the active feed target (thread-safe). Per-actor cleanup
+        // (kill-move, graph vars, pacify) is owned by CustomFeed::ExitFeedState,
+        // called from OnComplete below.
         PairedAnimPromptSink::GetSingleton()->SetActiveFeedTarget(nullptr);
 
         CustomFeed::OnComplete();
@@ -505,10 +497,6 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (!player) return;
-    
-    // Mark player and target as in kill move to prevent Quick Loot and other mods from interfering
-    AnimUtil::SetInKillMove(player, true);
-    AnimUtil::SetInKillMove(feedTarget, true);
 
     auto furnitureRef = TargetState::GetFurnitureReference(feedTarget);
 
@@ -527,11 +515,6 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     bool playerInCombat = player->IsInCombat();
     SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
 
-    // Pacify target during combat to prevent attack interruption
-    if (isInCombat || playerInCombat) {
-        AnimUtil::PacifyActor(feedTarget);
-    }
-
     int vampireStage = PapyrusCall::GetVampireStage();
     bool useTwoSingle = settings->NonCombat.UseTwoSingleAnimations && targetState == Feed::kStanding;
 
@@ -543,51 +526,6 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
         // ExecuteFeed(nullptr, feedTarget, true);
     } else {
-        // Execute all positioning/rotation in a single main-thread task
-        auto playerHandle = player->CreateRefHandle();
-        auto targetHandle = feedTarget->CreateRefHandle();
-
-        SKSE::GetTaskInterface()->AddTask([playerHandle, targetHandle, targetState, settings]() {
-            auto playerRef = playerHandle.get();
-            auto targetRef = targetHandle.get();
-            if (!playerRef || !targetRef) {
-                SKSE::log::warn("Position task: Handle resolution failed");
-                return;
-            }
-
-            auto* player = playerRef.get()->As<RE::Actor>();
-            auto* target = targetRef.get()->As<RE::Actor>();
-            if (!player || !target) {
-                SKSE::log::warn("Position task: Actor cast failed");
-                return;
-            }
-
-            SKSE::log::debug("Position task: targetState={}, EnableHeightAdjust={}",
-                targetState, settings->NonCombat.EnableHeightAdjust);
-
-            if (targetState == Feed::kStanding && settings->NonCombat.EnableHeightAdjust) {
-                auto playerPos = player->GetPosition();
-                auto targetPos = target->GetPosition();
-                float heightDiff = std::fabs(targetPos.z - playerPos.z);
-                SKSE::log::info("Height check BEFORE adjustment: player Z={:.2f}, target Z={:.2f}, diff={:.2f}",
-                    playerPos.z, targetPos.z, heightDiff);
-
-                AnimUtil::ApplyHeightAdjustment(player, target, settings->NonCombat.MinHeightDiff, settings->NonCombat.MaxHeightDiff);
-
-                // Log AFTER adjustment
-                playerPos = player->GetPosition();
-                targetPos = target->GetPosition();
-                heightDiff = std::fabs(targetPos.z - playerPos.z);
-                SKSE::log::info("Height check AFTER adjustment: player Z={:.2f}, target Z={:.2f}, diff={:.2f}",
-                    playerPos.z, targetPos.z, heightDiff);
-            }
-
-            if ((targetState == Feed::kStanding || targetState == Feed::kCombat) && settings->NonCombat.EnableRotation) {
-                AnimUtil::RotateTargetToClosest(target, player);
-                AnimUtil::RotateAttackerToTarget(player, target);
-            }
-        });
-
         // Calculate direction for animation selection (can be done immediately)
         bool isBehind = false;
         if (targetState == Feed::kStanding) {
@@ -652,10 +590,17 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         bool isPairedAnim = true;
         const char* idleEditorID = Feed::SelectIdleAnimation(targetState, feedTarget, furnitureRef, isBehind, isPairedAnim, isLethal);
 
-
-        AnimUtil::SetFeedGraphVars(player, feedType);
-        AnimUtil::SetFeedGraphVars(feedTarget, feedType);
-
+        // Centralized per-actor setup: kill-move flag, conditional pacify,
+        // height/rotation positioning, graph vars. Symmetric teardown lives
+        // in CustomFeed::ExitFeedState (called from OnComplete).
+        CustomFeed::EnterFeedState({
+            player, feedTarget, feedType, targetState,
+            playerInCombat, isInCombat,
+            settings->NonCombat.EnableHeightAdjust,
+            settings->NonCombat.EnableRotation,
+            settings->NonCombat.MinHeightDiff,
+            settings->NonCombat.MaxHeightDiff,
+        });
 
         ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
         // Reset lethal flag after use (embrace flag reset by integration)
@@ -1021,6 +966,40 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
             SKSE::log::debug("Removed feed prompt");
         }
     }
+}
+
+void PairedAnimPromptSink::TickPendingPrompt() {
+    if (g_clientID.load(std::memory_order_acquire) == 0) return;
+    if (!pendingTarget_) return;
+
+    auto ref = pendingTarget_.get();
+    if (!ref || !ref->Is(RE::FormType::ActorCharacter)) {
+        pendingTarget_.reset();
+        return;
+    }
+
+    RE::Actor* actor = ref->As<RE::Actor>();
+
+    auto* settings = Settings::GetSingleton();
+    bool targetInCombat = actor->IsInCombat();
+    float delaySeconds = targetInCombat ? settings->Combat.PromptDelayCombatSeconds
+                                        : settings->General.PromptDelayIdleSeconds;
+
+    auto elapsed = std::chrono::steady_clock::now() - pendingTargetTime_;
+    float elapsedSeconds = std::chrono::duration<float>(elapsed).count();
+
+    if (elapsedSeconds < delaySeconds) return;
+
+    // Re-validate before showing (target may have died, moved out of range, etc.)
+    if (!IsValidFeedTarget(actor)) {
+        pendingTarget_.reset();
+        return;
+    }
+
+    pendingTarget_.reset();
+    ShowPrompt(actor);
+    SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) (after {:.2f}s delay)",
+        actor->GetName(), actor->GetFormID(), elapsedSeconds);
 }
 
 void PairedAnimPromptSink::OnMenuStateChange(bool isMenuOpen) {

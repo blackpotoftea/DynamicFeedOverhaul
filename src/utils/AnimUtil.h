@@ -58,8 +58,10 @@ namespace AnimUtil {
     void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* callbackTarget = nullptr,
                   PlayIdleCallback callback = nullptr, bool isPaired = true);
 
-    // Preprocessing for paired animations - clears stagger/attack/knockdown states
-    void PrepareActorForPairedIdle(RE::Actor* actor);
+    // Clears engine-level animation-graph blockers (current idle, stagger/attack
+    // notifications, knock-down recovery) so a subsequent PlayIdle can succeed.
+    // Idle-playback plumbing - applies no feed-specific policy.
+    void FlushAnimationGraph(RE::Actor* actor);
 
     // Position and rotation functions
     void setPosition(RE::Actor* actor, float x, float y, float z, float rotation);

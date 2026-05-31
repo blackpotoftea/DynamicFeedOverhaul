@@ -23,6 +23,10 @@ namespace {
                 sink->OnPeriodicValidation();
             }
 
+            // 1b. Per-frame: resolve pending prompt delay (SKSE crosshair event
+            // is edge-triggered, so the delay must be ticked here to fire on time).
+            sink->TickPendingPrompt();
+
             // 2. Witness Check (only if enabled in settings)
             if (settings->Combat.EnableWitnessDetection) {
                 if (FeedAnimState::IsFeedActive()) {

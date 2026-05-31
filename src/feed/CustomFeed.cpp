@@ -1,5 +1,6 @@
 #include "CustomFeed.h"
 #include "utils/AnimUtil.h"
+#include "feed/AnimationRegistry.h"
 
 namespace CustomFeed {
     // Private state - hidden from header, stored as ObjectRefHandle for memory safety
@@ -183,20 +184,10 @@ namespace CustomFeed {
     // Called when feed ends normally - restores player control
     void OnComplete() {
         SKSE::log::debug("[CustomFeed] OnComplete");
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        // if (player) {
-        //     player->SetAIDriven(false);
-        //     SKSE::log::debug("[CustomFeed] SetAIDriven(false) called");
-        // }
 
-        // Release pacified target
-        auto targetRef = feedTargetHandle_.get();
-        if (targetRef) {
-            auto* target = targetRef->As<RE::Actor>();
-            if (target) {
-                AnimUtil::UndoPacifyActor(target);
-            }
-        }
+        // Undo per-actor mutations applied by EnterFeedState. Resolves target
+        // via feedTargetHandle_, so this must run before ClearFeedTarget() below.
+        ExitFeedState();
 
         // Increment dead feed count only if target was already dead when feed started
         // Don't count lethal feeds that killed the target
@@ -219,5 +210,77 @@ namespace CustomFeed {
         // }
 
         ClearFeedTarget();
+    }
+
+    void EnterFeedState(const FeedStateContext& ctx) {
+        if (!ctx.player || !ctx.target) {
+            SKSE::log::warn("[CustomFeed::EnterFeedState] null actor (player={}, target={})",
+                ctx.player ? "ok" : "null", ctx.target ? "ok" : "null");
+            return;
+        }
+
+        // 1. Clear engine-level animation blockers BEFORE applying new state -
+        //    otherwise residual stagger/attack/knockdown can fight positioning
+        //    and PlayIdle may silently no-op.
+        AnimUtil::FlushAnimationGraph(ctx.player);
+        AnimUtil::FlushAnimationGraph(ctx.target);
+
+        // 2. Kill-move flag - blocks Quick Loot and other mod interference.
+        AnimUtil::SetInKillMove(ctx.player, true);
+        AnimUtil::SetInKillMove(ctx.target, true);
+
+        // 3. Pacify target if either actor is in combat (prevents attack interruption).
+        if (ctx.playerInCombat || ctx.targetInCombat) {
+            AnimUtil::PacifyActor(ctx.target);
+        }
+
+        // 4. Positioning - only for upright targets, gated by settings.
+        const bool isUpright = (ctx.targetState == Feed::kStanding || ctx.targetState == Feed::kCombat);
+        if (isUpright) {
+            if (ctx.enableHeightAdjust) {
+                auto playerPos = ctx.player->GetPosition();
+                auto targetPos = ctx.target->GetPosition();
+                float heightDiff = std::fabs(targetPos.z - playerPos.z);
+                SKSE::log::info("Height check BEFORE adjustment: player Z={:.2f}, target Z={:.2f}, diff={:.2f}",
+                    playerPos.z, targetPos.z, heightDiff);
+
+                AnimUtil::ApplyHeightAdjustment(ctx.player, ctx.target, ctx.minHeightDiff, ctx.maxHeightDiff);
+
+                playerPos = ctx.player->GetPosition();
+                targetPos = ctx.target->GetPosition();
+                heightDiff = std::fabs(targetPos.z - playerPos.z);
+                SKSE::log::info("Height check AFTER adjustment: player Z={:.2f}, target Z={:.2f}, diff={:.2f}",
+                    playerPos.z, targetPos.z, heightDiff);
+            }
+
+            if (ctx.enableRotation) {
+                AnimUtil::RotateTargetToClosest(ctx.target, ctx.player);
+                AnimUtil::RotateAttackerToTarget(ctx.player, ctx.target);
+            }
+        }
+
+        // 5. Graph vars LAST - OAR must see the feedType variant before PlayIdle fires.
+        AnimUtil::SetFeedGraphVars(ctx.player, ctx.feedType);
+        AnimUtil::SetFeedGraphVars(ctx.target, ctx.feedType);
+    }
+
+    void ExitFeedState() {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        RE::Actor* target = nullptr;
+        if (auto ref = feedTargetHandle_.get()) {
+            target = ref->As<RE::Actor>();
+        }
+
+        // LIFO of EnterFeedState.
+        // 1. Clear graph vars first so animation graph returns to default state.
+        if (target) AnimUtil::ClearFeedGraphVars(target);
+        if (player) AnimUtil::ClearFeedGraphVars(player);
+
+        // 2. Release pacify (no-op if target was never pacified).
+        if (target) AnimUtil::UndoPacifyActor(target);
+
+        // 3. Kill-move flag last - QuickLoot etc. re-enable after all other state settled.
+        if (player) AnimUtil::SetInKillMove(player, false);
+        if (target) AnimUtil::SetInKillMove(target, false);
     }
 }

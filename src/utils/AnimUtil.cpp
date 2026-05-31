@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <bit>
+#include <format>
 
 // Pacified actors tracking
 namespace {
@@ -164,9 +165,10 @@ namespace AnimUtil {
         });
     }
 
-    // Preprocessing for paired animations - clears stagger/attack/knockdown states
-    // Must be called on main thread (via SKSE task)
-    void PrepareActorForPairedIdle(RE::Actor* actor) {
+    // Clears engine-level animation-graph blockers so a subsequent PlayIdle can run.
+    // Stops the current idle, sends attack/stagger-stop notifications, recovers from
+    // knock-down. Must be called on main thread (via SKSE task).
+    void FlushAnimationGraph(RE::Actor* actor) {
         if (!actor) return;
 
         // Stop any current idle animation first - this is critical!
@@ -194,7 +196,7 @@ namespace AnimUtil {
                 knockState == RE::KNOCK_STATE_ENUM::kQueued) {
                 actorState->actorState1.knockState = RE::KNOCK_STATE_ENUM::kNormal;
                 actor->NotifyAnimationGraph("GetUpEnd");
-                SKSE::log::debug("[AnimUtil::PrepareActorForPairedIdle] Reset knock state for {}",
+                SKSE::log::debug("[AnimUtil::FlushAnimationGraph] Reset knock state for {}",
                     actor->GetName());
             }
         }
@@ -224,86 +226,39 @@ namespace AnimUtil {
         SKSE::log::debug("[AnimUtil::playIdle] Queuing idle {:X} for {} (callbackTarget: {}, isPaired: {})",
             idleFormID, actorName, callbackTargetName, isPaired);
 
-        // Task 1: Prepare actors for paired idle (clear stagger/attack/knockdown states)
-        SKSE::GetTaskInterface()->AddTask([actorHandle, callbackTargetHandle, actorName, isPaired] {
-            if (!isPaired) return;  // Skip preparation for non-paired animations
+        // Caller is responsible for any actor-state preparation (e.g. FlushAnimationGraph).
+        // For the feed flow, CustomFeed::EnterFeedState owns this.
 
-            auto refPtr = actorHandle.get();
-            if (!refPtr) return;
-
-            auto* a = refPtr->As<RE::Actor>();
-            if (!a) return;
-
-            RE::Actor* callbackTargetActor = nullptr;
-            if (callbackTargetHandle) {
-                auto callbackTargetRefPtr = callbackTargetHandle.get();
-                if (callbackTargetRefPtr) {
-                    callbackTargetActor = callbackTargetRefPtr->As<RE::Actor>();
-                }
-            }
-
-            if (callbackTargetActor) {
-                SKSE::log::debug("[AnimUtil::playIdle] Preprocessing actors for paired idle");
-                PrepareActorForPairedIdle(a);
-                PrepareActorForPairedIdle(callbackTargetActor);
-            }
-        });
-
-        // Task 2: Play the actual idle animation
+        // Play the actual idle animation
         SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, callbackTargetHandle, actorName, callbackTargetName, callback, isPaired] {
-            // 1. Resolve the handle to get NiPointer<TESObjectREFR>
-            auto refPtr = actorHandle.get();
-            if (!refPtr) {
-                SKSE::log::error("[AnimUtil::playIdle] FAILED: Actor handle invalid for {}", actorName);
-                if (callback) {
-                    callback(false, nullptr);
-                }
-                return;
-            }
+            auto fail = [&](std::string_view reason, RE::Actor* cbTarget = nullptr) {
+                SKSE::log::error("[AnimUtil::playIdle] FAILED: {} for {}", reason, actorName);
+                if (callback) callback(false, cbTarget);
+            };
 
-            // 2. Cast the generic TESObjectREFR to Actor* (critical for accessing currentProcess)
+            auto refPtr = actorHandle.get();
+            if (!refPtr) return fail("Actor handle invalid");
+
             auto* a = refPtr->As<RE::Actor>();
-            if (!a) {
-                SKSE::log::error("[AnimUtil::playIdle] FAILED: Object is not an Actor for {}", actorName);
-                if (callback) {
-                    callback(false, nullptr);
-                }
-                return;
-            }
+            if (!a) return fail("Object is not an Actor");
 
             auto* idle = RE::TESForm::LookupByID<RE::TESIdleForm>(idleFormID);
-            if (!idle) {
-                SKSE::log::error("[AnimUtil::playIdle] FAILED: Idle form {:X} not found for {}", idleFormID, actorName);
-                if (callback) {
-                    callback(false, nullptr);
-                }
-                return;
-            }
+            if (!idle) return fail(std::format("Idle form {:X} not found", idleFormID));
 
+            // Resolve optional callback target (doubles as animation target when paired)
             RE::TESObjectREFR* animTarget = nullptr;
             RE::Actor* callbackTargetActor = nullptr;
             if (callbackTargetHandle) {
-                auto callbackTargetRefPtr = callbackTargetHandle.get();
-                if (!callbackTargetRefPtr) {
-                    SKSE::log::warn("[AnimUtil::playIdle] Callback target handle invalid for {}", actorName);
+                if (auto cbRef = callbackTargetHandle.get()) {
+                    callbackTargetActor = cbRef->As<RE::Actor>();
+                    if (isPaired) animTarget = cbRef.get();
                 } else {
-                    // Target can be TESObjectREFR (for furniture/beds) or Actor, so we use .get()
-                    callbackTargetActor = callbackTargetRefPtr->As<RE::Actor>();
-                    // Only use as animation target if isPaired
-                    if (isPaired) {
-                        animTarget = callbackTargetRefPtr.get();
-                    }
+                    SKSE::log::warn("[AnimUtil::playIdle] Callback target handle invalid for {}", actorName);
                 }
             }
 
             auto* process = a->GetActorRuntimeData().currentProcess;
-            if (!process) {
-                SKSE::log::error("[AnimUtil::playIdle] FAILED: No process for {}", actorName);
-                if (callback) {
-                    callback(false, callbackTargetActor);
-                }
-                return;
-            }
+            if (!process) return fail("No process", callbackTargetActor);
 
             // Clear conditions on idle and all parents to bypass condition checks
             // IdleParser::ClearIdleConditions(idle);
@@ -727,7 +682,7 @@ namespace AnimUtil {
     bool CanPlayerFeed(bool targetInCombat) {
         // First check if player is the right race
         if (!IsPlayerFeedingRace()) {
-            SKSE::log::debug("CanPlayerFeed: false - not a feeding race");
+            SKSE::log::trace("CanPlayerFeed: false - not a feeding race");
             return false;
         }
 
@@ -744,7 +699,7 @@ namespace AnimUtil {
         // Always log vampire stage for debugging (vampires and vampire lords)
         if (isVampire || isVampireLord) {
             int vampireStage = PapyrusCall::GetVampireStage();
-            SKSE::log::info("CanPlayerFeed: vampireStage={}, isVampireLord={}", vampireStage, isVampireLord);
+            SKSE::log::trace("CanPlayerFeed: vampireStage={}, isVampireLord={}", vampireStage, isVampireLord);
         }
 
         if (isVampire && !isVampireLord && !isWerewolf && settings->General.CheckHungerStage) {
@@ -754,9 +709,9 @@ namespace AnimUtil {
             }
 
             int vampireStage = PapyrusCall::GetVampireStage();
-            SKSE::log::debug("CanPlayerFeed: vampireStage={}, minRequired={}", vampireStage, settings->General.MinHungerStage);
+            SKSE::log::trace("CanPlayerFeed: vampireStage={}, minRequired={}", vampireStage, settings->General.MinHungerStage);
             if (vampireStage < settings->General.MinHungerStage) {
-                SKSE::log::debug("CanPlayerFeed: false - hunger stage {} < min {}", vampireStage, settings->General.MinHungerStage);
+                SKSE::log::trace("CanPlayerFeed: false - hunger stage {} < min {}", vampireStage, settings->General.MinHungerStage);
                 return false;
             }
         }
@@ -958,25 +913,50 @@ namespace AnimUtil {
     }
 
     void ApplyHeightAdjustment(RE::Actor* attacker, RE::Actor* target, float minHeightDiff, float maxHeightDiff) {
+        if (!attacker || !target) return;
+
         auto attackerPos = attacker->GetPosition();
         auto targetPos = target->GetPosition();
         float heightDiff = std::fabs(targetPos.z - attackerPos.z);
 
-        SKSE::log::info("ApplyHeightAdjustment: heightDiff={:.2f}, min={:.2f}, max={:.2f}",
-            heightDiff, minHeightDiff, maxHeightDiff);
+        SKSE::log::info("ApplyHeightAdjustment: heightDiff={:.2f}, min={:.2f}, max={:.2f}, attackerZ={:.2f}, targetZ={:.2f}",
+            heightDiff, minHeightDiff, maxHeightDiff, attackerPos.z, targetPos.z);
 
-        // Simple approach: raise both actors by 10 units and match Z
-        constexpr float raiseAmount = 10.0f;
+        if (heightDiff < minHeightDiff) {
+            SKSE::log::info("ApplyHeightAdjustment: diff below min, skipping");
+            return;
+        }
+        if (heightDiff > maxHeightDiff) {
+            SKSE::log::warn("ApplyHeightAdjustment: diff above max, skipping");
+            return;
+        }
 
-        float newAttackerZ = attackerPos.z + raiseAmount;
-        float newTargetZ = targetPos.z + raiseAmount;
-        float higherZ = std::max(newAttackerZ, newTargetZ);
+        // Anchor Z = higher of the two (avoids sinking either into floor).
+        // Attacker is the spatial anchor (player stays put), target moves to match.
+        float anchorZ = std::max(attackerPos.z, targetPos.z);
 
-        SKSE::log::info("ApplyHeightAdjustment: Raising both to Z={:.2f} (+{:.1f})",
-            higherZ, raiseAmount);
+        // Slide target's XY toward attacker along the line between them,
+        // leaving ~60 units spacing (typical paired-idle distance).
+        // Without this, target stays at its original XY (over the lower step)
+        // and havok drops them back down after the teleport.
+        constexpr float pairSpacing = 60.0f;
+        float dx = targetPos.x - attackerPos.x;
+        float dy = targetPos.y - attackerPos.y;
+        float dist = std::sqrt(dx * dx + dy * dy);
 
-        attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, higherZ), true);
-        target->SetPosition(RE::NiPoint3(targetPos.x, targetPos.y, higherZ), true);
+        float newTargetX = attackerPos.x;
+        float newTargetY = attackerPos.y;
+        if (dist > 0.01f) {
+            newTargetX = attackerPos.x + (dx / dist) * pairSpacing;
+            newTargetY = attackerPos.y + (dy / dist) * pairSpacing;
+        }
+
+        SKSE::log::info("ApplyHeightAdjustment: anchorZ={:.2f}, moving target from ({:.2f}, {:.2f}, {:.2f}) to ({:.2f}, {:.2f}, {:.2f}) (was {:.2f} units away)",
+            anchorZ, targetPos.x, targetPos.y, targetPos.z, newTargetX, newTargetY, anchorZ, dist);
+
+        target->SetPosition(RE::NiPoint3(newTargetX, newTargetY, anchorZ), true);
+        // Re-set attacker Z too in case attacker was the lower one
+        attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, anchorZ), true);
     }
 
     // Animation graph variable management (moved from PairedAnimPromptSink)

@@ -159,7 +159,7 @@ namespace WitnessDetection {
 
             // Check if this actor can witness the feed
             if (CanActorWitnessFeed(actor, player, target)) {
-                SKSE::log::warn("[WitnessDetection] Feed witnessed by: {} (distance: {:.1f})",
+                SKSE::log::trace("[WitnessDetection] Feed witnessed by: {} (distance: {:.1f})",
                     actor->GetName(), distance);
                 return actor;
             }
@@ -207,8 +207,10 @@ namespace WitnessDetection {
                 player->GetName(), target->GetName());
         }
 
-        // Check if the victim themselves should raise alarm (if awake and not a follower)
-        if (!target->IsPlayerTeammate()) {
+        // Check if the victim themselves should raise alarm (if awake and not a follower).
+        // Skip hostile targets — an enemy already in combat with the player is not a "witness"
+        // of an assault crime against themselves; fall through to scan for other nearby witnesses.
+        if (!target->IsPlayerTeammate() && !target->IsHostileToActor(player)) {
             // Check if victim is conscious and aware (not sleeping, unconscious, or bleeding out)
             if (TargetState::IsConsciousAndAware(target)) {
                 if (settings->Combat.WitnessDebugLogging) {
@@ -249,7 +251,7 @@ namespace WitnessDetection {
         }
 
         lastWitnessDetectionTime = currentTime;
-        SKSE::log::warn("[WitnessDetection] Feed witnessed by: {} - triggering assault crime", witness->GetName());
+        SKSE::log::trace("[WitnessDetection] Feed witnessed by: {} - triggering assault crime", witness->GetName());
 
         // Get the target's crime faction to determine assault bounty
         auto* crimeFaction = target->GetCrimeFaction();
