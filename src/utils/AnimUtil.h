@@ -77,6 +77,16 @@ namespace AnimUtil {
     // Set actor restrained state (calls Papyrus native function)
     void setRestrained(RE::Actor* actor, bool restrained = true);
 
+    // Pacify actor - stops combat and prevents re-aggro during feed animation
+    // Uses native ProcessLists functions for immediate effect (no VM delay)
+    void PacifyActor(RE::Actor* actor);
+
+    // Undo pacify - releases actor from pacified state
+    void UndoPacifyActor(RE::Actor* actor);
+
+    // Check if actor is currently pacified
+    bool IsActorPacified(RE::Actor* actor);
+
     // Continuous positioning - maintains position until stopped
     // updateFrequency: 1 = every frame, 2 = every other frame, etc. (default: 2 for ~30Hz at 60 FPS)
     void maintainActorPosition(RE::Actor* actor, float x, float y, float z, float rotation, const std::string& taskId, uint32_t updateFrequency = 2);

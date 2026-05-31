@@ -521,6 +521,11 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     bool playerInCombat = player->IsInCombat();
     SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
 
+    // Pacify target during combat to prevent attack interruption
+    if (isInCombat || playerInCombat) {
+        AnimUtil::PacifyActor(feedTarget);
+    }
+
     int vampireStage = PapyrusCall::GetVampireStage();
     bool useTwoSingle = settings->NonCombat.UseTwoSingleAnimations && targetState == Feed::kStanding;
 

@@ -10,6 +10,12 @@
 #include <unordered_map>
 #include <bit>
 
+// Pacified actors tracking
+namespace {
+    std::mutex g_PacifyMutex;
+    std::unordered_set<RE::FormID> g_PacifiedActors;
+}
+
 namespace {
     // Union for condition parameter handling
     union ConditionParam {
@@ -162,6 +168,14 @@ namespace AnimUtil {
     // Must be called on main thread (via SKSE task)
     void PrepareActorForPairedIdle(RE::Actor* actor) {
         if (!actor) return;
+
+        // Stop any current idle animation first - this is critical!
+        // PlayIdle can return true but not actually play if another idle is active
+        // TODO testing, if not needed remove
+        auto* process = actor->GetActorRuntimeData().currentProcess;
+        if (process) {
+            process->StopCurrentIdle(actor, true);
+        }
 
         // Stop any ongoing attack/stagger animations
         actor->NotifyAnimationGraph("attackStop");
@@ -484,6 +498,66 @@ namespace AnimUtil {
                 }
             }
         });
+    }
+
+    // Pacify actor - stops combat and prevents re-aggro during feed animation
+    void PacifyActor(RE::Actor* actor) {
+        if (!actor) return;
+
+        {
+            std::lock_guard<std::mutex> lock(g_PacifyMutex);
+            if (!g_PacifiedActors.insert(actor->GetFormID()).second) {
+                // Already pacified
+                return;
+            }
+        }
+
+        const auto process = RE::ProcessLists::GetSingleton();
+        if (!process) {
+            SKSE::log::warn("[AnimUtil::PacifyActor] ProcessLists not available");
+            return;
+        }
+
+        const auto detection = process->runDetection;
+        process->runDetection = false;
+        process->ClearCachedFactionFightReactions();
+        process->StopCombatAndAlarmOnActor(actor, false);
+        process->runDetection = detection;
+
+        // Restrain actor to prevent any movement/attacks during feed
+        setRestrained(actor, true);
+
+        SKSE::log::info("[AnimUtil::PacifyActor] {:X} ({}) has been pacified",
+            actor->GetFormID(), actor->GetName());
+    }
+
+    // Undo pacify - releases actor from pacified state
+    void UndoPacifyActor(RE::Actor* actor) {
+        if (!actor) return;
+
+        {
+            std::lock_guard<std::mutex> lock(g_PacifyMutex);
+            if (!g_PacifiedActors.contains(actor->GetFormID())) {
+                SKSE::log::debug("[AnimUtil::UndoPacifyActor] {:X} ({}) is not pacified",
+                    actor->GetFormID(), actor->GetName());
+                return;
+            }
+            g_PacifiedActors.erase(actor->GetFormID());
+        }
+
+        // Release restraint
+        setRestrained(actor, false);
+
+        SKSE::log::info("[AnimUtil::UndoPacifyActor] {:X} ({}) has been released",
+            actor->GetFormID(), actor->GetName());
+    }
+
+    // Check if actor is currently pacified
+    bool IsActorPacified(RE::Actor* actor) {
+        if (!actor) return false;
+
+        std::lock_guard<std::mutex> lock(g_PacifyMutex);
+        return g_PacifiedActors.contains(actor->GetFormID());
     }
 
     // Continuous positioning - maintains actor at fixed position until stopped
