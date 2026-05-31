@@ -58,6 +58,12 @@ namespace AnimUtil {
     void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* callbackTarget = nullptr,
                   PlayIdleCallback callback = nullptr, bool isPaired = true);
 
+    // Frame-driven retry for paired PlayIdle attempts. Must be called from the
+    // game thread (PlayerUpdateHook). If the "KillMoveStart" animation-graph
+    // event has not fired within ~50ms of a paired PlayIdle, retry the call up
+    // to 5 times before signaling failure via the original callback.
+    void TickPlayIdleRetry();
+
     // Clears engine-level animation-graph blockers (current idle, stagger/attack
     // notifications, knock-down recovery) so a subsequent PlayIdle can succeed.
     // Idle-playback plumbing - applies no feed-specific policy.

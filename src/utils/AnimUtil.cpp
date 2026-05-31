@@ -2,6 +2,7 @@
 #include "feed/TargetState.h"
 #include "feed/PairedAnimPromptSink.h"
 #include "feed/AnimationRegistry.h"
+#include "integration/VampireIntegrationUtils.h"
 #include "Settings.h"
 #include "papyrus/PapyrusCall.h"
 #include <memory>
@@ -10,11 +11,67 @@
 #include <unordered_map>
 #include <bit>
 #include <format>
+#include <chrono>
 
 // Pacified actors tracking
 namespace {
     std::mutex g_PacifyMutex;
     std::unordered_set<RE::FormID> g_PacifiedActors;
+}
+
+// Non-blocking PlayIdle retry for paired animations.
+// All access is on the game thread (SKSE task + PlayerUpdateHook) so no
+// synchronization is needed beyond the atomic KillMoveStart flag in FeedAnimState.
+namespace {
+    constexpr int kMaxAttempts = 15;
+    constexpr int kRetryIntervalMs = 50;
+
+    struct {
+        bool active = false;
+        RE::ObjectRefHandle actorHandle;
+        RE::FormID idleFormID = 0;
+        RE::ObjectRefHandle targetHandle;
+        std::string actorName;
+        AnimUtil::PlayIdleCallback callback;
+        int attempt = 0;
+        std::chrono::steady_clock::time_point nextRetryAt;
+        std::chrono::steady_clock::time_point firstPlayIdleAt;   // TEMP: KillMoveStart latency telemetry
+        std::chrono::steady_clock::time_point lastPlayIdleAt;    // TEMP: KillMoveStart latency telemetry
+    } g_Retry;
+
+    // Lazy-resolved failure sound. Cached per INI string so re-edits at runtime
+    // pick up the new value, but a stable string only hits the data handler once.
+    RE::BGSSoundDescriptorForm* _resolveFailureSound() {
+        const auto& spec = Settings::GetSingleton()->Animation.FailureSoundForm;
+        if (spec.empty()) return nullptr;
+
+        static std::string s_cachedSpec;
+        static RE::BGSSoundDescriptorForm* s_cachedSound = nullptr;
+        if (spec == s_cachedSpec) return s_cachedSound;
+
+        s_cachedSpec = spec;
+        s_cachedSound = nullptr;
+
+        auto delim = spec.find('|');
+        if (delim == std::string::npos) {
+            SKSE::log::warn("[AnimUtil] FailureSoundForm missing '|': '{}'", spec);
+            return nullptr;
+        }
+        std::string plugin = spec.substr(0, delim);
+        std::string idStr  = spec.substr(delim + 1);
+        try {
+            RE::FormID id = static_cast<RE::FormID>(std::stoul(idStr, nullptr, 16));
+            auto* dh = RE::TESDataHandler::GetSingleton();
+            if (dh) s_cachedSound = dh->LookupForm<RE::BGSSoundDescriptorForm>(id, plugin);
+        } catch (...) {
+            SKSE::log::warn("[AnimUtil] FailureSoundForm bad FormID hex: '{}'", idStr);
+            return nullptr;
+        }
+        if (!s_cachedSound) {
+            SKSE::log::warn("[AnimUtil] FailureSoundForm not found: '{}'", spec);
+        }
+        return s_cachedSound;
+    }
 }
 
 namespace {
@@ -260,32 +317,98 @@ namespace AnimUtil {
             auto* process = a->GetActorRuntimeData().currentProcess;
             if (!process) return fail("No process", callbackTargetActor);
 
-            // Clear conditions on idle and all parents to bypass condition checks
-            // IdleParser::ClearIdleConditions(idle);
+            // Solo: no KillMoveStart event for solo idles, so PlayIdle's
+            // return is the only signal. Single-shot, fire callback immediately.
+            if (!isPaired) {
+                bool success = process->PlayIdle(a, idle, animTarget);
+                if (!success) {
+                    SKSE::log::error("[AnimUtil::playIdle] FAILED (solo): {} (idle: {:X})", actorName, idleFormID);
+                    FeedAnimState::MarkFeedEnded();
+                    AnimEventSink::Unregister();
+                }
+                if (callback) callback(success, callbackTargetActor);
+                return;
+            }
 
-            bool success = process->PlayIdle(a, idle, animTarget);
+            // Paired: fire PlayIdle once, arm retry state. Success/failure is
+            // determined later in TickPlayIdleRetry based on the KillMoveStart
+            // animation event (the engine sometimes silently fails to start
+            // the animation even when PlayIdle returns true).
+            if (g_Retry.active && g_Retry.callback) {
+                SKSE::log::warn("[AnimUtil::playIdle] New paired PlayIdle while previous retry active - aborting previous");
+                g_Retry.callback(false, nullptr);
+            }
+            FeedAnimState::ResetKillMoveStart();
+            process->PlayIdle(a, idle, animTarget);
+            auto playIdleNow = std::chrono::steady_clock::now();
+            g_Retry.active = true;
+            g_Retry.actorHandle = actorHandle;
+            g_Retry.idleFormID = idleFormID;
+            g_Retry.targetHandle = callbackTargetHandle;
+            g_Retry.actorName = actorName;
+            g_Retry.callback = callback;
+            g_Retry.attempt = 1;
+            g_Retry.nextRetryAt = playIdleNow + std::chrono::milliseconds(kRetryIntervalMs);
+            g_Retry.firstPlayIdleAt = playIdleNow;   // TEMP
+            g_Retry.lastPlayIdleAt = playIdleNow;    // TEMP
+        });
+    }
 
-            // Restore conditions immediately after PlayIdle call
-            // IdleParser::RestoreIdleConditions();
-            // bool success = _playPairedIdle(process, a, RE::DEFAULT_OBJECT::kActionIdle, idle, true, false, animTarget);
-            if (success) {
-                SKSE::log::info("[AnimUtil::playIdle] SUCCESS: Idle {:X} started on {} (callbackTarget: {}, isPaired: {})",
-                    idleFormID, actorName, callbackTargetName, isPaired);
-            } else {
-                SKSE::log::error("[AnimUtil::playIdle] FAILED: PlayIdle returned false for {} (idle: {:X})",
-                    actorName, idleFormID);
-                // Immediately mark feed as ended so timeout resets without waiting 15s
-                // FeedAnimState uses atomics internally so this is thread-safe
+    void TickPlayIdleRetry() {
+        if (!g_Retry.active) return;
+
+        auto finish = [](bool success) {
+            auto cb = std::move(g_Retry.callback);
+            RE::Actor* target = nullptr;
+            if (g_Retry.targetHandle) {
+                if (auto ref = g_Retry.targetHandle.get()) target = ref->As<RE::Actor>();
+            }
+            if (!success) {
+                SKSE::log::error("[AnimUtil::playIdle] FAILED: KillMoveStart never fired for {} after {} attempts (idle: {:X})",
+                    g_Retry.actorName, kMaxAttempts, g_Retry.idleFormID);
                 FeedAnimState::MarkFeedEnded();
                 AnimEventSink::Unregister();
+                if (auto* sound = _resolveFailureSound()) {
+                    if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+                        VampireIntegrationUtils::PlaySound(sound, player);
+                    }
+                }
+            } else {
+                // TEMP: KillMoveStart latency telemetry - remove once tuning is done.
+                auto now = std::chrono::steady_clock::now();
+                auto sinceFirst = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_Retry.firstPlayIdleAt).count();
+                auto sinceLast  = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_Retry.lastPlayIdleAt).count();
+                SKSE::log::info("[AnimUtil::playIdle] SUCCESS: Idle {:X} started on {} (attempt {}/{}, KillMoveStart {}ms after attempt {}, {}ms after first PlayIdle)",
+                    g_Retry.idleFormID, g_Retry.actorName, g_Retry.attempt, kMaxAttempts,
+                    sinceLast, g_Retry.attempt, sinceFirst);
             }
+            g_Retry = {};
+            if (cb) cb(success, target);
+        };
 
-            // Invoke callback with result (called on game thread)
-            // Always pass callbackTargetActor regardless of isPaired
-            if (callback) {
-                callback(success, callbackTargetActor);
-            }
-        });
+        if (FeedAnimState::ConsumeKillMoveStart()) { finish(true); return; }
+        if (std::chrono::steady_clock::now() < g_Retry.nextRetryAt) return;
+        if (g_Retry.attempt >= kMaxAttempts) { finish(false); return; }
+
+        // Re-issue PlayIdle on the same actor/idle/target.
+        auto ref = g_Retry.actorHandle.get();
+        auto* a = ref ? ref->As<RE::Actor>() : nullptr;
+        auto* proc = a ? a->GetActorRuntimeData().currentProcess : nullptr;
+        auto* idle = RE::TESForm::LookupByID<RE::TESIdleForm>(g_Retry.idleFormID);
+        if (!proc || !idle) { finish(false); return; }
+
+        RE::TESObjectREFR* animTarget = nullptr;
+        if (g_Retry.targetHandle) {
+            if (auto t = g_Retry.targetHandle.get()) animTarget = t.get();
+        }
+
+        g_Retry.attempt++;
+        SKSE::log::warn("[AnimUtil::playIdle] KillMoveStart not seen, retrying (attempt {}/{}) for {}",
+            g_Retry.attempt, kMaxAttempts, g_Retry.actorName);
+        proc->PlayIdle(a, idle, animTarget);
+        auto retryNow = std::chrono::steady_clock::now();
+        g_Retry.nextRetryAt = retryNow + std::chrono::milliseconds(kRetryIntervalMs);
+        g_Retry.lastPlayIdleAt = retryNow;   // TEMP: KillMoveStart latency telemetry
     }
 
     // Set actor rotation (handles player vs NPC differently)

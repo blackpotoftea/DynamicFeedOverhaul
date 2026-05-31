@@ -3,6 +3,7 @@
 #include "feed/WitnessDetection.h"
 #include "Settings.h"
 #include "utils/MenuCheck.h"
+#include "utils/AnimUtil.h"
 
 namespace {
 
@@ -15,6 +16,9 @@ namespace {
 
             auto* sink = PairedAnimPromptSink::GetSingleton();
             auto* settings = Settings::GetSingleton();
+
+            // 0. Drive non-blocking PlayIdle retry (paired animation KillMoveStart wait)
+            AnimUtil::TickPlayIdleRetry();
 
             // 1. Periodic Check
             sink->periodicCheckTimer_ += a_delta;

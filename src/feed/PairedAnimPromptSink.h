@@ -26,6 +26,14 @@ namespace FeedAnimState {
     void MarkFeedEnded();
     bool CheckAndClearFeedEnded();
     bool IsFeedActive();
+
+    // KillMoveStart animation-graph event tracking.
+    // ResetKillMoveStart() clears the flag before a PlayIdle attempt; the event
+    // sink calls MarkKillMoveStartSeen() when the engine fires "KillMoveStart";
+    // ConsumeKillMoveStart() atomically reads-and-clears (true = event happened).
+    void MarkKillMoveStartSeen();
+    bool ConsumeKillMoveStart();
+    void ResetKillMoveStart();
 }
 
 class AnimEventSink : public RE::BSTEventSink<RE::BSAnimationGraphEvent> {

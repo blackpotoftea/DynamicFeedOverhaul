@@ -171,6 +171,7 @@ void Settings::LoadINI() {
     Animation.HungryThreshold = static_cast<int>(ini.GetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold));
     Animation.EnableTimeSlowdown = ini.GetBoolValue("Animation", "EnableTimeSlowdown", Animation.EnableTimeSlowdown);
     Animation.TimeSlowdownMultiplier = static_cast<float>(ini.GetDoubleValue("Animation", "TimeSlowdownMultiplier", Animation.TimeSlowdownMultiplier));
+    Animation.FailureSoundForm = ini.GetValue("Animation", "FailureSoundForm", Animation.FailureSoundForm.c_str());
 
     // Integration
     Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
@@ -208,8 +209,9 @@ void Settings::LoadINI() {
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
-    SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}",
-        Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier);
+    SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}, FailureSoundForm='{}'",
+        Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier,
+        Animation.FailureSoundForm);
     SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}",
         Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck,
         Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat);
@@ -374,6 +376,8 @@ void Settings::SaveINI() {
         "; Enable time slowdown effect when paired feed animation starts");
     ini.SetDoubleValue("Animation", "TimeSlowdownMultiplier", Animation.TimeSlowdownMultiplier,
         "; Time multiplier during feed (0.4 = 40% speed, 1.0 = normal speed)");
+    ini.SetValue("Animation", "FailureSoundForm", Animation.FailureSoundForm.c_str(),
+        "; Sound played at player when feed animation fails to start (after all retries). Format: PluginName|0xFormID (e.g., Skyrim.esm|0x10D650). Empty = disabled.");
 
     // Integration
     ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,

@@ -82,6 +82,20 @@ namespace FeedAnimState {
     bool IsFeedActive() {
         return feedState.load(std::memory_order_acquire) == State::Active;
     }
+
+    std::atomic<bool> killMoveStartSeen{false};
+
+    void MarkKillMoveStartSeen() {
+        killMoveStartSeen.store(true, std::memory_order_release);
+    }
+
+    bool ConsumeKillMoveStart() {
+        return killMoveStartSeen.exchange(false, std::memory_order_acq_rel);
+    }
+
+    void ResetKillMoveStart() {
+        killMoveStartSeen.store(false, std::memory_order_release);
+    }
 }
 
 // AnimEventSink Implementation
@@ -117,6 +131,10 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
             AnimEventSink::Unregister();
             SKSE::log::debug("Animation event sink unregistered (deferred)");
         });
+    } else if (tag == "KillMoveStart") {
+        // Ground truth that the paired animation actually started in the engine.
+        // AnimUtil's retry tick consumes this flag to confirm success and stop retrying.
+        FeedAnimState::MarkKillMoveStartSeen();
     } else {
          // Log all events during feed to discover weapon-related events
         //  SKSE::log::debug("[AnimEvent] {}", tag.c_str());

@@ -69,34 +69,21 @@ namespace WitnessDetection {
             return false;
         }
 
-        // Check detection level - has this actor actually detected the player?
+        // RequestDetectionLevel returns a positive integer; values >= ~50 indicate the
+        // actor is actively aware of the target. Values can far exceed 100 when fully
+        // alerted in combat.
         std::int32_t detectionLevel = GetDetectionLevel(potentialWitness, player);
 
-        // Detection levels: 0=None, 1-25=Noticed, 26-50=Unseen, 51-75=Seen, 76-100=Fully Detected
-        // Check if at least "Seen" level
         if (Settings::GetSingleton()->Combat.WitnessDebugLogging) {
             SKSE::log::debug("[WitnessDetection] {} detection level: {} (threshold: 50)",
                 potentialWitness->GetName(), detectionLevel);
         }
 
         if (detectionLevel >= 50) {
-            SKSE::log::warn("[WitnessDetection] Actor {} has DETECTED player (level: {})",
-                potentialWitness->GetName(), detectionLevel);
-            return true;
-        }
-
-        // Alternative check: hostile actor in combat with player
-        bool isHostile = potentialWitness->IsHostileToActor(player);
-        bool inCombat = potentialWitness->IsInCombat();
-
-        if (Settings::GetSingleton()->Combat.WitnessDebugLogging) {
-            SKSE::log::debug("[WitnessDetection] {} hostile check: isHostile={}, inCombat={}",
-                potentialWitness->GetName(), isHostile, inCombat);
-        }
-
-        if (isHostile && inCombat) {
-            SKSE::log::warn("[WitnessDetection] Hostile actor {} is in combat with player",
-                potentialWitness->GetName());
+            if (Settings::GetSingleton()->Combat.WitnessDebugLogging) {
+                SKSE::log::debug("[WitnessDetection] Actor {} has DETECTED player (level: {})",
+                    potentialWitness->GetName(), detectionLevel);
+            }
             return true;
         }
 
@@ -202,19 +189,26 @@ namespace WitnessDetection {
             return;
         }
 
+        // Hostile targets cannot be the victim of an assault crime — killing an enemy in
+        // active combat is not reportable, and any nearby hostile NPCs are threats, not
+        // witnesses. Short-circuit to avoid scanning and log spam every WitnessCheckInterval.
+        if (target->IsHostileToActor(player)) {
+            if (settings->Combat.WitnessDebugLogging) {
+                SKSE::log::debug("[WitnessDetection] target is hostile - no crime possible, skipping");
+            }
+            return;
+        }
+
         if (settings->Combat.WitnessDebugLogging) {
             SKSE::log::debug("[WitnessDetection] checking for witnesses (player: {}, target: {})",
                 player->GetName(), target->GetName());
         }
 
         // Check if the victim themselves should raise alarm (if awake and not a follower).
-        // Skip hostile targets — an enemy already in combat with the player is not a "witness"
-        // of an assault crime against themselves; fall through to scan for other nearby witnesses.
-        if (!target->IsPlayerTeammate() && !target->IsHostileToActor(player)) {
-            // Check if victim is conscious and aware (not sleeping, unconscious, or bleeding out)
+        if (!target->IsPlayerTeammate()) {
             if (TargetState::IsConsciousAndAware(target)) {
                 if (settings->Combat.WitnessDebugLogging) {
-                    SKSE::log::warn("[WitnessDetection] Victim {} is conscious and not a teammate - raising alarm",
+                    SKSE::log::debug("[WitnessDetection] Victim {} is conscious and not a teammate - raising alarm",
                         target->GetName());
                 }
                 OnDetectedByWitness(player, target, target);  // Victim is their own witness
@@ -225,7 +219,9 @@ namespace WitnessDetection {
         // Use the WitnessDetection module to check for witnesses
         RE::Actor* witness = CheckForWitnesses(player, target);
         if (witness) {
-            SKSE::log::warn("[WitnessDetection] found witness {}", witness->GetName());
+            if (settings->Combat.WitnessDebugLogging) {
+                SKSE::log::debug("[WitnessDetection] found witness {}", witness->GetName());
+            }
             OnDetectedByWitness(player, target, witness);
         } else {
             if (settings->Combat.WitnessDebugLogging) {
