@@ -148,6 +148,12 @@ namespace CustomFeed {
         // Use AnimUtil::playIdle for thread-safe, handle-based animation playback
         SKSE::log::debug("[CustomFeed] Calling AnimUtil::playIdle (paired={})...", isPaired);
 
+        // Solo animations: sheathe weapon first if drawn. Paired animations handle weapon state natively.
+        if (!isPaired && wasWeaponDrawn_) {
+            SKSE::log::info("[CustomFeed] Solo animation - sheathing weapon");
+            player->DrawWeaponMagicHands(false);
+        }
+
         // AnimUtil::playIdle handles thread-safety and ObjectRefHandle automatically
         // The callback will be invoked on game thread after PlayIdle succeeds or fails
         // Always pass target for callback (needed for integration) even for solo animations
@@ -202,12 +208,14 @@ namespace CustomFeed {
         }
         wasTargetDeadAtStart_ = false;
 
-        // // Restore weapon/magic drawn state if it was drawn before feeding
-        // if (player && wasWeaponDrawn_) {
-        //     SKSE::log::info("[CustomFeed] OnComplete: Restoring weapon drawn state");
-        //     AnimUtil::redrawWeapon(player);
-        //     wasWeaponDrawn_ = false;  // Reset the flag
-        // }
+        // Restore weapon drawn state if we sheathed it for a solo animation
+        if (wasWeaponDrawn_) {
+            if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+                SKSE::log::info("[CustomFeed] OnComplete: Redrawing weapon");
+                player->DrawWeaponMagicHands(true);
+            }
+            wasWeaponDrawn_ = false;
+        }
 
         ClearFeedTarget();
     }
