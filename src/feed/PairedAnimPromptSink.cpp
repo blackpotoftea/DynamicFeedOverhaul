@@ -58,8 +58,13 @@ namespace FeedAnimState {
         }
 
         // Clear kill move flag (was set to prevent Quick Loot etc. during animation)
+        // Get target before clearing the reference
+        auto target = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget();
         if (auto* player = RE::PlayerCharacter::GetSingleton()) {
             AnimUtil::SetInKillMove(player, false);
+        }
+        if (target) {
+            AnimUtil::SetInKillMove(target.get(), false);
         }
 
         // Clear the active feed target (thread-safe)
@@ -501,8 +506,9 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (!player) return;
     
-    // Mark player as in kill move to prevent Quick Loot and other mods from interfering
+    // Mark player and target as in kill move to prevent Quick Loot and other mods from interfering
     AnimUtil::SetInKillMove(player, true);
+    AnimUtil::SetInKillMove(feedTarget, true);
 
     auto furnitureRef = TargetState::GetFurnitureReference(feedTarget);
 
