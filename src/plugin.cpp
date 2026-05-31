@@ -13,6 +13,7 @@
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
 #include "utils/AnimUtil.h"
+#include "integration/UI.h"
 
 std::atomic<SkyPromptAPI::ClientID> g_clientID{0};
 
@@ -112,6 +113,9 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
 
     // Load settings from INI
     Settings::GetSingleton()->LoadINI();
+
+    // Register SKSE Menu Framework UI (no-op if framework not installed)
+    UI::Register();
 
     auto messaging = SKSE::GetMessagingInterface();
 	if (!messaging->RegisterListener("SKSE", MessageHandler)) {

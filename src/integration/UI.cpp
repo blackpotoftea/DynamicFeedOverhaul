@@ -1,0 +1,397 @@
+#include "UI.h"
+#include "../Settings.h"
+#include "../feed/TargetState.h"
+#include "../papyrus/PapyrusCall.h"
+#include "../utils/log.h"
+#include "VampireIntegrationUtils.h"
+#include <spdlog/spdlog.h>
+#include <sstream>
+
+namespace {
+    // Helper to join vector<string> into comma-separated string
+    std::string JoinStrings(const std::vector<std::string>& list) {
+        std::string result;
+        for (size_t i = 0; i < list.size(); ++i) {
+            if (i > 0) result += ", ";
+            result += list[i];
+        }
+        return result;
+    }
+
+    // Helper to split comma-separated string into vector<string>
+    std::vector<std::string> SplitStrings(const char* str) {
+        std::vector<std::string> result;
+        if (!str || strlen(str) == 0) return result;
+        std::stringstream ss(str);
+        std::string token;
+        while (std::getline(ss, token, ',')) {
+            size_t start = token.find_first_not_of(" \t");
+            size_t end = token.find_last_not_of(" \t");
+            if (start != std::string::npos && end != std::string::npos) {
+                result.push_back(token.substr(start, end - start + 1));
+            }
+        }
+        return result;
+    }
+}
+
+void UI::Register() {
+    if (!SKSEMenuFramework::IsInstalled()) {
+        return;
+    }
+    SKSEMenuFramework::SetSection("Dynamic Feed Overhaul");
+    SKSEMenuFramework::AddSectionItem("Settings", Settings::Render);
+    SKSEMenuFramework::AddSectionItem("Debug", Debug::Render);
+}
+
+void __stdcall UI::Debug::Render() {
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (!player) {
+        ImGuiMCP::Text("Player not available");
+        return;
+    }
+
+    // Player Status Section
+    ImGuiMCP::Text("Player Status");
+    ImGuiMCP::Separator();
+
+    // Show race
+    auto* race = player->GetRace();
+    if (race) {
+        ImGuiMCP::Text("Race: %s", race->GetFullName());
+    }
+
+    // Show PlayerIsVampire global
+    auto* playerIsVampireGlobal = RE::TESForm::LookupByEditorID<RE::TESGlobal>("PlayerIsVampire");
+    if (playerIsVampireGlobal) {
+        ImGuiMCP::Text("PlayerIsVampire: %.0f", playerIsVampireGlobal->value);
+    }
+
+    bool isVampire = TargetState::IsVampire(player);
+    bool isWerewolf = TargetState::IsWerewolf(player);
+    bool isVampireLord = TargetState::IsVampireLord(player);
+
+    ImGuiMCP::Text("Status: ");
+    ImGuiMCP::SameLine();
+    if (isVampireLord) {
+        ImGuiMCP::TextColored(ImGuiMCP::ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Vampire Lord");
+    } else if (isVampire) {
+        ImGuiMCP::TextColored(ImGuiMCP::ImVec4(0.8f, 0.0f, 0.2f, 1.0f), "Vampire");
+    } else if (isWerewolf) {
+        ImGuiMCP::TextColored(ImGuiMCP::ImVec4(0.6f, 0.4f, 0.2f, 1.0f), "Werewolf");
+    } else {
+        ImGuiMCP::Text("Normal");
+    }
+
+    // Show hunger stage for vampires
+    if (isVampire && !isVampireLord) {
+        int hungerStage = PapyrusCall::GetVampireStage();
+        if (hungerStage >= 1 && hungerStage <= 4) {
+            const char* hungerNames[] = {"Sated", "Peckish", "Hungry", "Starving"};
+            ImGuiMCP::Text("Hunger: %s (Stage %d)", hungerNames[hungerStage - 1], hungerStage);
+        }
+    }
+
+    // Debug Transformations Section
+    ImGuiMCP::Separator();
+    ImGuiMCP::Text("Debug Transformations");
+
+    if (ImGuiMCP::Button("Become Vampire")) {
+        auto* quest = RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerVampireQuest");
+        if (quest) {
+            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+            if (vm) {
+                auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
+                if (handle != vm->GetObjectHandlePolicy()->EmptyHandle()) {
+                    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(
+                        new VampireIntegrationUtils::EmptyCallback());
+                    RE::Actor* playerActor = player;
+                    vm->DispatchMethodCall(handle, "PlayerVampireQuestScript", "VampireChange",
+                        RE::MakeFunctionArguments(std::move(playerActor)), callback);
+                    SKSE::log::info("UI: Called PlayerVampireQuestScript.VampireChange(player)");
+                }
+            }
+        } else {
+            SKSE::log::warn("UI: PlayerVampireQuest not found");
+        }
+    }
+    if (ImGuiMCP::Button("Become Vampire Lord")) {
+        // TODO: Implement vampire lord transformation
+        SKSE::log::info("UI: Become Vampire Lord button pressed");
+    }
+    if (ImGuiMCP::Button("Become Werewolf")) {
+        // TODO: Implement werewolf transformation
+        SKSE::log::info("UI: Become Werewolf button pressed");
+    }
+}
+
+void __stdcall UI::Settings::Render() {
+    auto* settings = ::Settings::GetSingleton();
+    bool changed = false;
+
+    // General Settings
+    if (ImGuiMCP::CollapsingHeader("General")) {
+        changed |= ImGuiMCP::Checkbox("Enable Mod", &settings->General.EnableMod);
+        if (ImGuiMCP::Checkbox("Debug Logging", &settings->General.DebugLogging)) {
+            changed = true;
+            // Apply log level immediately when this toggle changes
+            if (settings->General.DebugLogging) {
+                spdlog::set_level(spdlog::level::trace);
+                spdlog::flush_on(spdlog::level::trace);
+            } else {
+                spdlog::set_level(spdlog::level::info);
+                spdlog::flush_on(spdlog::level::info);
+            }
+        }
+        ImGuiMCP::SetItemTooltip("Enable verbose trace logging");
+        if (ImGuiMCP::Button("Clear Log")) {
+            ClearLog();
+        }
+        ImGuiMCP::SetItemTooltip("Clears the log file (useful for isolating debug output)");
+        changed |= ImGuiMCP::Checkbox("Enable Werewolf", &settings->General.EnableWerewolf);
+        ImGuiMCP::SetItemTooltip("Enable feeding for Werewolf form (EXPERIMENTAL)");
+        changed |= ImGuiMCP::Checkbox("Enable Vampire Lord", &settings->General.EnableVampireLord);
+        changed |= ImGuiMCP::Checkbox("Force Vampire", &settings->General.ForceVampire);
+        ImGuiMCP::SetItemTooltip("Debug: Skip vampire check");
+        changed |= ImGuiMCP::Checkbox("Check Hunger Stage", &settings->General.CheckHungerStage);
+        if (settings->General.CheckHungerStage) {
+            changed |= ImGuiMCP::SliderInt("Min Hunger Stage", &settings->General.MinHungerStage, 1, 4);
+        }
+        changed |= ImGuiMCP::SliderInt("Force Feed Type", &settings->General.ForceFeedType, 0, 10);
+        ImGuiMCP::SetItemTooltip("Debug: Force specific FeedType (0=auto)");
+        changed |= ImGuiMCP::Checkbox("Debug Animation Cycle", &settings->General.DebugAnimationCycle);
+        changed |= ImGuiMCP::SliderFloat("Animation Timeout", &settings->General.AnimationTimeout, 1.0f, 60.0f, "%.1f sec");
+        changed |= ImGuiMCP::SliderFloat("Periodic Check Interval", &settings->General.PeriodicCheckInterval, 0.1f, 5.0f, "%.1f sec");
+        changed |= ImGuiMCP::SliderFloat("Prompt Delay (Idle)", &settings->General.PromptDelayIdleSeconds, 0.0f, 2.0f, "%.2f sec");
+    }
+
+    // Input Settings
+    if (ImGuiMCP::CollapsingHeader("Input")) {
+        ImGuiMCP::TextDisabled("Key codes (DirectInput scan codes). Common keys:");
+        ImGuiMCP::TextDisabled("  E=18, R=19, F=33, G=34, H=35");
+        ImGuiMCP::TextDisabled("  Gamepad: A=4096, B=8192, X=16384, Y=32768");
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::InputInt("Feed Key (Keyboard)", &settings->Input.FeedKey, 1, 16);
+        ImGuiMCP::SetItemTooltip("Primary feed key (default: 34 = G)");
+        changed |= ImGuiMCP::InputInt("Feed Key (Gamepad)", &settings->Input.FeedGamepadKey, 4096, 4096);
+        ImGuiMCP::SetItemTooltip("Primary feed gamepad button (default: 4096 = A)");
+        changed |= ImGuiMCP::InputInt("Secondary Key (Keyboard)", &settings->Input.SecondaryKey, 1, 16);
+        ImGuiMCP::SetItemTooltip("Secondary prompt key for Embrace (default: 35 = H)");
+        changed |= ImGuiMCP::InputInt("Secondary Key (Gamepad)", &settings->Input.SecondaryGamepadKey, 4096, 4096);
+        ImGuiMCP::SetItemTooltip("Secondary prompt gamepad button (default: 8192 = B)");
+    }
+
+    // Prompt Display Settings
+    if (ImGuiMCP::CollapsingHeader("Prompt Display")) {
+        changed |= ImGuiMCP::Checkbox("Require Weapon Drawn", &settings->PromptDisplay.RequireWeaponDrawn);
+        changed |= ImGuiMCP::Checkbox("Show When Sneaking", &settings->PromptDisplay.ShowWhenSneaking);
+        changed |= ImGuiMCP::Checkbox("Require Player Facing", &settings->PromptDisplay.RequirePlayerFacing);
+        if (settings->PromptDisplay.RequirePlayerFacing) {
+            changed |= ImGuiMCP::SliderFloat("Facing Angle Threshold", &settings->PromptDisplay.FacingAngleThreshold, 15.0f, 180.0f, "%.0f deg");
+        }
+        changed |= ImGuiMCP::Checkbox("Relaxed Combat Targeting", &settings->PromptDisplay.RelaxedCombatTargeting);
+        ImGuiMCP::SetItemTooltip("Disable facing requirement during combat");
+        changed |= ImGuiMCP::SliderFloat("Max Target Distance", &settings->PromptDisplay.MaxTargetDistance, 50.0f, 500.0f, "%.0f units");
+    }
+
+    // Non-Combat Settings
+    if (ImGuiMCP::CollapsingHeader("Non-Combat")) {
+        changed |= ImGuiMCP::Checkbox("Allow Standing", &settings->NonCombat.AllowStanding);
+        changed |= ImGuiMCP::Checkbox("Allow Sleeping", &settings->NonCombat.AllowSleeping);
+        changed |= ImGuiMCP::Checkbox("Allow Sitting (Chair)", &settings->NonCombat.AllowSittingChair);
+        ImGuiMCP::SetItemTooltip("Excluded by default (no animation)");
+        changed |= ImGuiMCP::Checkbox("Enable Height Adjust", &settings->NonCombat.EnableHeightAdjust);
+        if (settings->NonCombat.EnableHeightAdjust) {
+            changed |= ImGuiMCP::SliderFloat("Min Height Diff", &settings->NonCombat.MinHeightDiff, 0.0f, 50.0f, "%.0f");
+            changed |= ImGuiMCP::SliderFloat("Max Height Diff", &settings->NonCombat.MaxHeightDiff, 50.0f, 300.0f, "%.0f");
+        }
+        changed |= ImGuiMCP::Checkbox("Use Two Single Animations", &settings->NonCombat.UseTwoSingleAnimations);
+        if (settings->NonCombat.UseTwoSingleAnimations) {
+            static char playerAnimBuf[256] = "";
+            static char targetAnimBuf[256] = "";
+            static bool animBufsInitialized = false;
+            if (!animBufsInitialized) {
+                strncpy(playerAnimBuf, settings->NonCombat.PlayerStandingFrontAnim.c_str(), sizeof(playerAnimBuf) - 1);
+                strncpy(targetAnimBuf, settings->NonCombat.TargetStandingFrontAnim.c_str(), sizeof(targetAnimBuf) - 1);
+                animBufsInitialized = true;
+            }
+            if (ImGuiMCP::InputText("Player Animation", playerAnimBuf, sizeof(playerAnimBuf))) {
+                settings->NonCombat.PlayerStandingFrontAnim = playerAnimBuf;
+                changed = true;
+            }
+            ImGuiMCP::SetItemTooltip("Animation event name for player in two-single feed");
+            if (ImGuiMCP::InputText("Target Animation", targetAnimBuf, sizeof(targetAnimBuf))) {
+                settings->NonCombat.TargetStandingFrontAnim = targetAnimBuf;
+                changed = true;
+            }
+            ImGuiMCP::SetItemTooltip("Animation event name for target in two-single feed");
+        }
+        changed |= ImGuiMCP::SliderFloat("Target Offset X", &settings->NonCombat.TargetOffsetX, -200.0f, 200.0f, "%.0f");
+        changed |= ImGuiMCP::SliderFloat("Target Offset Y", &settings->NonCombat.TargetOffsetY, 0.0f, 200.0f, "%.0f");
+        changed |= ImGuiMCP::SliderFloat("Target Offset Z", &settings->NonCombat.TargetOffsetZ, -100.0f, 100.0f, "%.0f");
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Enable Lethal Feed", &settings->NonCombat.EnableLethalFeed);
+        ImGuiMCP::SetItemTooltip("Enable hold-to-kill feature for non-combat targets");
+        if (settings->NonCombat.EnableLethalFeed) {
+            changed |= ImGuiMCP::SliderFloat("Lethal Hold Duration", &settings->NonCombat.LethalHoldDuration, 1.0f, 15.0f, "%.1f sec");
+            changed |= ImGuiMCP::Checkbox("Exclude Essential From Lethal", &settings->NonCombat.ExcludeEssentialFromLethal);
+        }
+        changed |= ImGuiMCP::Checkbox("Enable Rotation", &settings->NonCombat.EnableRotation);
+        changed |= ImGuiMCP::Checkbox("Enable Level Check", &settings->NonCombat.EnableLevelCheck);
+        if (settings->NonCombat.EnableLevelCheck) {
+            changed |= ImGuiMCP::SliderInt("Max Level Difference", &settings->NonCombat.MaxLevelDifference, 0, 50);
+        }
+    }
+
+    // Combat Settings
+    if (ImGuiMCP::CollapsingHeader("Combat")) {
+        changed |= ImGuiMCP::Checkbox("Enabled", &settings->Combat.Enabled);
+        changed |= ImGuiMCP::Checkbox("Ignore Hunger Check", &settings->Combat.IgnoreHungerCheck);
+        changed |= ImGuiMCP::Checkbox("Require Low Health", &settings->Combat.RequireLowHealth);
+        if (settings->Combat.RequireLowHealth) {
+            changed |= ImGuiMCP::SliderFloat("Low Health Threshold", &settings->Combat.LowHealthThreshold, 0.05f, 0.75f, "%.0f%%");
+        }
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Allow Staggered", &settings->Combat.AllowStaggered);
+        ImGuiMCP::SetItemTooltip("Allow feeding on staggered targets (bypasses health check)");
+        if (settings->Combat.AllowStaggered) {
+            changed |= ImGuiMCP::Checkbox("Stagger Require Lower Level", &settings->Combat.StaggerRequireLowerLevel);
+            if (settings->Combat.StaggerRequireLowerLevel) {
+                changed |= ImGuiMCP::SliderInt("Stagger Max Level Diff", &settings->Combat.StaggerMaxLevelDifference, 0, 50);
+            }
+        }
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Enable Witness Detection", &settings->Combat.EnableWitnessDetection);
+        if (settings->Combat.EnableWitnessDetection) {
+            changed |= ImGuiMCP::SliderFloat("Witness Detection Radius", &settings->Combat.WitnessDetectionRadius, 500.0f, 5000.0f, "%.0f units");
+            changed |= ImGuiMCP::SliderFloat("Witness Check Interval", &settings->Combat.WitnessCheckInterval, 0.1f, 2.0f, "%.1f sec");
+            changed |= ImGuiMCP::Checkbox("Witness Debug Logging", &settings->Combat.WitnessDebugLogging);
+        }
+        changed |= ImGuiMCP::SliderFloat("Prompt Delay (Combat)", &settings->Combat.PromptDelayCombatSeconds, 0.0f, 2.0f, "%.2f sec");
+    }
+
+    // Filtering Settings
+    if (ImGuiMCP::CollapsingHeader("Filtering")) {
+        // --- Scene Filters ---
+        ImGuiMCP::TextDisabled("Scene Filters");
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Exclude In Scene", &settings->Filtering.ExcludeInScene);
+        ImGuiMCP::SetItemTooltip("Skip actors in dialogues/scripted events");
+        changed |= ImGuiMCP::Checkbox("Exclude OStim Scenes", &settings->Filtering.ExcludeOStimScenes);
+
+        // --- Dead Targets (Non-Combat only) ---
+        ImGuiMCP::Spacing();
+        ImGuiMCP::TextDisabled("Dead Targets (Non-Combat only)");
+        ImGuiMCP::Separator();
+        ImGuiMCP::TextDisabled("Note: dead targets are always excluded while in combat.");
+        changed |= ImGuiMCP::Checkbox("Exclude Dead", &settings->Filtering.ExcludeDead);
+        ImGuiMCP::SetItemTooltip("Skip dead actors outside combat (overridden by 'Allow Recently Dead' for fresh corpses)");
+        changed |= ImGuiMCP::Checkbox("Allow Recently Dead", &settings->Filtering.AllowRecentlyDead);
+        ImGuiMCP::SetItemTooltip("Allow feeding on fresh corpses (overrides 'Exclude Dead' when target is within the limits below)");
+        if (settings->Filtering.AllowRecentlyDead) {
+            changed |= ImGuiMCP::SliderFloat("Max Dead Hours", &settings->Filtering.MaxDeadHours, 0.5f, 24.0f, "%.1f hrs");
+            ImGuiMCP::SetItemTooltip("Maximum in-game hours since death to still allow feeding");
+            changed |= ImGuiMCP::SliderInt("Max Dead Feeds", &settings->Filtering.MaxDeadFeeds, 0, 10);
+            ImGuiMCP::SetItemTooltip("Max times to feed on a single corpse (0 = unlimited)");
+        }
+
+        // --- Keyword / Actor Filters ---
+        ImGuiMCP::Spacing();
+        ImGuiMCP::TextDisabled("Keyword / Actor Filters (comma-separated)");
+        ImGuiMCP::Separator();
+
+        static char includeKeywordsBuf[512] = "";
+        static char excludeKeywordsBuf[512] = "";
+        static char excludeActorsBuf[1024] = "";
+        static bool filterBufsInitialized = false;
+        if (!filterBufsInitialized) {
+            strncpy(includeKeywordsBuf, JoinStrings(settings->Filtering.IncludeKeywords).c_str(), sizeof(includeKeywordsBuf) - 1);
+            strncpy(excludeKeywordsBuf, JoinStrings(settings->Filtering.ExcludeKeywords).c_str(), sizeof(excludeKeywordsBuf) - 1);
+            strncpy(excludeActorsBuf, JoinStrings(settings->Filtering.ExcludeActorIDs).c_str(), sizeof(excludeActorsBuf) - 1);
+            filterBufsInitialized = true;
+        }
+        if (ImGuiMCP::InputText("Include Keywords", includeKeywordsBuf, sizeof(includeKeywordsBuf))) {
+            settings->Filtering.IncludeKeywords = SplitStrings(includeKeywordsBuf);
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("Only feed if target has ANY of these keywords (empty=allow all)");
+        if (ImGuiMCP::InputText("Exclude Keywords", excludeKeywordsBuf, sizeof(excludeKeywordsBuf))) {
+            settings->Filtering.ExcludeKeywords = SplitStrings(excludeKeywordsBuf);
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("Never feed if target has ANY of these keywords");
+        if (ImGuiMCP::InputText("Exclude Actor IDs", excludeActorsBuf, sizeof(excludeActorsBuf))) {
+            settings->Filtering.ExcludeActorIDs = SplitStrings(excludeActorsBuf);
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("Never feed on specific NPCs (format: PluginName|0xFormID)");
+    }
+
+    // Icon Overlay Settings
+    if (ImGuiMCP::CollapsingHeader("Icon Overlay")) {
+        changed |= ImGuiMCP::Checkbox("Enable Icon Overlay", &settings->IconOverlay.EnableIconOverlay);
+        if (settings->IconOverlay.EnableIconOverlay) {
+            const char* positions[] = {"Above Head", "Right of Head"};
+            if (ImGuiMCP::Combo("Icon Position", &settings->IconOverlay.IconPosition, positions, 2)) {
+                changed = true;
+            }
+            changed |= ImGuiMCP::SliderFloat("Icon Duration", &settings->IconOverlay.IconDuration, 1.0f, 15.0f, "%.1f sec");
+            changed |= ImGuiMCP::SliderFloat("Icon Size", &settings->IconOverlay.IconSize, 16.0f, 128.0f, "%.0f px");
+            changed |= ImGuiMCP::SliderFloat("Icon Height Offset", &settings->IconOverlay.IconHeightOffset, 0.0f, 50.0f, "%.0f");
+            static char iconPathBuf[512] = "";
+            static bool iconPathInitialized = false;
+            if (!iconPathInitialized) {
+                strncpy(iconPathBuf, settings->IconOverlay.IconPath.c_str(), sizeof(iconPathBuf) - 1);
+                iconPathInitialized = true;
+            }
+            if (ImGuiMCP::InputText("Icon Path", iconPathBuf, sizeof(iconPathBuf))) {
+                settings->IconOverlay.IconPath = iconPathBuf;
+                changed = true;
+            }
+            ImGuiMCP::SetItemTooltip("Path to the icon file (e.g., Data\\Interface\\ImGuiIcons\\Icons\\vampireFang.png)");
+        }
+    }
+
+    // Animation Settings
+    if (ImGuiMCP::CollapsingHeader("Animation")) {
+        changed |= ImGuiMCP::Checkbox("Enable Random Selection", &settings->Animation.EnableRandomSelection);
+        changed |= ImGuiMCP::SliderInt("Hungry Threshold", &settings->Animation.HungryThreshold, 1, 4);
+        ImGuiMCP::SetItemTooltip("Hunger stage >= this uses hungry animations");
+        changed |= ImGuiMCP::Checkbox("Enable Time Slowdown", &settings->Animation.EnableTimeSlowdown);
+        if (settings->Animation.EnableTimeSlowdown) {
+            changed |= ImGuiMCP::SliderFloat("Time Slowdown Multiplier", &settings->Animation.TimeSlowdownMultiplier, 0.1f, 1.0f, "%.1fx");
+        }
+        static char failureSoundBuf[256] = "";
+        static bool failureSoundInitialized = false;
+        if (!failureSoundInitialized) {
+            strncpy(failureSoundBuf, settings->Animation.FailureSoundForm.c_str(), sizeof(failureSoundBuf) - 1);
+            failureSoundInitialized = true;
+        }
+        if (ImGuiMCP::InputText("Failure Sound Form", failureSoundBuf, sizeof(failureSoundBuf))) {
+            settings->Animation.FailureSoundForm = failureSoundBuf;
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("Sound played at player on PlayIdle failure. Format: PluginName|0xFormID. Empty = disabled. Default: Skyrim.esm|0x6D1C6 (UIActivateFail).");
+    }
+
+    // Integration Settings
+    if (ImGuiMCP::CollapsingHeader("Integration")) {
+        changed |= ImGuiMCP::Checkbox("Enable Sacrosanct", &settings->Integration.EnableSacrosanct);
+        changed |= ImGuiMCP::Checkbox("Enable Sacrilege", &settings->Integration.EnableSacrilege);
+        changed |= ImGuiMCP::Checkbox("Enable Better Vampires", &settings->Integration.EnableBetterVampires);
+        changed |= ImGuiMCP::Checkbox("Poise Ignores Level Check", &settings->Integration.PoiseIgnoresLevelCheck);
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Deep Sacrosanct Integration", &settings->Integration.DeepSacrosanctIntegration);
+        ImGuiMCP::SetItemTooltip("Use C++ to mimic Sacrosanct ProcessFeed (bypasses Papyrus)");
+        changed |= ImGuiMCP::Checkbox("Deep Sacrilege Integration", &settings->Integration.DeepSacrilegeIntegration);
+        changed |= ImGuiMCP::Checkbox("Enable Sacrosanct In Combat", &settings->Integration.EnableSacrosanctInCombat);
+        changed |= ImGuiMCP::Checkbox("Enable Sacrilege In Combat", &settings->Integration.EnableSacrilegeInCombat);
+        changed |= ImGuiMCP::Checkbox("Enable Vampire Feed Proxy", &settings->Integration.EnableVampireFeedProxy);
+        ImGuiMCP::SetItemTooltip("Skip vanilla feed events when VampireFeedProxy.dll is detected");
+    }
+
+    // Save if any setting changed
+    if (changed) {
+        settings->SaveINI();
+    }
+}

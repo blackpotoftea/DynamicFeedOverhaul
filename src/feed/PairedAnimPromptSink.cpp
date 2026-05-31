@@ -766,6 +766,13 @@ bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
     // Check common filters first (fast)
     if (FeedFiltering::IsExcludedByFilters(actor)) return true;
 
+    // Skip corpses while the player is in combat — combat feeds target living enemies only.
+    auto* playerForCombatCheck = RE::PlayerCharacter::GetSingleton();
+    if (actor->IsDead() && playerForCombatCheck && playerForCombatCheck->IsInCombat()) {
+        SKSE::log::debug("Excluded: {} - dead body skipped (player in combat)", actor->GetName());
+        return true;
+    }
+
     bool isInCombat = actor->IsInCombat();
     SKSE::log::debug("IsExcluded check: {} | InCombat: {}", actor->GetName(), isInCombat);
 

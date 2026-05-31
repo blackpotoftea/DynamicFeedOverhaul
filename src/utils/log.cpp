@@ -1,17 +1,18 @@
-#pragma once
+#include "log.h"
 
-#include <spdlog/sinks/basic_file_sink.h>
-
-inline void SetupLog() {
+void ClearLog() {
     auto logsFolder = SKSE::log::log_directory();
-    if (!logsFolder) SKSE::stl::report_and_fail("SKSE log_directory not provided, logs disabled.");
+    if (!logsFolder) return;
     auto pluginName = SKSE::PluginDeclaration::GetSingleton()->GetName();
     auto logFilePath = *logsFolder / std::format("{}.log", pluginName);
+
+    // Drop and recreate logger - the 'true' param truncates the file
+    spdlog::drop("log");
     auto fileLoggerPtr = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFilePath.string(), true);
     auto loggerPtr = std::make_shared<spdlog::logger>("log", std::move(fileLoggerPtr));
     spdlog::set_default_logger(std::move(loggerPtr));
     spdlog::set_level(spdlog::level::info);
     spdlog::flush_on(spdlog::level::info);
-}
 
-void ClearLog();
+    spdlog::info("=== Log Cleared ===");
+}
