@@ -112,7 +112,7 @@ public:
         int HungryThreshold{ 3 };               // Hunger stage >= this uses hungry animations (1-4)
         bool EnableTimeSlowdown{ true };        // Enable time slowdown when paired feed starts
         float TimeSlowdownMultiplier{ 0.6f };   // Time multiplier during feed (0.4 = 40% speed)
-        std::string FailureSoundForm{ "Skyrim.esm|0x6D1C6" };   // Sound played at player on PlayIdle failure. Format: PluginName|0xFormID. Empty = disabled. Default: UIActivateFail.
+        std::string FailureSoundForm{ "Skyrim.esm|0x3C73C" };   // Sound played at player on PlayIdle failure. Format: PluginName|0xFormID. Empty = disabled. Default: WPNBlockBlade1HandVsOtherSD (sword-parry clang).
     } Animation;
 
     // Integration settings

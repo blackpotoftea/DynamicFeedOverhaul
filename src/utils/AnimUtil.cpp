@@ -369,9 +369,7 @@ namespace AnimUtil {
                 FeedAnimState::MarkFeedEnded();
                 AnimEventSink::Unregister();
                 if (auto* sound = _resolveFailureSound()) {
-                    if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-                        VampireIntegrationUtils::PlaySound(sound, player);
-                    }
+                    VampireIntegrationUtils::PlaySound2D(sound);
                 }
             } else {
                 // TEMP: KillMoveStart latency telemetry - remove once tuning is done.

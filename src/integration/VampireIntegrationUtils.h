@@ -11,8 +11,11 @@ namespace VampireIntegrationUtils {
         void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
     };
 
-    // Sound
+    // Sound (3D, positional at target actor)
     void PlaySound(RE::BGSSoundDescriptorForm* sound, RE::Actor* target);
+
+    // Sound (2D / UI-style, uses the SNDR's own output model - no positional override)
+    void PlaySound2D(RE::BGSSoundDescriptorForm* sound);
 
     // UI
     void ShowMessage(RE::BGSMessage* message);

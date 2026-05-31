@@ -371,7 +371,7 @@ void __stdcall UI::Settings::Render() {
             settings->Animation.FailureSoundForm = failureSoundBuf;
             changed = true;
         }
-        ImGuiMCP::SetItemTooltip("Sound played at player on PlayIdle failure. Format: PluginName|0xFormID. Empty = disabled. Default: Skyrim.esm|0x6D1C6 (UIActivateFail).");
+        ImGuiMCP::SetItemTooltip("Sound played at player on PlayIdle failure. Format: PluginName|0xFormID. Empty = disabled. Default: Skyrim.esm|0x3C73C (WPNBlockBlade1HandVsOtherSD).");
     }
 
     // Integration Settings

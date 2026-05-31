@@ -377,7 +377,7 @@ void Settings::SaveINI() {
     ini.SetDoubleValue("Animation", "TimeSlowdownMultiplier", Animation.TimeSlowdownMultiplier,
         "; Time multiplier during feed (0.4 = 40% speed, 1.0 = normal speed)");
     ini.SetValue("Animation", "FailureSoundForm", Animation.FailureSoundForm.c_str(),
-        "; Sound played at player when feed animation fails to start (after all retries). Format: PluginName|0xFormID. Empty = disabled. Default: UIActivateFail (Skyrim.esm|0x6D1C6).");
+        "; Sound played at player when feed animation fails to start (after all retries). Format: PluginName|0xFormID. Empty = disabled. Default: WPNBlockBlade1HandVsOtherSD (Skyrim.esm|0x3C73C).");
 
     // Integration
     ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,
