@@ -3,6 +3,7 @@
 #include "../feed/TargetState.h"
 #include "../papyrus/PapyrusCall.h"
 #include "../utils/log.h"
+#include "../utils/AnimUtil.h"
 #include "VampireIntegrationUtils.h"
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -372,6 +373,10 @@ void __stdcall UI::Settings::Render() {
             changed = true;
         }
         ImGuiMCP::SetItemTooltip("Sound played at player on PlayIdle failure. Format: PluginName|0xFormID. Empty = disabled. Default: Skyrim.esm|0x3C73C (WPNBlockBlade1HandVsOtherSD).");
+        if (ImGuiMCP::Button("Test Failure Sound")) {
+            AnimUtil::PlayFailureSoundTest();
+        }
+        ImGuiMCP::SetItemTooltip("Play the currently configured failure sound once (preview).");
     }
 
     // Integration Settings

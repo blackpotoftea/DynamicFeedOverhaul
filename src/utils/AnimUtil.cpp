@@ -369,7 +369,9 @@ namespace AnimUtil {
                 FeedAnimState::MarkFeedEnded();
                 AnimEventSink::Unregister();
                 if (auto* sound = _resolveFailureSound()) {
-                    VampireIntegrationUtils::PlaySound2D(sound);
+                    if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+                        VampireIntegrationUtils::PlaySound(sound, player);
+                    }
                 }
             } else {
                 // TEMP: KillMoveStart latency telemetry - remove once tuning is done.
@@ -407,6 +409,21 @@ namespace AnimUtil {
         auto retryNow = std::chrono::steady_clock::now();
         g_Retry.nextRetryAt = retryNow + std::chrono::milliseconds(kRetryIntervalMs);
         g_Retry.lastPlayIdleAt = retryNow;   // TEMP: KillMoveStart latency telemetry
+    }
+
+    void PlayFailureSoundTest() {
+        auto* sound = _resolveFailureSound();
+        if (!sound) {
+            SKSE::log::warn("[AnimUtil] PlayFailureSoundTest: no resolvable sound (check FailureSoundForm)");
+            return;
+        }
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player) {
+            SKSE::log::warn("[AnimUtil] PlayFailureSoundTest: player not available");
+            return;
+        }
+        SKSE::log::info("[AnimUtil] Test-playing failure sound (FormID {:X}) at player", sound->GetFormID());
+        VampireIntegrationUtils::PlaySound(sound, player);
     }
 
     // Set actor rotation (handles player vs NPC differently)

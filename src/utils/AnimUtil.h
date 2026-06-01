@@ -64,6 +64,10 @@ namespace AnimUtil {
     // to 5 times before signaling failure via the original callback.
     void TickPlayIdleRetry();
 
+    // Play the currently configured failure sound once, immediately. Used by
+    // the in-game settings UI to preview the sound without triggering a feed.
+    void PlayFailureSoundTest();
+
     // Clears engine-level animation-graph blockers (current idle, stagger/attack
     // notifications, knock-down recovery) so a subsequent PlayIdle can succeed.
     // Idle-playback plumbing - applies no feed-specific policy.

@@ -35,32 +35,6 @@ namespace VampireIntegrationUtils {
         }
     }
 
-    void PlaySound2D(RE::BGSSoundDescriptorForm* sound) {
-        if (!sound) return;
-
-        auto* audioManager = RE::BSAudioManager::GetSingleton();
-        if (!audioManager) {
-            SKSE::log::warn("VampireIntegrationUtils::PlaySound2D: BSAudioManager not available");
-            return;
-        }
-
-        RE::BSSoundHandle handle;
-        handle.soundID = static_cast<uint32_t>(-1);
-        handle.assumeSuccess = false;
-        handle.state.reset();
-
-        audioManager->BuildSoundDataFromDescriptor(handle, sound);
-
-        if (handle.IsValid()) {
-            // No SetPosition / SetObjectToFollow - the SNDR's own output model
-            // (2D for UI sounds, 3D for world sounds) is used as-is.
-            handle.Play();
-            SKSE::log::debug("VampireIntegrationUtils::PlaySound2D: Playing sound {:X}", sound->GetFormID());
-        } else {
-            SKSE::log::warn("VampireIntegrationUtils::PlaySound2D: Failed to build sound handle");
-        }
-    }
-
     void ShowMessage(RE::BGSMessage* message) {
         if (!message) return;
         RE::BSString result;
