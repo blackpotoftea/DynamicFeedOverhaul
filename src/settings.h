@@ -115,6 +115,20 @@ public:
         std::string FailureSoundForm{ "Skyrim.esm|0x3C73C" };   // Sound played at player on PlayIdle failure. Format: PluginName|0xFormID. Empty = disabled. Default: WPNBlockBlade1HandVsOtherSD (sword-parry clang).
     } Animation;
 
+    // Health drain settings - applies on VFD_VampireFeedTrigger animation event
+    // Visual HP-bar drain that floors at 1 HP (paired animation handles the kill).
+    struct {
+        bool Enable{ true };
+        bool FloorTargetAtOneHP{ true };        // Target-only: floor drained HP at 1 so the drain itself can't kill the NPC (paired animation handles the kill). Player drain always floors at 1 regardless.
+        bool DrainOnNPC{ true };                // Apply drain to the target NPC
+        bool DrainOnPlayer{ true };             // Apply drain to the player (models a per-bite cost; defaults on)
+        float LethalChunkMinPercent{ 20.0f };   // Lower bound of % current-HP drained per trigger (lethal feeds)
+        float LethalChunkMaxPercent{ 50.0f };   // Upper bound (lethal feeds)
+        float EscalationPerTrigger{ 1.2f };     // Multiplier on the roll for each successive trigger in same feed
+        float NonLethalChunkPercent{ 10.0f };   // Fixed % per trigger on non-lethal feeds
+        float MaxChunkCapPercent{ 95.0f };      // Safety cap so escalation can't one-shot to 1
+    } HealthDrain;
+
     // Integration settings
     struct {
         bool EnableSacrosanct{ true };              // Enable Sacrosanct integration

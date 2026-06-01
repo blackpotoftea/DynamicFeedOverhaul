@@ -173,6 +173,17 @@ void Settings::LoadINI() {
     Animation.TimeSlowdownMultiplier = static_cast<float>(ini.GetDoubleValue("Animation", "TimeSlowdownMultiplier", Animation.TimeSlowdownMultiplier));
     Animation.FailureSoundForm = ini.GetValue("Animation", "FailureSoundForm", Animation.FailureSoundForm.c_str());
 
+    // HealthDrain
+    HealthDrain.Enable = ini.GetBoolValue("HealthDrain", "Enable", HealthDrain.Enable);
+    HealthDrain.FloorTargetAtOneHP = ini.GetBoolValue("HealthDrain", "FloorTargetAtOneHP", HealthDrain.FloorTargetAtOneHP);
+    HealthDrain.DrainOnNPC = ini.GetBoolValue("HealthDrain", "DrainOnNPC", HealthDrain.DrainOnNPC);
+    HealthDrain.DrainOnPlayer = ini.GetBoolValue("HealthDrain", "DrainOnPlayer", HealthDrain.DrainOnPlayer);
+    HealthDrain.LethalChunkMinPercent = static_cast<float>(ini.GetDoubleValue("HealthDrain", "LethalChunkMinPercent", HealthDrain.LethalChunkMinPercent));
+    HealthDrain.LethalChunkMaxPercent = static_cast<float>(ini.GetDoubleValue("HealthDrain", "LethalChunkMaxPercent", HealthDrain.LethalChunkMaxPercent));
+    HealthDrain.EscalationPerTrigger = static_cast<float>(ini.GetDoubleValue("HealthDrain", "EscalationPerTrigger", HealthDrain.EscalationPerTrigger));
+    HealthDrain.NonLethalChunkPercent = static_cast<float>(ini.GetDoubleValue("HealthDrain", "NonLethalChunkPercent", HealthDrain.NonLethalChunkPercent));
+    HealthDrain.MaxChunkCapPercent = static_cast<float>(ini.GetDoubleValue("HealthDrain", "MaxChunkCapPercent", HealthDrain.MaxChunkCapPercent));
+
     // Integration
     Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
     Integration.EnableSacrilege = ini.GetBoolValue("Integration", "EnableSacrilege", Integration.EnableSacrilege);
@@ -212,6 +223,10 @@ void Settings::LoadINI() {
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}, FailureSoundForm='{}'",
         Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier,
         Animation.FailureSoundForm);
+    SKSE::log::info("  [HealthDrain] Enable={}, FloorTargetAtOneHP={}, OnNPC={}, OnPlayer={}, LethalMin={}, LethalMax={}, Escalation={}, NonLethal={}, Cap={}",
+        HealthDrain.Enable, HealthDrain.FloorTargetAtOneHP, HealthDrain.DrainOnNPC, HealthDrain.DrainOnPlayer,
+        HealthDrain.LethalChunkMinPercent, HealthDrain.LethalChunkMaxPercent,
+        HealthDrain.EscalationPerTrigger, HealthDrain.NonLethalChunkPercent, HealthDrain.MaxChunkCapPercent);
     SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}",
         Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck,
         Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat);
@@ -378,6 +393,26 @@ void Settings::SaveINI() {
         "; Time multiplier during feed (0.4 = 40% speed, 1.0 = normal speed)");
     ini.SetValue("Animation", "FailureSoundForm", Animation.FailureSoundForm.c_str(),
         "; Sound played at player when feed animation fails to start (after all retries). Format: PluginName|0xFormID. Empty = disabled. Default: WPNBlockBlade1HandVsOtherSD (Skyrim.esm|0x3C73C).");
+
+    // HealthDrain
+    ini.SetBoolValue("HealthDrain", "Enable", HealthDrain.Enable,
+        "; Enable visual HP drain on VFD_VampireFeedTrigger animation events");
+    ini.SetBoolValue("HealthDrain", "FloorTargetAtOneHP", HealthDrain.FloorTargetAtOneHP,
+        "; Target NPC only: floor drained HP at 1 so the drain itself can never kill (paired animation delivers the kill). Set false to let drain take the NPC to 0. Player drain ALWAYS floors at 1 regardless of this flag.");
+    ini.SetBoolValue("HealthDrain", "DrainOnNPC", HealthDrain.DrainOnNPC,
+        "; Apply the drain chunk to the target NPC each VFD_VampireFeedTrigger");
+    ini.SetBoolValue("HealthDrain", "DrainOnPlayer", HealthDrain.DrainOnPlayer,
+        "; Apply the drain chunk to the player each VFD_VampireFeedTrigger (models a per-bite cost)");
+    ini.SetDoubleValue("HealthDrain", "LethalChunkMinPercent", HealthDrain.LethalChunkMinPercent,
+        "; Lower bound (% of current HP) drained per trigger on lethal feeds");
+    ini.SetDoubleValue("HealthDrain", "LethalChunkMaxPercent", HealthDrain.LethalChunkMaxPercent,
+        "; Upper bound (% of current HP) drained per trigger on lethal feeds");
+    ini.SetDoubleValue("HealthDrain", "EscalationPerTrigger", HealthDrain.EscalationPerTrigger,
+        "; Multiplier applied to the roll for each successive trigger in same feed (1.0 = no escalation, 1.2 = +20%/trigger)");
+    ini.SetDoubleValue("HealthDrain", "NonLethalChunkPercent", HealthDrain.NonLethalChunkPercent,
+        "; Fixed % of current HP drained per trigger on non-lethal feeds (no variance, no escalation)");
+    ini.SetDoubleValue("HealthDrain", "MaxChunkCapPercent", HealthDrain.MaxChunkCapPercent,
+        "; Safety cap so escalation can't one-shot to 1 HP (default 95.0)");
 
     // Integration
     ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,

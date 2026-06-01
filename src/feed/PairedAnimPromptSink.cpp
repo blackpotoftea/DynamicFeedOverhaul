@@ -16,6 +16,8 @@
 #include "feed/WitnessDetection.h"
 #include <thread>
 #include <algorithm>
+#include <cmath>
+#include <random>
 
 extern std::atomic<SkyPromptAPI::ClientID> g_clientID;
 
@@ -28,9 +30,13 @@ namespace FeedAnimState {
     };
 
     std::atomic<State> feedState{State::Idle};
+    std::atomic<bool> currentFeedLethal{false};
+    std::atomic<uint32_t> vfdTriggerCount{0};
 
     void MarkFeedStarted() {
         feedState.store(State::Active, std::memory_order_release);
+        currentFeedLethal.store(false, std::memory_order_release);
+        vfdTriggerCount.store(0, std::memory_order_release);
         SKSE::log::info("========== FEED STARTED ==========");
 
         // Apply time slowdown if enabled and player is in combat
@@ -48,6 +54,8 @@ namespace FeedAnimState {
     }
 
     void MarkFeedEnded() {
+        // currentFeedLethal / vfdTriggerCount are reset in MarkFeedStarted for the next feed;
+        // leaving them set here is harmless (gated by feedState) and matches killMoveStartSeen's pattern.
         feedState.store(State::Ended, std::memory_order_release);
         SKSE::log::info("========== FEED ENDED ==========");
 
@@ -96,6 +104,18 @@ namespace FeedAnimState {
     void ResetKillMoveStart() {
         killMoveStartSeen.store(false, std::memory_order_release);
     }
+
+    void SetCurrentFeedLethal(bool lethal) {
+        currentFeedLethal.store(lethal, std::memory_order_release);
+    }
+
+    bool IsCurrentFeedLethal() {
+        return currentFeedLethal.load(std::memory_order_acquire);
+    }
+
+    uint32_t IncrementVFDTriggerCount() {
+        return vfdTriggerCount.fetch_add(1, std::memory_order_acq_rel) + 1;
+    }
 }
 
 // AnimEventSink Implementation
@@ -135,6 +155,52 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
         // Ground truth that the paired animation actually started in the engine.
         // AnimUtil's retry tick consumes this flag to confirm success and stop retrying.
         FeedAnimState::MarkKillMoveStartSeen();
+    } else if (tag == "VFD_VampireFeedTrigger") {
+        auto* settings = Settings::GetSingleton();
+        if (settings->HealthDrain.Enable) {
+            uint32_t triggerIdx = FeedAnimState::IncrementVFDTriggerCount();
+            bool lethal = FeedAnimState::IsCurrentFeedLethal();
+
+            float percent;
+            if (lethal) {
+                float minP = settings->HealthDrain.LethalChunkMinPercent;
+                float maxP = settings->HealthDrain.LethalChunkMaxPercent;
+                if (maxP < minP) std::swap(minP, maxP);
+
+                thread_local std::random_device rd;
+                thread_local std::mt19937 gen(rd());
+                std::uniform_real_distribution<float> dist(minP, maxP);
+                float roll = dist(gen);
+
+                float escalation = std::pow(settings->HealthDrain.EscalationPerTrigger,
+                                            static_cast<float>(triggerIdx - 1));
+                percent = std::min(roll * escalation, settings->HealthDrain.MaxChunkCapPercent);
+            } else {
+                percent = settings->HealthDrain.NonLethalChunkPercent;
+            }
+
+            // Player drain always floors at 1 (we never want the bite to kill the player).
+            // Target drain honors FloorTargetAtOneHP — when off, drain can take the NPC to 0.
+            bool targetFloor = settings->HealthDrain.FloorTargetAtOneHP;
+            SKSE::log::debug("VFD_VampireFeedTrigger #{} (lethal={}, percent={:.1f}, targetFloor={})",
+                             triggerIdx, lethal, percent, targetFloor);
+
+            if (settings->HealthDrain.DrainOnNPC) {
+                auto target = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget();
+                if (target) {
+                    AnimUtil::DrainHealthChunk(target.get(), percent, targetFloor);
+                } else {
+                    SKSE::log::debug("VFD_VampireFeedTrigger: DrainOnNPC enabled but no active feed target");
+                }
+            }
+
+            if (settings->HealthDrain.DrainOnPlayer) {
+                auto* player = RE::PlayerCharacter::GetSingleton();
+                if (player) {
+                    AnimUtil::DrainHealthChunk(player, percent, /*floorAtOne=*/true);
+                }
+            }
+        }
     } else {
          // Log all events during feed to discover weapon-related events
         //  SKSE::log::debug("[AnimEvent] {}", tag.c_str());
@@ -619,6 +685,10 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
             settings->NonCombat.MinHeightDiff,
             settings->NonCombat.MaxHeightDiff,
         });
+
+        // Publish lethal state so the VFD_VampireFeedTrigger event handler can
+        // decide variance vs fixed drain. Cleared on MarkFeedEnded/MarkFeedStarted.
+        FeedAnimState::SetCurrentFeedLethal(isLethal);
 
         ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
         // Reset lethal flag after use (embrace flag reset by integration)

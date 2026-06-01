@@ -379,6 +379,31 @@ void __stdcall UI::Settings::Render() {
         ImGuiMCP::SetItemTooltip("Play the currently configured failure sound once (preview).");
     }
 
+    // Health Drain Settings
+    if (ImGuiMCP::CollapsingHeader("Health Drain")) {
+        changed |= ImGuiMCP::Checkbox("Enable Health Drain", &settings->HealthDrain.Enable);
+        ImGuiMCP::SetItemTooltip("Visual HP-bar drain on VFD_VampireFeedTrigger animation events");
+        if (settings->HealthDrain.Enable) {
+            changed |= ImGuiMCP::Checkbox("Floor Target At 1 HP", &settings->HealthDrain.FloorTargetAtOneHP);
+            ImGuiMCP::SetItemTooltip("Target NPC only: floor drain at 1 HP so it never kills (paired animation delivers the kill). Disable to let drain take NPC to 0. Player drain always floors at 1.");
+            changed |= ImGuiMCP::Checkbox("Drain On NPC", &settings->HealthDrain.DrainOnNPC);
+            ImGuiMCP::SetItemTooltip("Apply the drain chunk to the target NPC each trigger");
+            changed |= ImGuiMCP::Checkbox("Drain On Player", &settings->HealthDrain.DrainOnPlayer);
+            ImGuiMCP::SetItemTooltip("Apply the drain chunk to the player each trigger (per-bite cost; always floors at 1)");
+            ImGuiMCP::Separator();
+            ImGuiMCP::TextDisabled("Lethal feeds (variance + escalation)");
+            changed |= ImGuiMCP::SliderFloat("Lethal Chunk Min %", &settings->HealthDrain.LethalChunkMinPercent, 1.0f, 100.0f, "%.1f%%");
+            changed |= ImGuiMCP::SliderFloat("Lethal Chunk Max %", &settings->HealthDrain.LethalChunkMaxPercent, 1.0f, 100.0f, "%.1f%%");
+            changed |= ImGuiMCP::SliderFloat("Escalation Per Trigger", &settings->HealthDrain.EscalationPerTrigger, 1.0f, 3.0f, "%.2fx");
+            ImGuiMCP::SetItemTooltip("Multiplier applied to the roll for each successive trigger in same feed (1.0 = no escalation)");
+            changed |= ImGuiMCP::SliderFloat("Max Chunk Cap %", &settings->HealthDrain.MaxChunkCapPercent, 50.0f, 100.0f, "%.1f%%");
+            ImGuiMCP::SetItemTooltip("Safety cap so escalation can't one-shot to 1 HP");
+            ImGuiMCP::Separator();
+            ImGuiMCP::TextDisabled("Non-lethal feeds (fixed, no variance)");
+            changed |= ImGuiMCP::SliderFloat("Non-Lethal Chunk %", &settings->HealthDrain.NonLethalChunkPercent, 1.0f, 100.0f, "%.1f%%");
+        }
+    }
+
     // Integration Settings
     if (ImGuiMCP::CollapsingHeader("Integration")) {
         changed |= ImGuiMCP::Checkbox("Enable Sacrosanct", &settings->Integration.EnableSacrosanct);

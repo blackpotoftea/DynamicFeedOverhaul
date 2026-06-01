@@ -148,6 +148,13 @@ namespace AnimUtil {
     // Kill target actor (for lethal feeds)
     void KillTarget(RE::Actor* target);
 
+    // Drain a percentage of current health from the actor.
+    // floorAtOne=true caps the drain at 1 HP so it can never kill (paired
+    // animation delivers the death — preserves kill-credit / OAR / vampire
+    // integration). floorAtOne=false allows the drain to reduce HP to 0.
+    // Deferred to the main thread internally.
+    void DrainHealthChunk(RE::Actor* actor, float percent, bool floorAtOne = true);
+
     // Death time utilities
     // Returns hours since death, or -1.0f if actor is not dead or has no process
     float GetHoursSinceDeath(RE::Actor* actor);

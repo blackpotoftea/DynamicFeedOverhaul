@@ -1285,6 +1285,38 @@ namespace AnimUtil {
         });
     }
 
+    void DrainHealthChunk(RE::Actor* target, float percent, bool floorAtOne) {
+        if (!target || percent <= 0.0f) return;
+
+        SKSE::GetTaskInterface()->AddTask([handle = target->GetHandle(), percent, floorAtOne]() {
+            auto ref = handle.get();
+            if (!ref) return;
+            auto* actor = ref->As<RE::Actor>();
+            if (!actor || actor->IsDead()) return;
+
+            auto* avOwner = actor->AsActorValueOwner();
+            if (!avOwner) return;
+
+            float currentHP = avOwner->GetActorValue(RE::ActorValue::kHealth);
+            if (currentHP <= 0.0f) return;
+            if (floorAtOne && currentHP <= 1.0f) return;
+
+            float chunk = currentHP * (percent / 100.0f);
+            float floor = floorAtOne ? 1.0f : 0.0f;
+            float newHP = std::max(floor, currentHP - chunk);
+            float damage = currentHP - newHP;
+            if (damage <= 0.0f) return;
+
+            // Negative restore = damage that bypasses armor (matches SacrosanctIntegration pattern)
+            avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage,
+                                       RE::ActorValue::kHealth,
+                                       -damage);
+
+            SKSE::log::debug("DrainHealthChunk: {} HP {:.1f} -> {:.1f} (-{:.1f}, {:.1f}%, floor={})",
+                             actor->GetName(), currentHP, newHP, damage, percent, floorAtOne ? 1 : 0);
+        });
+    }
+
     // Get hours since actor died
     // Returns -1.0f if actor is not dead or has no AI process
     float GetHoursSinceDeath(RE::Actor* actor) {
