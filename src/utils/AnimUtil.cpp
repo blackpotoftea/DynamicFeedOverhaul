@@ -1,6 +1,7 @@
 #include "utils/AnimUtil.h"
 #include "feed/TargetState.h"
 #include "feed/PairedAnimPromptSink.h"
+#include "feed/AnimEventSink.h"
 #include "feed/AnimationRegistry.h"
 #include "feed/FeedIconOverlay.h"
 #include "integration/VampireIntegrationUtils.h"

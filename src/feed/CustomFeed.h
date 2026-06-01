@@ -24,6 +24,12 @@ namespace CustomFeed {
     void ForceStop();
     void OnComplete();
 
+    // Plays the chosen idle via PlayPairedFeed and, on success, dispatches the
+    // post-feed integration glue (Sacrosanct / Better Vampires / VampireFeedProxy /
+    // werewolf branches + manual-kill fallback when no OAR animation handles it).
+    void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim,
+                     bool isLethal = false, bool hasOARAnimation = false);
+
     // Per-actor feed policy bundle. Centralizes mutations that were previously
     // scattered across HandleFeedAccepted, MarkFeedEnded, and OnComplete.
     struct FeedStateContext {

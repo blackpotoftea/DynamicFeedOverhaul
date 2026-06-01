@@ -388,8 +388,6 @@ void __stdcall UI::Settings::Render() {
             ImGuiMCP::SetItemTooltip("Target NPC only: floor drain at 1 HP so it never kills (paired animation delivers the kill). Disable to let drain take NPC to 0. Player drain always floors at 1.");
             changed |= ImGuiMCP::Checkbox("Drain On NPC", &settings->HealthDrain.DrainOnNPC);
             ImGuiMCP::SetItemTooltip("Apply the drain chunk to the target NPC each trigger");
-            changed |= ImGuiMCP::Checkbox("Drain On Player", &settings->HealthDrain.DrainOnPlayer);
-            ImGuiMCP::SetItemTooltip("Apply the drain chunk to the player each trigger (per-bite cost; always floors at 1)");
             ImGuiMCP::Separator();
             ImGuiMCP::TextDisabled("Lethal feeds (variance + escalation)");
             changed |= ImGuiMCP::SliderFloat("Lethal Chunk Min %", &settings->HealthDrain.LethalChunkMinPercent, 1.0f, 100.0f, "%.1f%%");

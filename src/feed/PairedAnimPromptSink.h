@@ -1,5 +1,6 @@
 #pragma once
 #include "SkyPrompt/API.hpp"
+#include "feed/FeedAnimState.h"
 #include <mutex>
 #include <atomic>
 #include <chrono>
@@ -19,49 +20,6 @@ struct PromptDef {
     uint32_t color = 0xFFFFFFFF;  // AABBGGRR
     int priority = 100;           // Higher = primary button
     std::function<void(RE::Actor* target, bool holdComplete)> onAccept;
-};
-
-namespace FeedAnimState {
-    void MarkFeedStarted();
-    void MarkFeedEnded();
-    bool CheckAndClearFeedEnded();
-    bool IsFeedActive();
-
-    // KillMoveStart animation-graph event tracking.
-    // ResetKillMoveStart() clears the flag before a PlayIdle attempt; the event
-    // sink calls MarkKillMoveStartSeen() when the engine fires "KillMoveStart";
-    // ConsumeKillMoveStart() atomically reads-and-clears (true = event happened).
-    void MarkKillMoveStartSeen();
-    bool ConsumeKillMoveStart();
-    void ResetKillMoveStart();
-
-    // Lethal flag for the current feed; consulted by the VFD_VampireFeedTrigger
-    // handler to choose between lethal-with-variance and fixed non-lethal drain.
-    // Set in HandleFeedAccepted just before ExecuteFeed. Reset on MarkFeedStarted/Ended.
-    void SetCurrentFeedLethal(bool lethal);
-    bool IsCurrentFeedLethal();
-
-    // Counts VFD_VampireFeedTrigger occurrences within a single feed so the
-    // drain chunk escalates with successive bites. Reset by MarkFeedStarted.
-    uint32_t IncrementVFDTriggerCount();   // returns new count starting at 1
-}
-
-class AnimEventSink : public RE::BSTEventSink<RE::BSAnimationGraphEvent> {
-public:
-    static AnimEventSink* GetSingleton();
-
-    RE::BSEventNotifyControl ProcessEvent(
-        const RE::BSAnimationGraphEvent* event,
-        RE::BSTEventSource<RE::BSAnimationGraphEvent>* source) override;
-
-    static void Register();
-    static void Unregister();
-    static void CheckTimeout();
-
-private:
-    AnimEventSink() = default;
-    static std::chrono::steady_clock::time_point registeredTime_;
-    static std::mutex mutex_;
 };
 
 class PairedAnimPromptSink : public SkyPromptAPI::PromptSink {
@@ -125,8 +83,6 @@ private:
     PairedAnimPromptSink();
 
     void RegisterCorePromptCallback();
-
-    static void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal = false, bool hasOARAnimation = false);
 
     void HandleFeedAcceptedTest();  // Minimal test for kill move playback
     void HandleTimingOut();

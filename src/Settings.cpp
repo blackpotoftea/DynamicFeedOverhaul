@@ -177,7 +177,6 @@ void Settings::LoadINI() {
     HealthDrain.Enable = ini.GetBoolValue("HealthDrain", "Enable", HealthDrain.Enable);
     HealthDrain.FloorTargetAtOneHP = ini.GetBoolValue("HealthDrain", "FloorTargetAtOneHP", HealthDrain.FloorTargetAtOneHP);
     HealthDrain.DrainOnNPC = ini.GetBoolValue("HealthDrain", "DrainOnNPC", HealthDrain.DrainOnNPC);
-    HealthDrain.DrainOnPlayer = ini.GetBoolValue("HealthDrain", "DrainOnPlayer", HealthDrain.DrainOnPlayer);
     HealthDrain.LethalChunkMinPercent = static_cast<float>(ini.GetDoubleValue("HealthDrain", "LethalChunkMinPercent", HealthDrain.LethalChunkMinPercent));
     HealthDrain.LethalChunkMaxPercent = static_cast<float>(ini.GetDoubleValue("HealthDrain", "LethalChunkMaxPercent", HealthDrain.LethalChunkMaxPercent));
     HealthDrain.EscalationPerTrigger = static_cast<float>(ini.GetDoubleValue("HealthDrain", "EscalationPerTrigger", HealthDrain.EscalationPerTrigger));
@@ -223,8 +222,8 @@ void Settings::LoadINI() {
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}, FailureSoundForm='{}'",
         Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier,
         Animation.FailureSoundForm);
-    SKSE::log::info("  [HealthDrain] Enable={}, FloorTargetAtOneHP={}, OnNPC={}, OnPlayer={}, LethalMin={}, LethalMax={}, Escalation={}, NonLethal={}, Cap={}",
-        HealthDrain.Enable, HealthDrain.FloorTargetAtOneHP, HealthDrain.DrainOnNPC, HealthDrain.DrainOnPlayer,
+    SKSE::log::info("  [HealthDrain] Enable={}, FloorTargetAtOneHP={}, OnNPC={}, LethalMin={}, LethalMax={}, Escalation={}, NonLethal={}, Cap={}",
+        HealthDrain.Enable, HealthDrain.FloorTargetAtOneHP, HealthDrain.DrainOnNPC,
         HealthDrain.LethalChunkMinPercent, HealthDrain.LethalChunkMaxPercent,
         HealthDrain.EscalationPerTrigger, HealthDrain.NonLethalChunkPercent, HealthDrain.MaxChunkCapPercent);
     SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}",
@@ -401,8 +400,6 @@ void Settings::SaveINI() {
         "; Target NPC only: floor drained HP at 1 so the drain itself can never kill (paired animation delivers the kill). Set false to let drain take the NPC to 0. Player drain ALWAYS floors at 1 regardless of this flag.");
     ini.SetBoolValue("HealthDrain", "DrainOnNPC", HealthDrain.DrainOnNPC,
         "; Apply the drain chunk to the target NPC each VFD_VampireFeedTrigger");
-    ini.SetBoolValue("HealthDrain", "DrainOnPlayer", HealthDrain.DrainOnPlayer,
-        "; Apply the drain chunk to the player each VFD_VampireFeedTrigger (models a per-bite cost)");
     ini.SetDoubleValue("HealthDrain", "LethalChunkMinPercent", HealthDrain.LethalChunkMinPercent,
         "; Lower bound (% of current HP) drained per trigger on lethal feeds");
     ini.SetDoubleValue("HealthDrain", "LethalChunkMaxPercent", HealthDrain.LethalChunkMaxPercent,
