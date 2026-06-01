@@ -2,6 +2,7 @@
 #include "feed/TargetState.h"
 #include "feed/PairedAnimPromptSink.h"
 #include "feed/AnimationRegistry.h"
+#include "feed/FeedIconOverlay.h"
 #include "integration/VampireIntegrationUtils.h"
 #include "Settings.h"
 #include "papyrus/PapyrusCall.h"
@@ -71,6 +72,18 @@ namespace {
             SKSE::log::warn("[AnimUtil] FailureSoundForm not found: '{}'", spec);
         }
         return s_cachedSound;
+    }
+
+    // Fire user-facing failure cues: tint the active prompt icon red and play
+    // the configured failure sound at the player. Safe to call from solo or
+    // paired failure paths. Caller is responsible for one-shot semantics.
+    void _fireFailureCue() {
+        FeedIconOverlay::GetSingleton()->TriggerFailureAnimation();
+        if (auto* sound = _resolveFailureSound()) {
+            if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+                VampireIntegrationUtils::PlaySound(sound, player);
+            }
+        }
     }
 }
 
@@ -239,10 +252,13 @@ namespace AnimUtil {
         // Stop any ongoing attack/stagger animations
         actor->NotifyAnimationGraph("attackStop");
         actor->NotifyAnimationGraph("staggerStop");
-        // actor->NotifyAnimationGraph("blockStop");
-        // actor->NotifyAnimationGraph("recoilStop");
-        // actor->NotifyAnimationGraph("bashStop");
-        // actor->NotifyAnimationGraph("InterruptCast");
+
+        // TESTING
+        actor->NotifyAnimationGraph("blockStop");
+        actor->NotifyAnimationGraph("recoilStop");
+        actor->NotifyAnimationGraph("bashStop");
+        actor->NotifyAnimationGraph("InterruptCast");
+        
         // actor->NotifyAnimationGraph("IdleForceDefaultState");
 
         // Handle knocked-down state - force actor to normal state if getting up
@@ -325,6 +341,7 @@ namespace AnimUtil {
                     SKSE::log::error("[AnimUtil::playIdle] FAILED (solo): {} (idle: {:X})", actorName, idleFormID);
                     FeedAnimState::MarkFeedEnded();
                     AnimEventSink::Unregister();
+                    _fireFailureCue();
                 }
                 if (callback) callback(success, callbackTargetActor);
                 return;
@@ -368,11 +385,7 @@ namespace AnimUtil {
                     g_Retry.actorName, kMaxAttempts, g_Retry.idleFormID);
                 FeedAnimState::MarkFeedEnded();
                 AnimEventSink::Unregister();
-                if (auto* sound = _resolveFailureSound()) {
-                    if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-                        VampireIntegrationUtils::PlaySound(sound, player);
-                    }
-                }
+                _fireFailureCue();
             } else {
                 // TEMP: KillMoveStart latency telemetry - remove once tuning is done.
                 auto now = std::chrono::steady_clock::now();

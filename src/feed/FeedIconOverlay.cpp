@@ -23,6 +23,7 @@ struct AnimationResult {
 namespace ImageAnimation {
     AnimationResult CalculateBiteAnimation(float elapsedSeconds, float animDuration = 0.6f);
     AnimationResult CalculateOverlayImgAnimation(float elapsedSeconds, float totalDuration);
+    AnimationResult CalculateFailureAnimation(float elapsedSeconds, float animDuration = 1.5f);
 }
 
 AnimationResult ImageAnimation::CalculateBiteAnimation(float feedElapsed, float animDuration) {
@@ -69,6 +70,37 @@ AnimationResult ImageAnimation::CalculateBiteAnimation(float feedElapsed, float 
             float alpha = 1.0f - fadeT;
             result.tintColor = (result.tintColor & 0x00FFFFFF) | (static_cast<int>(255 * alpha) << 24);
         }
+    }
+
+    return result;
+}
+
+AnimationResult ImageAnimation::CalculateFailureAnimation(float elapsed, float animDuration) {
+    AnimationResult result;
+
+    if (elapsed >= animDuration) {
+        result.isComplete = true;
+        return result;
+    }
+
+    // Solid red tint for the whole duration, alpha fades out over the last 0.5s.
+    float alpha = 1.0f;
+    if (elapsed > animDuration - 0.5f) {
+        alpha = std::max(0.0f, (animDuration - elapsed) / 0.5f);
+    }
+    result.tintColor = IM_COL32(255, 64, 64, static_cast<int>(255 * alpha));
+
+    // Quick scale shake: 1.0 -> 1.2 -> 1.0 over the first 0.2s, hold at 1.0 after.
+    if (elapsed < 0.1f) {
+        float t = elapsed / 0.1f;
+        float s = 1.0f + 0.2f * t;
+        result.widthScale = s;
+        result.heightScale = s;
+    } else if (elapsed < 0.2f) {
+        float t = (elapsed - 0.1f) / 0.1f;
+        float s = 1.2f - 0.2f * t;
+        result.widthScale = s;
+        result.heightScale = s;
     }
 
     return result;
@@ -289,10 +321,24 @@ void FeedIconOverlay::TriggerFeedAnimation() {
     }
 }
 
+void FeedIconOverlay::TriggerFailureAnimation() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_state.active.load()) {
+        _state.failure.store(true);
+        _state.failureStartTime = std::chrono::steady_clock::now();
+        // Suppress concurrent feed animation if it was running.
+        _state.feeding.store(false);
+        SKSE::log::debug("Triggered failure animation (red tint)");
+    } else {
+        SKSE::log::debug("TriggerFailureAnimation: overlay not active, skipping");
+    }
+}
+
 void FeedIconOverlay::StopIcon() {
     std::lock_guard<std::mutex> lock(_mutex);
     _state.active.store(false);
     _state.feeding.store(false);
+    _state.failure.store(false);
     _state.target.reset(); // Clear handle
     _state.hasLastPos = false;  // Reset smoothing state
 
@@ -305,8 +351,8 @@ void FeedIconOverlay::RenderOverlay() {
         return;
     }
 
-    // Handle expiry (unless feeding animation is active)
-    if (!_state.feeding.load() && _state.IsExpired()) {
+    // Handle expiry (unless feeding or failure animation is active)
+    if (!_state.feeding.load() && !_state.failure.load() && _state.IsExpired()) {
         SKSE::log::debug("Icon overlay expired, stopping");
         StopIcon();
         return;
@@ -332,7 +378,19 @@ void FeedIconOverlay::RenderOverlay() {
     auto now = std::chrono::steady_clock::now();
     AnimationResult animResult;
 
-    if (_state.feeding.load()) {
+    if (_state.failure.load()) {
+        // Failure Animation (red flash)
+        auto failureElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - _state.failureStartTime).count() / 1000.0f;
+
+        animResult = ImageAnimation::CalculateFailureAnimation(failureElapsed);
+
+        if (animResult.isComplete) {
+            _state.active.store(false);
+            _state.failure.store(false);
+            return;
+        }
+    } else if (_state.feeding.load()) {
         // Feeding Animation (Bite)
         auto feedElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             now - _state.feedStartTime).count() / 1000.0f;

@@ -21,12 +21,15 @@ public:
         std::atomic<bool> active{false};
         std::atomic<bool> feeding{false}; // New state for "bite" animation
         std::chrono::steady_clock::time_point feedStartTime; // When feeding started
+        std::atomic<bool> failure{false}; // Red-tint failure flash (PlayIdle failed)
+        std::chrono::steady_clock::time_point failureStartTime;
         ImGuiMCP::ImVec2 lastScreenPos{0.0f, 0.0f};  // For smoothing
         bool hasLastPos{false};
 
         bool IsExpired() const {
             if (!active.load()) return true;
             if (feeding.load()) return false; // Don't expire during feed animation
+            if (failure.load()) return false; // Don't expire during failure flash
             auto now = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
             return elapsed >= duration;
@@ -41,6 +44,10 @@ public:
 
     // Trigger the "bite" animation (red tint + squeeze/shut) and then hide
     void TriggerFeedAnimation();
+
+    // Tint the icon red briefly to signal PlayIdle failure, then hide.
+    // Mirrors TriggerFeedAnimation but uses a failure-coded animation curve.
+    void TriggerFailureAnimation();
 
     // Render the icon overlay (called from render hook)
     void RenderOverlay();
