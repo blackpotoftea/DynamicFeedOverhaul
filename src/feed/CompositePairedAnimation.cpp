@@ -10,7 +10,6 @@ namespace CompositePairedAnimation {
         // Internal state
         RE::ActorHandle feedTargetHandle_;
         bool isActive_ = false;
-
     }
 
     void PositionActorsForAnimationTranslate(RE::Actor* player, RE::Actor* target) {
@@ -88,10 +87,8 @@ namespace CompositePairedAnimation {
         feedTargetHandle_ = target->GetHandle();
         isActive_ = true;
 
-        // Position and lock BOTH actors (like OStim)
-        // PositionActorsForAnimation(player, target);
-
-
+        // Initial alignment around player-centered scene
+        PositionActorsForAnimation(player, target);
 
         const auto& playerAnim = settings->NonCombat.PlayerStandingFrontAnim;
         const auto& targetAnim = settings->NonCombat.TargetStandingFrontAnim;
@@ -128,16 +125,16 @@ namespace CompositePairedAnimation {
     void OnComplete() {
         if (!isActive_) return;
         SKSE::log::info("[CompositePairedAnimation] OnComplete - cleaning up");
-        // StopContinuousLock();
-        feedTargetHandle_ = {}; // Reset handle
+        if (auto target = feedTargetHandle_.get()) {
+            AnimUtil::setRestrained(target.get(), false);
+        }
+        feedTargetHandle_ = {};
         isActive_ = false;
-
     }
 
     // Force stop
     void ForceStop() {
         SKSE::log::info("[CompositePairedAnimation] ForceStop called");
-        // StopContinuousLock();
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (player) {
             if (auto* process = player->GetActorRuntimeData().currentProcess) {
@@ -149,6 +146,7 @@ namespace CompositePairedAnimation {
              if (auto* process = target->GetActorRuntimeData().currentProcess) {
                 process->StopCurrentIdle(target.get(), true);
              }
+             AnimUtil::setRestrained(target.get(), false);
         }
         feedTargetHandle_ = {};
         isActive_ = false;
@@ -159,5 +157,45 @@ namespace CompositePairedAnimation {
         auto ref = feedTargetHandle_.get();
         if (!ref) return nullptr;
         return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
+    }
+
+    // Per-frame position lock. Called from PlayerUpdateHook. No-op on the
+    // fast path when no composite feed is active.
+    void Tick() {
+        if (!isActive_) return;
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player) return;
+
+        auto ref = feedTargetHandle_.get();
+        if (!ref) {
+            // Target unloaded — self-stop.
+            isActive_ = false;
+            return;
+        }
+        auto* target = ref->As<RE::Actor>();
+        if (!target || target->IsDead()) {
+            isActive_ = false;
+            return;
+        }
+
+        auto* settings = Settings::GetSingleton();
+        const float offX = settings->NonCombat.TargetOffsetX;
+        const float offY = settings->NonCombat.TargetOffsetY;
+        const float offZ = settings->NonCombat.TargetOffsetZ;
+
+        const RE::NiPoint3 center = player->GetPosition();
+        const float centerAngle = player->GetAngleZ();
+        const float sinR = std::sin(centerAngle);
+        const float cosR = std::cos(centerAngle);
+
+        const float targetX = center.x + cosR * offX + sinR * offY;
+        const float targetY = center.y - sinR * offX + cosR * offY;
+        const float targetZ = center.z + offZ;
+
+        // Face-opposite: victim looks back at player.
+        const float targetRot = AnimUtil::normalizeAngle(centerAngle - static_cast<float>(M_PI));
+
+        AnimUtil::setPosition(target, targetX, targetY, targetZ, targetRot);
     }
 }

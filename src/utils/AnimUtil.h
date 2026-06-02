@@ -102,8 +102,6 @@ namespace AnimUtil {
     // Continuous positioning - maintains position until stopped
     // updateFrequency: 1 = every frame, 2 = every other frame, etc. (default: 2 for ~30Hz at 60 FPS)
     void maintainActorPosition(RE::Actor* actor, float x, float y, float z, float rotation, const std::string& taskId, uint32_t updateFrequency = 2);
-    void maintainPairedPosition(RE::Actor* attacker, RE::Actor* victim, bool faceOpposite, const std::string& taskId, uint32_t updateFrequency = 2);
-    void stopMaintainingPosition(const std::string& taskId);
 
     // Native Papyrus function wrappers (via SKSE)
     void TranslateTo(RE::BSScript::IVirtualMachine* vm, RE::VMStackID stackID, RE::TESObjectREFR* object,

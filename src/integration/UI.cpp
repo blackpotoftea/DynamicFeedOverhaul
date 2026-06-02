@@ -206,30 +206,6 @@ void __stdcall UI::Settings::Render() {
             changed |= ImGuiMCP::SliderFloat("Min Height Diff", &settings->NonCombat.MinHeightDiff, 0.0f, 50.0f, "%.0f");
             changed |= ImGuiMCP::SliderFloat("Max Height Diff", &settings->NonCombat.MaxHeightDiff, 50.0f, 300.0f, "%.0f");
         }
-        changed |= ImGuiMCP::Checkbox("Use Composite Paired Animation", &settings->NonCombat.UseCompositePairedAnimation);
-        if (settings->NonCombat.UseCompositePairedAnimation) {
-            static char playerAnimBuf[256] = "";
-            static char targetAnimBuf[256] = "";
-            static bool animBufsInitialized = false;
-            if (!animBufsInitialized) {
-                strncpy(playerAnimBuf, settings->NonCombat.PlayerStandingFrontAnim.c_str(), sizeof(playerAnimBuf) - 1);
-                strncpy(targetAnimBuf, settings->NonCombat.TargetStandingFrontAnim.c_str(), sizeof(targetAnimBuf) - 1);
-                animBufsInitialized = true;
-            }
-            if (ImGuiMCP::InputText("Player Animation", playerAnimBuf, sizeof(playerAnimBuf))) {
-                settings->NonCombat.PlayerStandingFrontAnim = playerAnimBuf;
-                changed = true;
-            }
-            ImGuiMCP::SetItemTooltip("Player-side single-actor animation event for composite paired feed");
-            if (ImGuiMCP::InputText("Target Animation", targetAnimBuf, sizeof(targetAnimBuf))) {
-                settings->NonCombat.TargetStandingFrontAnim = targetAnimBuf;
-                changed = true;
-            }
-            ImGuiMCP::SetItemTooltip("Target-side single-actor animation event for composite paired feed");
-        }
-        changed |= ImGuiMCP::SliderFloat("Target Offset X", &settings->NonCombat.TargetOffsetX, -200.0f, 200.0f, "%.0f");
-        changed |= ImGuiMCP::SliderFloat("Target Offset Y", &settings->NonCombat.TargetOffsetY, 0.0f, 200.0f, "%.0f");
-        changed |= ImGuiMCP::SliderFloat("Target Offset Z", &settings->NonCombat.TargetOffsetZ, -100.0f, 100.0f, "%.0f");
         ImGuiMCP::Separator();
         changed |= ImGuiMCP::Checkbox("Enable Lethal Feed", &settings->NonCombat.EnableLethalFeed);
         ImGuiMCP::SetItemTooltip("Enable hold-to-kill feature for non-combat targets");
@@ -374,6 +350,37 @@ void __stdcall UI::Settings::Render() {
         if (settings->Animation.EnableTimeSlowdown) {
             changed |= ImGuiMCP::SliderFloat("Time Slowdown Multiplier", &settings->Animation.TimeSlowdownMultiplier, 0.1f, 1.0f, "%.1fx");
         }
+
+        ImGuiMCP::Separator();
+        ImGuiMCP::TextDisabled("Composite Paired Animation");
+        changed |= ImGuiMCP::Checkbox("Use Composite Paired Animation", &settings->NonCombat.UseCompositePairedAnimation);
+        if (settings->NonCombat.UseCompositePairedAnimation) {
+            static char playerAnimBuf[256] = "";
+            static char targetAnimBuf[256] = "";
+            static bool animBufsInitialized = false;
+            if (!animBufsInitialized) {
+                strncpy(playerAnimBuf, settings->NonCombat.PlayerStandingFrontAnim.c_str(), sizeof(playerAnimBuf) - 1);
+                strncpy(targetAnimBuf, settings->NonCombat.TargetStandingFrontAnim.c_str(), sizeof(targetAnimBuf) - 1);
+                animBufsInitialized = true;
+            }
+            if (ImGuiMCP::InputText("Player Animation", playerAnimBuf, sizeof(playerAnimBuf))) {
+                settings->NonCombat.PlayerStandingFrontAnim = playerAnimBuf;
+                changed = true;
+            }
+            ImGuiMCP::SetItemTooltip("Player-side single-actor animation event for composite paired feed");
+            if (ImGuiMCP::InputText("Target Animation", targetAnimBuf, sizeof(targetAnimBuf))) {
+                settings->NonCombat.TargetStandingFrontAnim = targetAnimBuf;
+                changed = true;
+            }
+            ImGuiMCP::SetItemTooltip("Target-side single-actor animation event for composite paired feed");
+        }
+        changed |= ImGuiMCP::SliderFloat("Target Offset X", &settings->NonCombat.TargetOffsetX, -200.0f, 200.0f, "%.0f");
+        changed |= ImGuiMCP::SliderFloat("Target Offset Y", &settings->NonCombat.TargetOffsetY, 0.0f, 200.0f, "%.0f");
+        changed |= ImGuiMCP::SliderFloat("Target Offset Z", &settings->NonCombat.TargetOffsetZ, -100.0f, 100.0f, "%.0f");
+    }
+
+    // Sound Settings
+    if (ImGuiMCP::CollapsingHeader("Sound")) {
         static char failureSoundBuf[256] = "";
         static bool failureSoundInitialized = false;
         if (!failureSoundInitialized) {

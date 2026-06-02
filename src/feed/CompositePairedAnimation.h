@@ -20,4 +20,10 @@ namespace CompositePairedAnimation {
 
     // Get current target
     RE::NiPointer<RE::Actor> GetFeedTarget();
+
+    // Per-frame position lock — drives the target to the offset configured in
+    // Settings::NonCombat (face-opposite from player). Called once per frame
+    // from PlayerUpdateHook. No-op when IsActive() is false, so cost is a
+    // single bool check during normal gameplay.
+    void Tick();
 }

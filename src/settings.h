@@ -54,8 +54,8 @@ public:
         float MinHeightDiff{ 10.0f };     // Minimum height diff to trigger adjustment
         float MaxHeightDiff{ 150.0f };    // Max height diff (~3-4 stair steps)
         bool UseCompositePairedAnimation{ true };  // Composite two single-actor animations to simulate a paired animation
-        std::string PlayerStandingFrontAnim{ "VampireFeed_Player_StandingFront" };  // Player-side single-actor animation
-        std::string TargetStandingFrontAnim{ "VampireFeed_Target_StandingFront" };  // Target-side single-actor animation
+        std::string PlayerStandingFrontAnim{ "Anub2PVampireFemaleIntro_0" };  // Player-side single-actor animation
+        std::string TargetStandingFrontAnim{ "Anub2PVampireFemaleIntro_1" };  // Target-side single-actor animation
         float TargetOffsetX{ 0.0f };   // Target X offset from player (local coords)
         float TargetOffsetY{ 100.0f }; // Target Y offset (positive = in front)
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)

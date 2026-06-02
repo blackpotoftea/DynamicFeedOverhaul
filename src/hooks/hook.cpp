@@ -1,6 +1,7 @@
 #include "hooks/hook.h"
 #include "feed/PairedAnimPromptSink.h"
 #include "feed/WitnessDetection.h"
+#include "feed/CompositePairedAnimation.h"
 #include "Settings.h"
 #include "utils/MenuCheck.h"
 #include "utils/AnimUtil.h"
@@ -19,6 +20,11 @@ namespace {
 
             // 0. Drive non-blocking PlayIdle retry (paired animation KillMoveStart wait)
             AnimUtil::TickPlayIdleRetry();
+
+            // 0b. Composite paired-animation position lock — one bool check on
+            //     the fast path; does positioning math only while a composite
+            //     feed is active. Self-stops when target unloads/dies.
+            CompositePairedAnimation::Tick();
 
             // 1. Periodic Check
             sink->periodicCheckTimer_ += a_delta;

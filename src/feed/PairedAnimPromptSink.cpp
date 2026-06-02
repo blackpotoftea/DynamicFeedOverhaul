@@ -254,12 +254,28 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     bool useComposite = settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding;
 
     if (useComposite) {
-        // int feedType = 0;
+        // Composite path: two single-actor animations stitched together with a
+        // per-frame position + face-opposite lock (GTS hug composition pattern).
+        // Reuse PairedAnimation::EnterFeedState for the engine-state plumbing —
+        // ExitFeedState (called from PairedAnimation::OnComplete in MarkFeedEnded)
+        // tears it down symmetrically.
+        PairedAnimation::SetFeedTarget(feedTarget);
+        PairedAnimation::EnterFeedState({
+            player, feedTarget, /*feedType=*/0, targetState,
+            playerInCombat, isInCombat,
+            settings->NonCombat.EnableHeightAdjust,
+            settings->NonCombat.EnableRotation,
+            settings->NonCombat.MinHeightDiff,
+            settings->NonCombat.MaxHeightDiff,
+        });
 
-        // AnimUtil::SetFeedGraphVars(player, feedType);
-        // AnimUtil::SetFeedGraphVars(feedTarget, feedType);
+        FeedAnimState::SetCurrentFeedLethal(false);
 
-        // ExecuteFeed(nullptr, feedTarget, true);
+        if (!CompositePairedAnimation::Play(feedTarget)) {
+            SKSE::log::warn("[HandleFeedAccepted] CompositePairedAnimation::Play failed - tearing down feed state");
+            FeedAnimState::MarkFeedEnded();
+        }
+        return;
     } else {
         // Calculate direction for animation selection (can be done immediately)
         bool isBehind = false;

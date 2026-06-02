@@ -2,6 +2,7 @@
 #include "feed/FeedAnimState.h"
 #include "feed/PairedAnimPromptSink.h"
 #include "feed/PairedAnimation.h"
+#include "feed/CompositePairedAnimation.h"
 #include "Settings.h"
 #include <atomic>
 
@@ -55,8 +56,7 @@ namespace FeedAnimState {
         PairedAnimPromptSink::GetSingleton()->SetActiveFeedTarget(nullptr);
 
         PairedAnimation::OnComplete();
-        // disable as require more refactor
-        //CompositePairedAnimation::OnComplete();
+        CompositePairedAnimation::OnComplete();
         PairedAnimPromptSink::GetSingleton()->RefreshPrompt();
     }
 
