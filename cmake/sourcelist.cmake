@@ -2,10 +2,10 @@ set(sources ${sources}
     src/plugin.cpp
     src/Settings.cpp
     src/hooks/hook.cpp
-    src/feed/TwoSingleFeed.cpp
+    src/feed/CompositePairedAnimation.cpp
     src/feed/FeedIconOverlay.cpp
     src/feed/PairedAnimPromptSink.cpp
-    src/feed/CustomFeed.cpp
+    src/feed/PairedAnimation.cpp
     src/feed/FeedAnimState.cpp
     src/feed/AnimEventSink.cpp
     src/feed/WitnessDetection.cpp

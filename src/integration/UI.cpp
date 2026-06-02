@@ -206,8 +206,8 @@ void __stdcall UI::Settings::Render() {
             changed |= ImGuiMCP::SliderFloat("Min Height Diff", &settings->NonCombat.MinHeightDiff, 0.0f, 50.0f, "%.0f");
             changed |= ImGuiMCP::SliderFloat("Max Height Diff", &settings->NonCombat.MaxHeightDiff, 50.0f, 300.0f, "%.0f");
         }
-        changed |= ImGuiMCP::Checkbox("Use Two Single Animations", &settings->NonCombat.UseTwoSingleAnimations);
-        if (settings->NonCombat.UseTwoSingleAnimations) {
+        changed |= ImGuiMCP::Checkbox("Use Composite Paired Animation", &settings->NonCombat.UseCompositePairedAnimation);
+        if (settings->NonCombat.UseCompositePairedAnimation) {
             static char playerAnimBuf[256] = "";
             static char targetAnimBuf[256] = "";
             static bool animBufsInitialized = false;
@@ -220,12 +220,12 @@ void __stdcall UI::Settings::Render() {
                 settings->NonCombat.PlayerStandingFrontAnim = playerAnimBuf;
                 changed = true;
             }
-            ImGuiMCP::SetItemTooltip("Animation event name for player in two-single feed");
+            ImGuiMCP::SetItemTooltip("Player-side single-actor animation event for composite paired feed");
             if (ImGuiMCP::InputText("Target Animation", targetAnimBuf, sizeof(targetAnimBuf))) {
                 settings->NonCombat.TargetStandingFrontAnim = targetAnimBuf;
                 changed = true;
             }
-            ImGuiMCP::SetItemTooltip("Animation event name for target in two-single feed");
+            ImGuiMCP::SetItemTooltip("Target-side single-actor animation event for composite paired feed");
         }
         changed |= ImGuiMCP::SliderFloat("Target Offset X", &settings->NonCombat.TargetOffsetX, -200.0f, 200.0f, "%.0f");
         changed |= ImGuiMCP::SliderFloat("Target Offset Y", &settings->NonCombat.TargetOffsetY, 0.0f, 200.0f, "%.0f");

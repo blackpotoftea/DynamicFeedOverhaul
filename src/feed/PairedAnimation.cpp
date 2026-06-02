@@ -1,4 +1,4 @@
-#include "CustomFeed.h"
+#include "PairedAnimation.h"
 #include "utils/AnimUtil.h"
 #include "feed/AnimationRegistry.h"
 #include "feed/TargetState.h"
@@ -7,7 +7,7 @@
 #include "integration/VampireIntegrationUtils.h"
 #include "integration/VampireFeedProxyIntegration.h"
 
-namespace CustomFeed {
+namespace PairedAnimation {
     // Private state - hidden from header, stored as ObjectRefHandle for memory safety
     // THREADING: Must only be accessed from main game thread (ensured via SKSE::GetTaskInterface()->AddTask)
     static RE::ObjectRefHandle feedTargetHandle_{};
@@ -96,12 +96,12 @@ namespace CustomFeed {
     // callback is invoked on game thread after animation starts (or fails)
     void PlayPairedFeed(const char* idleEditorID, RE::Actor* target, bool isPaired,
                         FeedCallback callback) {
-        SKSE::log::debug("[CustomFeed] PlayPairedFeed called (paired={})", isPaired);
+        SKSE::log::debug("[PairedAnimation] PlayPairedFeed called (paired={})", isPaired);
 
         // Validate inputs
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player) {
-            SKSE::log::error("[CustomFeed] FAILED: player is null");
+            SKSE::log::error("[PairedAnimation] FAILED: player is null");
             if (callback) {
                 callback(false, nullptr);
             }
@@ -111,9 +111,9 @@ namespace CustomFeed {
         // Save weapon/magic drawn state so we can restore it after feeding
         auto* playerState = player->AsActorState();
         wasWeaponDrawn_ = playerState && playerState->IsWeaponDrawn();
-        SKSE::log::info("[CustomFeed] Saved weapon drawn state: {}", wasWeaponDrawn_);
+        SKSE::log::info("[PairedAnimation] Saved weapon drawn state: {}", wasWeaponDrawn_);
         if (!idleEditorID) {
-            SKSE::log::error("[CustomFeed] FAILED: idleEditorID is null");
+            SKSE::log::error("[PairedAnimation] FAILED: idleEditorID is null");
             if (callback) {
                 callback(false, target);
             }
@@ -121,16 +121,16 @@ namespace CustomFeed {
         }
         // Target only required for paired animations
         if (isPaired && !target) {
-            SKSE::log::error("[CustomFeed] FAILED: target is null for paired animation");
+            SKSE::log::error("[PairedAnimation] FAILED: target is null for paired animation");
             if (callback) {
                 callback(false, nullptr);
             }
             return;
         }
 
-        SKSE::log::debug("[CustomFeed] Looking up idle: '{}'", idleEditorID);
+        SKSE::log::debug("[PairedAnimation] Looking up idle: '{}'", idleEditorID);
         if (target) {
-            SKSE::log::debug("[CustomFeed] Target: {} (FormID: {:X})", target->GetName(), target->GetFormID());
+            SKSE::log::debug("[PairedAnimation] Target: {} (FormID: {:X})", target->GetName(), target->GetFormID());
         }
 
         SetFeedTarget(target);
@@ -141,21 +141,21 @@ namespace CustomFeed {
         // Lookup idle form
         auto* feedIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(idleEditorID);
         if (!feedIdle) {
-            SKSE::log::error("[CustomFeed] FAILED: Idle '{}' not found in game data", idleEditorID);
+            SKSE::log::error("[PairedAnimation] FAILED: Idle '{}' not found in game data", idleEditorID);
             ClearFeedTarget();
             if (callback) {
                 callback(false, target);
             }
             return;
         }
-        SKSE::log::debug("[CustomFeed] Found idle form: {:X}", feedIdle->GetFormID());
+        SKSE::log::debug("[PairedAnimation] Found idle form: {:X}", feedIdle->GetFormID());
 
         // Use AnimUtil::playIdle for thread-safe, handle-based animation playback
-        SKSE::log::debug("[CustomFeed] Calling AnimUtil::playIdle (paired={})...", isPaired);
+        SKSE::log::debug("[PairedAnimation] Calling AnimUtil::playIdle (paired={})...", isPaired);
 
         // Solo animations: sheathe weapon first if drawn. Paired animations handle weapon state natively.
         if (!isPaired && wasWeaponDrawn_) {
-            SKSE::log::info("[CustomFeed] Solo animation - sheathing weapon");
+            SKSE::log::info("[PairedAnimation] Solo animation - sheathing weapon");
             player->DrawWeaponMagicHands(false);
         }
 
@@ -164,7 +164,7 @@ namespace CustomFeed {
         // Always pass target for callback (needed for integration) even for solo animations
         AnimUtil::playIdle(player, feedIdle, target, callback, isPaired);
 
-        SKSE::log::info("[CustomFeed] Animation playback initiated (callback pending)");
+        SKSE::log::info("[PairedAnimation] Animation playback initiated (callback pending)");
     }
 
     // Force stop - recovery function for stuck animations
@@ -177,7 +177,7 @@ namespace CustomFeed {
 
             // // Restore weapon/magic drawn state if it was drawn before feeding
             // if (wasWeaponDrawn_) {
-            //     SKSE::log::info("[CustomFeed] ForceStop: Restoring weapon drawn state");
+            //     SKSE::log::info("[PairedAnimation] ForceStop: Restoring weapon drawn state");
             //     AnimUtil::redrawWeapon(player);
             //     wasWeaponDrawn_ = false;
             // }
@@ -189,12 +189,12 @@ namespace CustomFeed {
             }
         }
         ClearFeedTarget();
-        SKSE::log::info("[CustomFeed] ForceStop called");
+        SKSE::log::info("[PairedAnimation] ForceStop called");
     }
 
     // Called when feed ends normally - restores player control
     void OnComplete() {
-        SKSE::log::debug("[CustomFeed] OnComplete");
+        SKSE::log::debug("[PairedAnimation] OnComplete");
 
         // Undo per-actor mutations applied by EnterFeedState. Resolves target
         // via feedTargetHandle_, so this must run before ClearFeedTarget() below.
@@ -216,7 +216,7 @@ namespace CustomFeed {
         // Restore weapon drawn state if we sheathed it for a solo animation
         if (wasWeaponDrawn_) {
             if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-                SKSE::log::info("[CustomFeed] OnComplete: Redrawing weapon");
+                SKSE::log::info("[PairedAnimation] OnComplete: Redrawing weapon");
                 player->DrawWeaponMagicHands(true);
             }
             wasWeaponDrawn_ = false;
@@ -227,7 +227,7 @@ namespace CustomFeed {
 
     void EnterFeedState(const FeedStateContext& ctx) {
         if (!ctx.player || !ctx.target) {
-            SKSE::log::warn("[CustomFeed::EnterFeedState] null actor (player={}, target={})",
+            SKSE::log::warn("[PairedAnimation::EnterFeedState] null actor (player={}, target={})",
                 ctx.player ? "ok" : "null", ctx.target ? "ok" : "null");
             return;
         }
@@ -300,10 +300,10 @@ namespace CustomFeed {
     void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim, bool isLethal, bool hasOARAnimation) {
         auto* settings = Settings::GetSingleton();
 
-        // if (settings->NonCombat.UseTwoSingleAnimations && isPairedAnim) {
-        //     SKSE::log::info("Using two-single animation mode");
+        // if (settings->NonCombat.UseCompositePairedAnimation && isPairedAnim) {
+        //     SKSE::log::info("Using composite paired animation mode");
         //     // temporary disabled
-        //     // if (TwoSingleFeed::PlayTwoSingleFeed(target)) {
+        //     // if (CompositePairedAnimation::Play(target)) {
         //     //     PapyrusCall::SendOnVampireFeedEvent(target);
         //     //     auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
         //     //     if (vampireQuest) {
@@ -313,7 +313,7 @@ namespace CustomFeed {
         //     //     }
         //     //     return;
         //     // }
-        //     SKSE::log::warn("Two-single feed failed, falling back to paired animation");
+        //     SKSE::log::warn("Composite paired feed failed, falling back to native paired animation");
         // }
 
 
@@ -323,7 +323,7 @@ namespace CustomFeed {
         // This ensures integration logic runs only when animation is actually playing
         auto onAnimationResult = [isLethal, hasOARAnimation](bool success, RE::Actor* callbackTarget) {
             if (!success) {
-                SKSE::log::warn("CustomFeed failed - animation did not start");
+                SKSE::log::warn("PairedAnimation failed - animation did not start");
                 return;
             }
 
@@ -413,6 +413,6 @@ namespace CustomFeed {
         };
 
         // PlayPairedFeed now takes callback - integration runs after animation starts
-        CustomFeed::PlayPairedFeed(idleEditorID, target, isPairedAnim, onAnimationResult);
+        PairedAnimation::PlayPairedFeed(idleEditorID, target, isPairedAnim, onAnimationResult);
     }
 }

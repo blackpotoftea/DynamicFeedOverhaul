@@ -1,10 +1,10 @@
-#include "feed/TwoSingleFeed.h"
+#include "feed/CompositePairedAnimation.h"
 #include "Settings.h"
 #include "PCH.h"
 #include "utils/AnimUtil.h"
 #include <cmath>
 
-namespace TwoSingleFeed {
+namespace CompositePairedAnimation {
 
     namespace {
         // Internal state
@@ -12,7 +12,7 @@ namespace TwoSingleFeed {
         bool isActive_ = false;
 
     }
-    
+
     void PositionActorsForAnimationTranslate(RE::Actor* player, RE::Actor* target) {
         // 1. Get Player Data
         RE::NiPoint3 center = player->GetPosition();
@@ -32,7 +32,7 @@ namespace TwoSingleFeed {
         float targetZ = center.z + z;
 
         // 4. Calculate Rotation (Degrees)
-        // If you want them to face the player, use centerAngle + PI. 
+        // If you want them to face the player, use centerAngle + PI.
         // If you want them to face same way as player, use centerAngle.
         // TranslateTo needs DEGREES.
         float targetAngleDeg = (centerAngle) * (180.0f / 3.141592653589793f);
@@ -63,7 +63,7 @@ namespace TwoSingleFeed {
         // Position player at scene center (no offset)
         AnimUtil::Alignment playerAlignment{0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
         AnimUtil::alignActor(player, sceneCenter, playerAlignment);
-        
+
         // Position target with offset from settings
         AnimUtil::Alignment targetAlignment{x, y, z, 1.0f, 0.0f, 0.0f};
         AnimUtil::alignActor(target, sceneCenter, targetAlignment);
@@ -71,18 +71,18 @@ namespace TwoSingleFeed {
         SKSE::log::info("Positioned actors using AnimUtil - Target offset: ({:.2f}, {:.2f}, {:.2f})", x, y, z);
     }
 
-    // Main entry point - play two single-actor feed animations
-    bool PlayTwoSingleFeed(RE::Actor* target) {
+    // Main entry point - play two single-actor feed animations in sync
+    bool Play(RE::Actor* target) {
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player || !target) {
-            SKSE::log::error("[TwoSingleFeed] Player or target is null");
+            SKSE::log::error("[CompositePairedAnimation] Player or target is null");
             return false;
         }
 
         auto* settings = Settings::GetSingleton();
         AnimUtil::setRestrained(target, true);
 
-        SKSE::log::info("[TwoSingleFeed] Starting two-single feed on {} (FormID: {:X})",
+        SKSE::log::info("[CompositePairedAnimation] Starting composite paired animation on {} (FormID: {:X})",
             target->GetName(), target->GetFormID());
 
         feedTargetHandle_ = target->GetHandle();
@@ -99,16 +99,16 @@ namespace TwoSingleFeed {
         auto* playerIdleForm = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(playerAnim);
         auto* targetIdleForm = RE::TESForm::LookupByEditorID<RE::TESIdleForm>(targetAnim);
 
-        SKSE::log::info("[TwoSingleFeed] DEBUG: playerIdleForm lookup result: {} (looking for '{}')",
+        SKSE::log::info("[CompositePairedAnimation] DEBUG: playerIdleForm lookup result: {} (looking for '{}')",
             playerIdleForm ? "FOUND" : "NULL", playerAnim);
-        SKSE::log::info("[TwoSingleFeed] DEBUG: targetIdleForm lookup result: {} (looking for '{}')",
+        SKSE::log::info("[CompositePairedAnimation] DEBUG: targetIdleForm lookup result: {} (looking for '{}')",
             targetIdleForm ? "FOUND" : "NULL", targetAnim);
 
         if (!playerIdleForm) {
-            SKSE::log::error("[TwoSingleFeed] Failed to find player animation: '{}'", playerAnim);
+            SKSE::log::error("[CompositePairedAnimation] Failed to find player animation: '{}'", playerAnim);
         }
         if (!targetIdleForm) {
-            SKSE::log::error("[TwoSingleFeed] Failed to find target animation: '{}'", targetAnim);
+            SKSE::log::error("[CompositePairedAnimation] Failed to find target animation: '{}'", targetAnim);
         }
 
         AnimUtil::playIdle(player, playerIdleForm, nullptr);
@@ -117,26 +117,26 @@ namespace TwoSingleFeed {
         AnimUtil::playAnimation(player, playerAnim, 1.0f);
         AnimUtil::playAnimation(target, targetAnim, 1.0f);
 
-        SKSE::log::info("[TwoSingleFeed] Animation triggers: player='{}' , target='{}' ",
+        SKSE::log::info("[CompositePairedAnimation] Animation triggers: player='{}' , target='{}' ",
             playerAnim, targetAnim);
 
-        SKSE::log::info("[TwoSingleFeed] Started successfully");
+        SKSE::log::info("[CompositePairedAnimation] Started successfully");
         return true;
     }
 
     // Called when feed animation completes normally
     void OnComplete() {
         if (!isActive_) return;
-        SKSE::log::info("[TwoSingleFeed] OnComplete - cleaning up");
+        SKSE::log::info("[CompositePairedAnimation] OnComplete - cleaning up");
         // StopContinuousLock();
         feedTargetHandle_ = {}; // Reset handle
         isActive_ = false;
-        
+
     }
 
     // Force stop
     void ForceStop() {
-        SKSE::log::info("[TwoSingleFeed] ForceStop called");
+        SKSE::log::info("[CompositePairedAnimation] ForceStop called");
         // StopContinuousLock();
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (player) {
@@ -144,7 +144,7 @@ namespace TwoSingleFeed {
                 process->StopCurrentIdle(player, true);
             }
         }
-        
+
         if (auto target = feedTargetHandle_.get()) {
              if (auto* process = target->GetActorRuntimeData().currentProcess) {
                 process->StopCurrentIdle(target.get(), true);

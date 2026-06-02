@@ -301,7 +301,7 @@ namespace AnimUtil {
             idleFormID, actorName, callbackTargetName, isPaired);
 
         // Caller is responsible for any actor-state preparation (e.g. FlushAnimationGraph).
-        // For the feed flow, CustomFeed::EnterFeedState owns this.
+        // For the feed flow, PairedAnimation::EnterFeedState owns this.
 
         // Play the actual idle animation
         SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, callbackTargetHandle, actorName, callbackTargetName, callback, isPaired] {

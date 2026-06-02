@@ -1,7 +1,7 @@
 #include "PCH.h"
 #include "feed/AnimationRegistry.h"
 #include "feed/TargetState.h"
-#include "feed/CustomFeed.h"
+#include "feed/PairedAnimation.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -238,15 +238,15 @@ namespace Feed {
         // Dead targets use bedroll animation (corpse on ground)
         if (targetState == kDead) {
             outIsPairedAnim = false;
-            bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
+            bool isLeft = PairedAnimation::IsPlayerOnLeftSide(target);
             SKSE::log::debug("Dead target - using bedroll {} side (solo idle)", isLeft ? "left" : "right");
             return isLeft ? Idles::VAMPIRE_BEDROLL_LEFT : Idles::VAMPIRE_BEDROLL_RIGHT;
         }
 
         if (targetState == kSleeping && furnitureRef) {
             outIsPairedAnim = false;
-            bool isLeft = CustomFeed::IsPlayerOnLeftSide(target);
-            bool isBedroll = CustomFeed::IsBedroll(furnitureRef.get());
+            bool isLeft = PairedAnimation::IsPlayerOnLeftSide(target);
+            bool isBedroll = PairedAnimation::IsBedroll(furnitureRef.get());
 
             if (isBedroll) {
                 SKSE::log::debug("Bedroll {} side (solo idle)", isLeft ? "left" : "right");

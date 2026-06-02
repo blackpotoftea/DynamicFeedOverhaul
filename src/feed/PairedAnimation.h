@@ -3,7 +3,7 @@
 #include <functional>
 
 // Custom paired animation feed - replaces InitiateVampireFeedPackage
-namespace CustomFeed {
+namespace PairedAnimation {
     // Callback type for PlayPairedFeed result - called on game thread after PlayIdle attempt
     // Parameters: success (true if animation started), target actor (may be null for non-paired)
     using FeedCallback = std::function<void(bool success, RE::Actor* target)>;

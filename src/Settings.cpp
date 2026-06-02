@@ -120,7 +120,7 @@ void Settings::LoadINI() {
     NonCombat.EnableHeightAdjust = ini.GetBoolValue("NonCombat", "EnableHeightAdjust", NonCombat.EnableHeightAdjust);
     NonCombat.MinHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MinHeightDiff", NonCombat.MinHeightDiff));
     NonCombat.MaxHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MaxHeightDiff", NonCombat.MaxHeightDiff));
-    NonCombat.UseTwoSingleAnimations = ini.GetBoolValue("NonCombat", "UseTwoSingleAnimations", NonCombat.UseTwoSingleAnimations);
+    NonCombat.UseCompositePairedAnimation = ini.GetBoolValue("NonCombat", "UseCompositePairedAnimation", NonCombat.UseCompositePairedAnimation);
     NonCombat.PlayerStandingFrontAnim = ini.GetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str());
     NonCombat.TargetStandingFrontAnim = ini.GetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str());
     NonCombat.TargetOffsetX = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX));
@@ -203,12 +203,12 @@ void Settings::LoadINI() {
         Input.FeedKey, Input.FeedGamepadKey, Input.SecondaryKey, Input.SecondaryGamepadKey);
     SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
         PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
-    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), TwoSingle={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, EnableLevelCheck={}, MaxLevelDiff={}",
+    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), CompositePaired={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, EnableLevelCheck={}, MaxLevelDiff={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
-        NonCombat.UseTwoSingleAnimations, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
+        NonCombat.UseCompositePairedAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
         NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
-    if (NonCombat.UseTwoSingleAnimations) {
+    if (NonCombat.UseCompositePairedAnimation) {
         SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
             NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
     }
@@ -299,12 +299,12 @@ void Settings::SaveINI() {
         "; Minimum height difference to trigger adjustment (units)");
     ini.SetDoubleValue("NonCombat", "MaxHeightDiff", NonCombat.MaxHeightDiff,
         "; Maximum height difference for adjustment (~3-4 stair steps)");
-    ini.SetBoolValue("NonCombat", "UseTwoSingleAnimations", NonCombat.UseTwoSingleAnimations,
-        "; Use two single-actor animations instead of paired animations (requires custom animations)");
+    ini.SetBoolValue("NonCombat", "UseCompositePairedAnimation", NonCombat.UseCompositePairedAnimation,
+        "; Composite two single-actor animations to simulate a paired animation (requires custom animations)");
     ini.SetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str(),
-        "; Animation event name for player in two-single standing front feed");
+        "; Player-side single-actor animation event for standing front composite feed");
     ini.SetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str(),
-        "; Animation event name for target in two-single standing front feed");
+        "; Target-side single-actor animation event for standing front composite feed");
     ini.SetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX,
         "; Target X offset from player in local coordinates (0=centered)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY,

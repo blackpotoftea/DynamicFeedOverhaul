@@ -4,9 +4,9 @@
 #include "Settings.h"
 #include "feed/TargetState.h"
 #include "papyrus/PapyrusCall.h"
-#include "feed/CustomFeed.h"
+#include "feed/PairedAnimation.h"
 #include "feed/FeedFiltering.h"
-#include "feed/TwoSingleFeed.h"
+#include "feed/CompositePairedAnimation.h"
 #include "feed/FeedIconOverlay.h"
 #include "integration/OStimIntegration.h"
 #include "integration/VampireIntegrationUtils.h"
@@ -251,9 +251,9 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
 
     int vampireStage = PapyrusCall::GetVampireStage();
-    bool useTwoSingle = settings->NonCombat.UseTwoSingleAnimations && targetState == Feed::kStanding;
+    bool useComposite = settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding;
 
-    if (useTwoSingle) {
+    if (useComposite) {
         // int feedType = 0;
 
         // AnimUtil::SetFeedGraphVars(player, feedType);
@@ -327,8 +327,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
         // Centralized per-actor setup: kill-move flag, conditional pacify,
         // height/rotation positioning, graph vars. Symmetric teardown lives
-        // in CustomFeed::ExitFeedState (called from OnComplete).
-        CustomFeed::EnterFeedState({
+        // in PairedAnimation::ExitFeedState (called from OnComplete).
+        PairedAnimation::EnterFeedState({
             player, feedTarget, feedType, targetState,
             playerInCombat, isInCombat,
             settings->NonCombat.EnableHeightAdjust,
@@ -341,7 +341,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // decide variance vs fixed drain. Cleared on MarkFeedEnded/MarkFeedStarted.
         FeedAnimState::SetCurrentFeedLethal(isLethal);
 
-        CustomFeed::ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
+        PairedAnimation::ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
         // Reset lethal flag after use (embrace flag reset by integration)
         isLethalFeedInProgress_ = false;
     }

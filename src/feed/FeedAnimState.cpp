@@ -1,7 +1,7 @@
 #include "PCH.h"
 #include "feed/FeedAnimState.h"
 #include "feed/PairedAnimPromptSink.h"
-#include "feed/CustomFeed.h"
+#include "feed/PairedAnimation.h"
 #include "Settings.h"
 #include <atomic>
 
@@ -50,13 +50,13 @@ namespace FeedAnimState {
         }
 
         // Clear the active feed target (thread-safe). Per-actor cleanup
-        // (kill-move, graph vars, pacify) is owned by CustomFeed::ExitFeedState,
+        // (kill-move, graph vars, pacify) is owned by PairedAnimation::ExitFeedState,
         // called from OnComplete below.
         PairedAnimPromptSink::GetSingleton()->SetActiveFeedTarget(nullptr);
 
-        CustomFeed::OnComplete();
+        PairedAnimation::OnComplete();
         // disable as require more refactor
-        //TwoSingleFeed::OnComplete();
+        //CompositePairedAnimation::OnComplete();
         PairedAnimPromptSink::GetSingleton()->RefreshPrompt();
     }
 
