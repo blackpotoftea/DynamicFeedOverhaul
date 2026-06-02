@@ -14,9 +14,11 @@ namespace FeedFiltering {
 
         auto* settings = Settings::GetSingleton();
 
+        const bool isDead = actor->IsDead();
+
         // Dead check - skip dead actors unless AllowRecentlyDead is enabled
-        if (actor->IsDead()) {
-            // Werewolves can always feed on corpses (no time/feed limits)
+        if (isDead) {
+            // Werewolves can always feed on corpses (no time/feed/keyword limits)
             auto* player = RE::PlayerCharacter::GetSingleton();
             if (player && TargetState::IsWerewolf(player)) {
                 SKSE::log::debug("Allowed: {} - werewolf can devour any corpse", actor->GetName());
@@ -43,12 +45,11 @@ namespace FeedFiltering {
                         actor->GetName(), settings->Filtering.MaxDeadFeeds);
                     return true;
                 }
-                SKSE::log::debug("Allowed: {} - recently dead ({:.2f}h/{:.2f}h, {}/{} feeds)",
+                SKSE::log::debug("Recently-dead: {} ({:.2f}h/{:.2f}h, {}/{} feeds) - applying keyword/ID filters",
                     actor->GetName(), hoursSinceDeath, settings->Filtering.MaxDeadHours,
                     AnimUtil::GetDeadFeedCount(actor), settings->Filtering.MaxDeadFeeds);
-                // Dead targets that pass the above checks skip all other filters
-                // (no level check, no scene check, no keyword restrictions)
-                return false;
+                // Fall through to keyword/ID filters so skeletons and excluded races
+                // are rejected even when AllowRecentlyDead is on.
             } else if (settings->Filtering.ExcludeDead) {
                 SKSE::log::debug("Excluded: {} - actor is dead", actor->GetName());
                 return true;
@@ -56,7 +57,7 @@ namespace FeedFiltering {
         }
 
         // Scene check - skip actors in dialogues/scripted events (living only)
-        if (settings->Filtering.ExcludeInScene) {
+        if (!isDead && settings->Filtering.ExcludeInScene) {
             if (actor->GetCurrentScene() != nullptr) {
                 SKSE::log::debug("Excluded: {} - currently in a scene", actor->GetName());
                 return true;

@@ -350,6 +350,18 @@ void __stdcall UI::Settings::Render() {
                 changed = true;
             }
             ImGuiMCP::SetItemTooltip("Path to the icon file (e.g., Data\\Interface\\ImGuiIcons\\Icons\\vampireFang.png)");
+
+            static char failureIconPathBuf[512] = "";
+            static bool failureIconPathInitialized = false;
+            if (!failureIconPathInitialized) {
+                strncpy(failureIconPathBuf, settings->IconOverlay.FailureIconPath.c_str(), sizeof(failureIconPathBuf) - 1);
+                failureIconPathInitialized = true;
+            }
+            if (ImGuiMCP::InputText("Failure Icon Path", failureIconPathBuf, sizeof(failureIconPathBuf))) {
+                settings->IconOverlay.FailureIconPath = failureIconPathBuf;
+                changed = true;
+            }
+            ImGuiMCP::SetItemTooltip("Icon shown when PlayIdle fails (e.g., Data\\Interface\\ImGuiIcons\\Icons\\vampireFangs_fail.png)");
         }
     }
 

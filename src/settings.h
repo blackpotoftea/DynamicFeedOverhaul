@@ -104,6 +104,7 @@ public:
         float IconSize{ 64.0f };                 // Size of the icon
         float IconHeightOffset{ 15.0f };         // Height offset above head (game units)
         std::string IconPath{ "Data\\Interface\\ImGuiIcons\\Icons\\vampireFang.png" }; // Path to icon file
+        std::string FailureIconPath{ "Data\\Interface\\ImGuiIcons\\Icons\\vampireFangs_fail.png" }; // Icon shown on PlayIdle failure
     } IconOverlay;
 
     // Animation selection settings

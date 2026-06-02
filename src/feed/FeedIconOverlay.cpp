@@ -83,12 +83,12 @@ AnimationResult ImageAnimation::CalculateFailureAnimation(float elapsed, float a
         return result;
     }
 
-    // Solid red tint for the whole duration, alpha fades out over the last 0.5s.
+    // Show the failure asset in its native colors; alpha fades out over the last 0.5s.
     float alpha = 1.0f;
     if (elapsed > animDuration - 0.5f) {
         alpha = std::max(0.0f, (animDuration - elapsed) / 0.5f);
     }
-    result.tintColor = IM_COL32(255, 64, 64, static_cast<int>(255 * alpha));
+    result.tintColor = IM_COL32(255, 255, 255, static_cast<int>(255 * alpha));
 
     // Quick scale shake: 1.0 -> 1.2 -> 1.0 over the first 0.2s, hold at 1.0 after.
     if (elapsed < 0.1f) {
@@ -328,7 +328,10 @@ void FeedIconOverlay::TriggerFailureAnimation() {
         _state.failureStartTime = std::chrono::steady_clock::now();
         // Suppress concurrent feed animation if it was running.
         _state.feeding.store(false);
-        SKSE::log::debug("Triggered failure animation (red tint)");
+        // Swap to the failure icon for the duration of this animation.
+        // StopIcon() / next ShowIcon() will restore the normal path.
+        _state.currentIconPath = Settings::GetSingleton()->IconOverlay.FailureIconPath;
+        SKSE::log::debug("Triggered failure animation (icon: {})", _state.currentIconPath);
     } else {
         SKSE::log::debug("TriggerFailureAnimation: overlay not active, skipping");
     }

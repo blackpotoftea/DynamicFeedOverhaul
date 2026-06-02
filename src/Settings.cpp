@@ -165,6 +165,7 @@ void Settings::LoadINI() {
     IconOverlay.IconSize = static_cast<float>(ini.GetDoubleValue("IconOverlay", "IconSize", IconOverlay.IconSize));
     IconOverlay.IconHeightOffset = static_cast<float>(ini.GetDoubleValue("IconOverlay", "IconHeightOffset", IconOverlay.IconHeightOffset));
     IconOverlay.IconPath = ini.GetValue("IconOverlay", "IconPath", IconOverlay.IconPath.c_str());
+    IconOverlay.FailureIconPath = ini.GetValue("IconOverlay", "FailureIconPath", IconOverlay.FailureIconPath.c_str());
 
     // Animation
     Animation.EnableRandomSelection = ini.GetBoolValue("Animation", "EnableRandomSelection", Animation.EnableRandomSelection);
@@ -380,6 +381,8 @@ void Settings::SaveINI() {
         "; Height offset above the target's head in game units (default 15.0)");
     ini.SetValue("IconOverlay", "IconPath", IconOverlay.IconPath.c_str(),
         "; Path to the icon image file (PNG, JPG, etc.)");
+    ini.SetValue("IconOverlay", "FailureIconPath", IconOverlay.FailureIconPath.c_str(),
+        "; Path to the icon shown when PlayIdle fails (PNG, JPG, etc.)");
 
     // Animation
     ini.SetBoolValue("Animation", "EnableRandomSelection", Animation.EnableRandomSelection,

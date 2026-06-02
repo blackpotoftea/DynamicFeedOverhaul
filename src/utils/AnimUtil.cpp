@@ -1334,6 +1334,13 @@ namespace AnimUtil {
         // Get death time from AI process
         float deathTime = process->deathTime;
 
+        // deathTime is 0 for pre-placed corpses (never actually died via runtime kill).
+        // Treat as invalid so skeletons / staged dungeon corpses are excluded.
+        if (deathTime <= 0.0f) {
+            SKSE::log::debug("GetHoursSinceDeath: {} has deathTime=0 (pre-placed corpse)", actor->GetName());
+            return -1.0f;
+        }
+
         // Get current game time in hours
         auto* calendar = RE::Calendar::GetSingleton();
         if (!calendar) {
