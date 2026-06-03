@@ -14,6 +14,18 @@ namespace CompositePairedAnimation {
         // so animation root motion can't slide the scene out from under the lock.
         RE::NiPoint3 lockedPlayerPos_{};
         float lockedPlayerYaw_ = 0.0f;
+
+        // Phase 2 (deferred) state. After Play() queues the head-tracking
+        // disable, we wait a few frames for the graph variable changes to
+        // settle in the behavior graph BEFORE firing the position lock and
+        // anim trigger. Otherwise the new anim's transition blend begins
+        // mid-evaluation with stale head-tracking IK still pulling on the
+        // spine — that's the source of the visible first-frame rotation.
+        // Tick() counts down and fires the deferred phase exactly once.
+        int settleFramesRemaining_ = 0;
+        RE::NiPoint3 pendingTargetPos_{};
+        std::string pendingPlayerAnim_;
+        std::string pendingTargetAnim_;
     }
 
     void PositionActorsForAnimationTranslate(RE::Actor* player, RE::Actor* target) {
@@ -93,6 +105,22 @@ namespace CompositePairedAnimation {
         lockedPlayerPos_ = player->GetPosition();
         lockedPlayerYaw_ = player->data.angle.z;
 
+        // Pacify the target unconditionally for the composite path. NPC
+        // head-tracking / look-at-player AI was slewing the target's heading
+        // each frame and causing a visible first-time rotation spin before
+        // the lock landed. Pacify halts that AI control; UndoPacifyActor
+        // is called by PairedAnimation::ExitFeedState during cleanup.
+        // AnimUtil::PacifyActor(target);
+
+        // Disable head-tracking + foot IK graph variables on both actors.
+        // Pacify stops AI packages but the behavior graph's internal
+        // head-tracking IK still slews the actor's effective rotation each
+        // frame — that's the real source of the visible first-time spin.
+        // Restored via UnlockActorForPairedAnim in OnComplete / ForceStop.
+        // (OStimNG's GameActor::lock uses the same four graph vars.)
+        AnimUtil::LockActorForPairedAnim(player);
+        AnimUtil::LockActorForPairedAnim(target);
+
         // Disable character-vs-character collision so the two actors can
         // overlap into the embrace pose. World collision is unaffected so
         // they don't fall through the floor. kNoCharacterCollisions is the
@@ -111,30 +139,67 @@ namespace CompositePairedAnimation {
         const float offX = settings->NonCombat.TargetOffsetX;
         const float offY = settings->NonCombat.TargetOffsetY;
         const float offZ = settings->NonCombat.TargetOffsetZ;
-        const float targetX = lockedPlayerPos_.x + cosR * offX + sinR * offY;
-        const float targetY = lockedPlayerPos_.y - sinR * offX + cosR * offY;
-        const float targetZ = lockedPlayerPos_.z + offZ;
+        pendingTargetPos_ = RE::NiPoint3{
+            lockedPlayerPos_.x + cosR * offX + sinR * offY,
+            lockedPlayerPos_.y - sinR * offX + cosR * offY,
+            lockedPlayerPos_.z + offZ
+        };
 
-        // Use TranslateTo via LockAtPosition — the engine-native lock that
-        // suppresses anim root motion. One call per actor, no per-frame
-        // fighting, no vibration. StopTranslation in OnComplete releases.
-        // (Replaces the prior PositionActorsForAnimation + per-frame Tick lock.)
-        AnimUtil::LockAtPosition(player, lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z, lockedPlayerYaw_, true);
-        AnimUtil::LockAtPosition(target, targetX, targetY, targetZ, lockedPlayerYaw_, true);
+        // Re-assert PLAYER heading directly (bypasses SetAngle interpolation).
+        // Target heading is NOT touched here — RotateTargetToClosest already
+        // set the target to face-opposite (= facing the player), which is
+        // what the asset-fixed clip expects. A direct face-same write here
+        // would undo that and the actors would face the same direction.
+        player->data.angle.z = lockedPlayerYaw_;
 
-        const auto& playerAnim = settings->NonCombat.PlayerStandingFrontAnim;
-        const auto& targetAnim = settings->NonCombat.TargetStandingFrontAnim;
+        // Stash anim names + arm the deferred phase. Tick() fires the
+        // position lock and NotifyAnimationGraph after settleFramesRemaining_
+        // hits zero — gives the head-tracking graph vars (queued above by
+        // LockActorForPairedAnim) at least 2-3 game-thread updates to settle
+        // before the new anim's transition blend starts. Without this delay,
+        // the blend begins with stale head-tracking IK and visibly spins.
+        pendingPlayerAnim_ = settings->NonCombat.PlayerStandingFrontAnim;
+        pendingTargetAnim_ = settings->NonCombat.TargetStandingFrontAnim;
+        settleFramesRemaining_ = 3;
 
-        // Animations are Nemesis behavior-graph events, not TESIdleForms — fire
-        // them directly via NotifyAnimationGraph (deferred to the game thread
-        // by AnimUtil::playAnimation). No IdleForm lookup needed.
-        AnimUtil::playAnimation(player, playerAnim);
-        AnimUtil::playAnimation(target, targetAnim);
-
-        SKSE::log::info("[CompositePairedAnimation] NotifyAnimationGraph: player='{}', target='{}'",
-            playerAnim, targetAnim);
-        SKSE::log::info("[CompositePairedAnimation] Started successfully");
+        SKSE::log::info("[CompositePairedAnimation] Play stage 1 queued (graph vars + pacify); stage 2 deferred {} frames", settleFramesRemaining_);
         return true;
+    }
+
+    // Deferred stage 2: fires from Tick() once head-tracking graph vars have
+    // had a few frames to settle. Locks both actors at their target world
+    // poses via TranslateTo and triggers the Nemesis graph events.
+    namespace {
+        void FireDeferredPlay() {
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            auto targetRef = feedTargetHandle_.get();
+            if (!player || !targetRef) {
+                SKSE::log::warn("[CompositePairedAnimation] Deferred play aborted (actor missing)");
+                isActive_ = false;
+                return;
+            }
+            auto* target = targetRef->As<RE::Actor>();
+            if (!target) {
+                isActive_ = false;
+                return;
+            }
+
+            // Re-assert PLAYER heading. Target heading is left alone — it was
+            // set by RotateTargetToClosest (face-opposite of player), which
+            // is what the fixed-asset clip expects. Don't write face-same here.
+            player->data.angle.z = lockedPlayerYaw_;
+            const float targetYaw = target->data.angle.z;
+
+            AnimUtil::LockAtPosition(player, lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z, lockedPlayerYaw_, false);
+            AnimUtil::LockAtPosition(target, pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z, targetYaw, false);
+
+            AnimUtil::playAnimation(player, pendingPlayerAnim_);
+            AnimUtil::playAnimation(target, pendingTargetAnim_);
+
+            SKSE::log::info("[CompositePairedAnimation] NotifyAnimationGraph: player='{}', target='{}'",
+                pendingPlayerAnim_, pendingTargetAnim_);
+            SKSE::log::info("[CompositePairedAnimation] Started successfully (deferred)");
+        }
     }
 
     namespace {
@@ -160,13 +225,16 @@ namespace CompositePairedAnimation {
         auto* player = RE::PlayerCharacter::GetSingleton();
         ReleaseLock(player);
         RestoreCollision(player);
+        AnimUtil::UnlockActorForPairedAnim(player);
         if (auto target = feedTargetHandle_.get()) {
             ReleaseLock(target.get());
             RestoreCollision(target.get());
+            AnimUtil::UnlockActorForPairedAnim(target.get());
             AnimUtil::setRestrained(target.get(), false);
         }
         feedTargetHandle_ = {};
         isActive_ = false;
+        settleFramesRemaining_ = 0;
     }
 
     // Force stop
@@ -179,6 +247,7 @@ namespace CompositePairedAnimation {
             }
             ReleaseLock(player);
             RestoreCollision(player);
+            AnimUtil::UnlockActorForPairedAnim(player);
         }
 
         if (auto target = feedTargetHandle_.get()) {
@@ -187,10 +256,12 @@ namespace CompositePairedAnimation {
              }
              ReleaseLock(target.get());
              RestoreCollision(target.get());
+             AnimUtil::UnlockActorForPairedAnim(target.get());
              AnimUtil::setRestrained(target.get(), false);
         }
         feedTargetHandle_ = {};
         isActive_ = false;
+        settleFramesRemaining_ = 0;
     }
 
     bool IsActive() { return isActive_; }
@@ -200,22 +271,34 @@ namespace CompositePairedAnimation {
         return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
     }
 
-    // Lightweight per-frame health check. Position lock is held by the engine
-    // via TranslateTo (set up in Play, released in OnComplete/ForceStop), so
-    // there's nothing to teleport here. Tick just watches for target
-    // invalidation (unload, death) and self-stops the composite state.
+    // Lightweight per-frame driver. Position lock is held by the engine via
+    // TranslateTo (set up in Play stage 2, released in OnComplete/ForceStop).
+    // This also fires the deferred Play stage 2 once head-tracking graph vars
+    // have settled, and watches for target invalidation (unload, death).
     void Tick() {
         if (!isActive_) return;
 
         auto ref = feedTargetHandle_.get();
         if (!ref) {
             isActive_ = false;
+            settleFramesRemaining_ = 0;
             return;
         }
         auto* target = ref->As<RE::Actor>();
         if (!target || target->IsDead()) {
             isActive_ = false;
+            settleFramesRemaining_ = 0;
             return;
+        }
+
+        // Deferred Play stage 2 — fires exactly once when the countdown
+        // reaches zero. Decrement-then-check so 3 means "fire on the 3rd Tick
+        // after Play()", giving the graph vars a few evaluations to settle.
+        if (settleFramesRemaining_ > 0) {
+            --settleFramesRemaining_;
+            if (settleFramesRemaining_ == 0) {
+                FireDeferredPlay();
+            }
         }
     }
 }

@@ -99,6 +99,19 @@ namespace AnimUtil {
     // Check if actor is currently pacified
     bool IsActorPacified(RE::Actor* actor);
 
+    // Lock an actor for a paired-animation scene. Disables head-tracking and
+    // foot-IK behavior-graph variables so the NPC's vanilla look-at-player
+    // logic can't slew the effective rotation on the first frame of the new
+    // anim — that slew is the cause of the visible "first-time spin" when
+    // entering composite paired animations. Mirrors OStimNG GameActor::lock().
+    // Pairs with UnlockActorForPairedAnim; must be called on every cleanup
+    // path or NPCs will lose head-tracking permanently.
+    void LockActorForPairedAnim(RE::Actor* actor);
+
+    // Restore head-tracking + foot IK graph variables to their default-on
+    // state. Symmetric to LockActorForPairedAnim.
+    void UnlockActorForPairedAnim(RE::Actor* actor);
+
     // Continuous positioning - maintains position until stopped
     // updateFrequency: 1 = every frame, 2 = every other frame, etc. (default: 2 for ~30Hz at 60 FPS)
     void maintainActorPosition(RE::Actor* actor, float x, float y, float z, float rotation, const std::string& taskId, uint32_t updateFrequency = 2);

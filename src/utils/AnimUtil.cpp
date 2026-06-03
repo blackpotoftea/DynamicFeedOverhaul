@@ -692,6 +692,45 @@ namespace AnimUtil {
         return g_PacifiedActors.contains(actor->GetFormID());
     }
 
+    // Disable head-tracking + foot IK graph variables. The vanilla NPC behavior
+    // graph runs head-tracking each frame and will slew the actor's effective
+    // facing toward the player on the first frame of a new paired anim — the
+    // root cause of the "first-time spin" before positioning settles. Flipping
+    // these vars off pre-anim makes the lock hold immediately. OStimNG calls
+    // these exact same vars for the same reason (GameActor::lock).
+    void LockActorForPairedAnim(RE::Actor* actor) {
+        if (!actor) return;
+        auto handle = actor->CreateRefHandle();
+        SKSE::GetTaskInterface()->AddTask([handle]() {
+            if (auto ref = handle.get()) {
+                if (auto* a = ref.get()) {
+                    a->SetGraphVariableBool("bHumanoidFootIKDisable", true);
+                    a->SetGraphVariableBool("bHeadTrackSpine", false);
+                    a->SetGraphVariableBool("bHeadTracking", false);
+                    a->SetGraphVariableBool("tdmHeadtrackingBehavior", false);
+                }
+            }
+        });
+    }
+
+    // Restore head-tracking + foot IK to default-on. Symmetric to
+    // LockActorForPairedAnim — call from every feed cleanup path or NPCs will
+    // permanently lose head-tracking.
+    void UnlockActorForPairedAnim(RE::Actor* actor) {
+        if (!actor) return;
+        auto handle = actor->CreateRefHandle();
+        SKSE::GetTaskInterface()->AddTask([handle]() {
+            if (auto ref = handle.get()) {
+                if (auto* a = ref.get()) {
+                    a->SetGraphVariableBool("bHumanoidFootIKDisable", false);
+                    a->SetGraphVariableBool("bHeadTrackSpine", true);
+                    a->SetGraphVariableBool("bHeadTracking", true);
+                    a->SetGraphVariableBool("tdmHeadtrackingBehavior", true);
+                }
+            }
+        });
+    }
+
     // Continuous positioning - maintains actor at fixed position until stopped
     void maintainActorPosition(RE::Actor* actor, float x, float y, float z, float rotation, const std::string& taskId) {
         if (!actor) return;

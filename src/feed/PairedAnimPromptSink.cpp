@@ -254,11 +254,14 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     bool useComposite = settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding;
 
     if (useComposite) {
-        // Composite path: two single-actor animations stitched together with a
-        // per-frame position + face-opposite lock (GTS hug composition pattern).
-        // Reuse PairedAnimation::EnterFeedState for the engine-state plumbing —
-        // ExitFeedState (called from PairedAnimation::OnComplete in MarkFeedEnded)
-        // tears it down symmetrically.
+        // Composite path: two single-actor animations played in sync, with the
+        // pair locked via Skyrim's native TranslateTo (set up in
+        // CompositePairedAnimation::Play).
+        // TEMPORARY: rotation re-enabled while testing the asset-side root
+        // motion fix. EnterFeedState will rotate target → face player and
+        // player → face target. Previously skipped to avoid a chained spin
+        // with LockAtPosition's face-same snap; with the anim's root motion
+        // removed, the snap should no longer be visible.
         PairedAnimation::SetFeedTarget(feedTarget);
         PairedAnimation::EnterFeedState({
             player, feedTarget, /*feedType=*/0, targetState,
