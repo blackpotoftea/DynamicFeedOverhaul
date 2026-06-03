@@ -374,9 +374,10 @@ void __stdcall UI::Settings::Render() {
             }
             ImGuiMCP::SetItemTooltip("Target-side single-actor animation event for composite paired feed");
         }
-        changed |= ImGuiMCP::SliderFloat("Target Offset X", &settings->NonCombat.TargetOffsetX, -200.0f, 200.0f, "%.0f");
-        changed |= ImGuiMCP::SliderFloat("Target Offset Y", &settings->NonCombat.TargetOffsetY, 0.0f, 200.0f, "%.0f");
-        changed |= ImGuiMCP::SliderFloat("Target Offset Z", &settings->NonCombat.TargetOffsetZ, -100.0f, 100.0f, "%.0f");
+        changed |= ImGuiMCP::SliderFloat("Target Offset X", &settings->NonCombat.TargetOffsetX, -100.0f, 100.0f, "%.1f");
+        changed |= ImGuiMCP::SliderFloat("Target Offset Y", &settings->NonCombat.TargetOffsetY, -100.0f, 100.0f, "%.1f");
+        ImGuiMCP::SetItemTooltip("Distance from player along their heading (+ in front, - behind). ~20-30 for embrace/OStim-style anims.");
+        changed |= ImGuiMCP::SliderFloat("Target Offset Z", &settings->NonCombat.TargetOffsetZ, -50.0f, 50.0f, "%.1f");
     }
 
     // Sound Settings

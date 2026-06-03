@@ -57,7 +57,7 @@ public:
         std::string PlayerStandingFrontAnim{ "Anub2PVampireFemaleIntro_0" };  // Player-side single-actor animation
         std::string TargetStandingFrontAnim{ "Anub2PVampireFemaleIntro_1" };  // Target-side single-actor animation
         float TargetOffsetX{ 0.0f };   // Target X offset from player (local coords)
-        float TargetOffsetY{ 100.0f }; // Target Y offset (positive = in front)
+        float TargetOffsetY{ 25.0f };  // Target Y offset (positive = in front). ~20-30 matches Anub2P / OStim "standing apart" choreography.
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)
         bool EnableLethalFeed{ false };      // Enable hold-to-kill feature for non-combat targets
         float LethalHoldDuration{ 5.0f };    // Seconds to hold button for lethal feed
