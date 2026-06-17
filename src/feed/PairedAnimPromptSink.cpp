@@ -39,6 +39,26 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
         std::vector<PromptDef> prompts;
         if (!target) return prompts;
 
+        // Active-composite-feed toggle: when this is the currently-feeding
+        // target AND we're on the composite path, the only prompt is "Stop
+        // Feed" bound to the same key. Gated on CompositePairedAnimation::
+        // IsActive() (NOT IsFeedActive) so the legacy single-actor
+        // PairedAnimation::ExecuteFeed path retains its original behavior
+        // (prompt hidden, no toggle).
+        if (CompositePairedAnimation::IsActive()) {
+            auto activeFeed = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget();
+            if (activeFeed && activeFeed.get() == target) {
+                prompts.push_back({
+                    .text = "Stop Feed",
+                    .type = SkyPromptAPI::PromptType::kSinglePress,
+                    .color = 0xFFCCCCFFu,
+                    .priority = 1000,
+                    .onAccept = nullptr
+                });
+                return prompts;
+            }
+        }
+
         auto* settings = Settings::GetSingleton();
         auto* player = RE::PlayerCharacter::GetSingleton();
 
@@ -187,6 +207,17 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
     case SkyPromptAPI::PromptEventType::kUp:
         // Button released early - for kHold this is non-lethal feed
         if (event.prompt.type == SkyPromptAPI::PromptType::kHold) {
+            // Defensive composite-only toggle gate: during an active composite
+            // feed the prompt is kSinglePress ("Stop Feed"), so kUp on kHold
+            // shouldn't normally fire — but a lingering kHold release at the
+            // moment the composite feed started would otherwise re-trigger
+            // HandleFeedAccepted.
+            if (CompositePairedAnimation::IsActive()) {
+                SKSE::log::info("[Toggle] kUp during active composite feed - stopping");
+                CompositePairedAnimation::ForceStop();
+                FeedAnimState::MarkFeedEnded();
+                return;
+            }
             SKSE::log::info("kUp on kHold - early release, executing non-lethal feed");
             if (matchedDef->onAccept) matchedDef->onAccept(target, false);
             self->HandleFeedAccepted();
@@ -195,6 +226,18 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
 
     case SkyPromptAPI::PromptEventType::kAccepted:
         {
+            // Composite-only toggle: if a composite feed is running, this
+            // press exits instead of starting a new one. Stops the composite,
+            // then chains into MarkFeedEnded for the state teardown. The
+            // legacy single-actor PairedAnimation::ExecuteFeed path is not
+            // touched — its prompt is hidden during play, so this branch
+            // can't fire anyway, but the gate also makes the rule explicit.
+            if (CompositePairedAnimation::IsActive()) {
+                SKSE::log::info("[Toggle] Feed key pressed during active composite feed - stopping");
+                CompositePairedAnimation::ForceStop();
+                FeedAnimState::MarkFeedEnded();
+                return;
+            }
             bool holdComplete = (event.prompt.type == SkyPromptAPI::PromptType::kHold);
             SKSE::log::info("kAccepted - executing (holdComplete={})", holdComplete);
             if (matchedDef->onAccept) matchedDef->onAccept(target, holdComplete);
@@ -225,8 +268,12 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     // Store the feed target for witness detection (thread-safe)
     SetActiveFeedTarget(feedTarget);
 
+    // Hide the existing prompt; the composite branch re-shows it as
+    // "Stop Feed" AFTER CompositePairedAnimation::Play sets isActive_=true
+    // (so the callback's CompositePairedAnimation::IsActive() check fires).
+    // The single-actor branch leaves the prompt hidden, preserving the
+    // original behavior (no toggle UX for that path).
     HidePrompt();
-
     FeedAnimState::MarkFeedStarted();
     AnimEventSink::Register();
 
@@ -277,7 +324,11 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         if (!CompositePairedAnimation::Play(feedTarget)) {
             SKSE::log::warn("[HandleFeedAccepted] CompositePairedAnimation::Play failed - tearing down feed state");
             FeedAnimState::MarkFeedEnded();
+            return;
         }
+        // Play() has set isActive_=true — now the prompt callback returns
+        // "Stop Feed". Re-show the prompt so the user sees the toggle UI.
+        ShowPrompt(feedTarget);
         return;
     } else {
         // Calculate direction for animation selection (can be done immediately)
@@ -499,8 +550,20 @@ bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
     }
 
     if (FeedAnimState::IsFeedActive()) {
-        SKSE::log::debug("IsExcluded: feed already active");
-        return true;
+        // Composite path: allow the currently-feeding target through so its
+        // "Stop Feed" prompt stays visible. Other actors are still excluded.
+        // Non-composite path: original blanket exclude (no toggle UX).
+        if (CompositePairedAnimation::IsActive()) {
+            auto activeFeed = GetSingleton()->GetActiveFeedTarget();
+            if (!activeFeed || activeFeed.get() != actor) {
+                SKSE::log::debug("IsExcluded: composite feed active on different target");
+                return true;
+            }
+            // Fall through — active feed's own target proceeds to prompt callbacks.
+        } else {
+            SKSE::log::debug("IsExcluded: feed already active (non-composite path)");
+            return true;
+        }
     }
     
     // Check common filters first (fast)

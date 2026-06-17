@@ -713,20 +713,40 @@ namespace AnimUtil {
         });
     }
 
-    // Restore head-tracking + foot IK to default-on. Symmetric to
-    // LockActorForPairedAnim — call from every feed cleanup path or NPCs will
-    // permanently lose head-tracking.
+    // Restore head-tracking + foot IK to default-on AND force the behavior
+    // graph back to its default state. Symmetric to LockActorForPairedAnim
+    // but also fires the same anim-reset events OStimNG fires in unlock()
+    // — without these, the actor can stay stuck in the composite anim pose
+    // after StopCurrentIdle / TranslateTo release. Player gets a sequence of
+    // reset events (vanilla skeleton has multiple "return to default" entry
+    // points); NPC gets the single IdleForceDefaultState which is the
+    // canonical NPC-graph reset.
     void UnlockActorForPairedAnim(RE::Actor* actor) {
         if (!actor) return;
         auto handle = actor->CreateRefHandle();
         SKSE::GetTaskInterface()->AddTask([handle]() {
-            if (auto ref = handle.get()) {
-                if (auto* a = ref.get()) {
-                    a->SetGraphVariableBool("bHumanoidFootIKDisable", false);
-                    a->SetGraphVariableBool("bHeadTrackSpine", true);
-                    a->SetGraphVariableBool("bHeadTracking", true);
-                    a->SetGraphVariableBool("tdmHeadtrackingBehavior", true);
-                }
+            auto ref = handle.get();
+            if (!ref) return;
+            auto* a = ref.get();
+            if (!a) return;
+
+            // Restore the head-tracking / foot-IK graph vars first.
+            a->SetGraphVariableBool("bHumanoidFootIKDisable", false);
+            a->SetGraphVariableBool("bHeadTrackSpine", true);
+            a->SetGraphVariableBool("bHeadTracking", true);
+            a->SetGraphVariableBool("tdmHeadtrackingBehavior", true);
+
+            // Force the behavior graph back to its default state — same as
+            // OStimNG GameActor::unlock. Player vs NPC use different events.
+            if (a->IsPlayerRef()) {
+                a->NotifyAnimationGraph("Reset");
+                a->NotifyAnimationGraph("ReturnToDefault");
+                a->NotifyAnimationGraph("FNISDefault");
+                a->NotifyAnimationGraph("IdleReturnToDefault");
+                a->NotifyAnimationGraph("ForceFurnExit");
+                a->NotifyAnimationGraph("ReturnDefaultState");
+            } else {
+                a->NotifyAnimationGraph("IdleForceDefaultState");
             }
         });
     }
