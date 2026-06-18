@@ -8,6 +8,7 @@ set(sources ${sources}
     src/feed/PairedAnimation.cpp
     src/feed/FeedAnimState.cpp
     src/feed/AnimEventSink.cpp
+    src/feed/CombatBark.cpp
     src/feed/WitnessDetection.cpp
     src/utils/AnimUtil.cpp
     src/integration/OStimIntegration.cpp

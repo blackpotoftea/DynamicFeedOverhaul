@@ -2,6 +2,7 @@
 #include "Settings.h"
 #include "PCH.h"
 #include "utils/AnimUtil.h"
+#include "feed/CombatBark.h"
 #include <cmath>
 
 namespace CompositePairedAnimation {
@@ -195,6 +196,12 @@ namespace CompositePairedAnimation {
 
             AnimUtil::playAnimation(player, pendingPlayerAnim_);
             AnimUtil::playAnimation(target, pendingTargetAnim_);
+
+            // TODO(bark): emit a victim pain bark here once CombatBark works.
+            // CombatBark::Play(target, CombatBark::Type::Hit) is wired and
+            // dispatches, but ObjectReference.Say selects no info for a
+            // pacified target (combat-topic conditions fail) so it's silent.
+            // See CombatBark.h for the investigation and the options.
 
             SKSE::log::info("[CompositePairedAnimation] NotifyAnimationGraph: player='{}', target='{}'",
                 pendingPlayerAnim_, pendingTargetAnim_);
