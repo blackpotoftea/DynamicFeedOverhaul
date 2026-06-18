@@ -54,8 +54,14 @@ public:
         float MinHeightDiff{ 10.0f };     // Minimum height diff to trigger adjustment
         float MaxHeightDiff{ 150.0f };    // Max height diff (~3-4 stair steps)
         bool UseCompositePairedAnimation{ true };  // Composite two single-actor animations to simulate a paired animation
-        std::string PlayerStandingFrontAnim{ "Anub2PVampireFemaleIntro_0" };  // Player-side single-actor animation
-        std::string TargetStandingFrontAnim{ "Anub2PVampireFemaleIntro_1" };  // Target-side single-actor animation
+        std::string PlayerStandingFrontAnim{ "Anub2PVampireFemaleIntro_0" };  // Player-side single-actor animation (intro/loop fallback)
+        std::string TargetStandingFrontAnim{ "Anub2PVampireFemaleIntro_1" };  // Target-side single-actor animation (intro/loop fallback)
+        // Staged composite timing (hybrid: timer fallback; clip annotation events override)
+        float CompositeIntroDuration{ 2.0f };    // Seconds Intro plays before -> Loop (fallback if no VFD_IntroEnd)
+        float CompositeExitDuration{ 2.0f };     // Seconds Exit plays before teardown (fallback if no VFD_ExitEnd)
+        float CompositeKillDuration{ 2.5f };     // Seconds Kill plays before victim dies + teardown (fallback if no VFD_KillEnd)
+        float CompositeLethalThreshold{ 0.05f }; // Victim HP fraction (0-1) at/below which Loop -> Kill (drained dry)
+        float CompositeLoopDrainPercentPerSecond{ 10.0f }; // Constant victim HP drain per second (% of max) while feeding loop runs (0 = off)
         float TargetOffsetX{ 0.0f };   // Target X offset from player (local coords)
         float TargetOffsetY{ 25.0f };  // Target Y offset (positive = in front). ~20-30 matches Anub2P / OStim "standing apart" choreography.
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)

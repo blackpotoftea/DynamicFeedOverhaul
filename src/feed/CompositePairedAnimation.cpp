@@ -1,4 +1,5 @@
 #include "feed/CompositePairedAnimation.h"
+#include "feed/FeedAnimState.h"
 #include "Settings.h"
 #include "PCH.h"
 #include "utils/AnimUtil.h"
@@ -8,85 +9,144 @@
 namespace CompositePairedAnimation {
 
     namespace {
-        // Internal state
+        // Lifecycle stages. Active == not Idle/Done (see IsActive()).
+        enum class Stage { Idle, Settle, Intro, Loop, Exit, Killing, Done };
+
         RE::ActorHandle feedTargetHandle_;
-        bool isActive_ = false;
-        // Player pose locked at Play() time. Tick re-applies these every frame
+        Stage stage_ = Stage::Idle;
+        float stageTimer_ = 0.0f;   // seconds elapsed in the current stage
+
+        // Settle phase: wait a few frames after Play() so the head-tracking /
+        // foot-IK graph-var changes settle before the Intro blend starts,
+        // otherwise stale IK visibly spins the actor on the first frame.
+        int settleFramesRemaining_ = 0;
+
+        // Selected clip set for this feed.
+        Feed::CompositePack pack_{};
+
+        // Player pose locked at Play() time. Re-applied on every stage change
         // so animation root motion can't slide the scene out from under the lock.
         RE::NiPoint3 lockedPlayerPos_{};
         float lockedPlayerYaw_ = 0.0f;
-
-        // Phase 2 (deferred) state. After Play() queues the head-tracking
-        // disable, we wait a few frames for the graph variable changes to
-        // settle in the behavior graph BEFORE firing the position lock and
-        // anim trigger. Otherwise the new anim's transition blend begins
-        // mid-evaluation with stale head-tracking IK still pulling on the
-        // spine — that's the source of the visible first-frame rotation.
-        // Tick() counts down and fires the deferred phase exactly once.
-        int settleFramesRemaining_ = 0;
         RE::NiPoint3 pendingTargetPos_{};
-        std::string pendingPlayerAnim_;
-        std::string pendingTargetAnim_;
     }
 
-    void PositionActorsForAnimationTranslate(RE::Actor* player, RE::Actor* target) {
-        // 1. Get Player Data
-        RE::NiPoint3 center = player->GetPosition();
-        float centerAngle = player->GetAngleZ();
-        float sinR = std::sin(centerAngle);
-        float cosR = std::cos(centerAngle);
+    bool IsActive() { return stage_ != Stage::Idle && stage_ != Stage::Done; }
 
-        // 2. Get Settings
-        auto* settings = Settings::GetSingleton();
-        float x = settings->NonCombat.TargetOffsetX;
-        float y = settings->NonCombat.TargetOffsetY;
-        float z = settings->NonCombat.TargetOffsetZ;
-
-        // 3. Calculate Target Position (Your Matrix was correct!)
-        float targetX = center.x + cosR * x + sinR * y;
-        float targetY = center.y - sinR * x + cosR * y;
-        float targetZ = center.z + z;
-
-        // 4. Calculate Rotation (Degrees)
-        // If you want them to face the player, use centerAngle + PI.
-        // If you want them to face same way as player, use centerAngle.
-        // TranslateTo needs DEGREES.
-        float targetAngleDeg = (centerAngle) * (180.0f / 3.141592653589793f);
-
-        SKSE::log::info("Locking NPC to: {:.2f}, {:.2f}, {:.2f} Angle: {:.2f}", targetX, targetY, targetZ, targetAngleDeg);
-
-        // 5. THE FIX: TranslateTo
-        // Speed 100000 = Instant.
-        AnimUtil::TranslateTo(nullptr, 0, target, targetX, targetY, targetZ, 0.0f, 0.0f, targetAngleDeg, 100000.0f, 0.0f);
-        AnimUtil::TranslateTo(nullptr, 0, player, center.x, center.y, center.z, 0.0f, 0.0f, centerAngle, 100000.0f, 0.0f);
+    RE::NiPointer<RE::Actor> GetFeedTarget() {
+        auto ref = feedTargetHandle_.get();
+        if (!ref) return nullptr;
+        return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
     }
 
-    // Position the TARGET around the player-centered scene. The Anub2P-style
-    // paired animations bake a 180° face-off into the clips themselves (_0
-    // faces skeleton +Y, _1 faces skeleton -Y), so both actors share the SAME
-    // world heading and the anim files render them face-to-face.
-    void PositionActorsForAnimation(RE::Actor* player, RE::Actor* target) {
-        const RE::NiPoint3 center = player->GetPosition();
-        const float centerAngle = player->GetAngleZ();
+    namespace {
+        void RestoreCollision(RE::Actor* a) {
+            if (!a) return;
+            if (auto* cc = a->GetCharController()) {
+                cc->flags.reset(RE::CHARACTER_FLAGS::kNoCharacterCollisions);
+            }
+        }
 
-        auto* settings = Settings::GetSingleton();
-        const float x = settings->NonCombat.TargetOffsetX;
-        const float y = settings->NonCombat.TargetOffsetY;
-        const float z = settings->NonCombat.TargetOffsetZ;
+        // Pair with AnimUtil::LockAtPosition — releases the engine's TranslateTo
+        // hold so the actor can move under anim/AI control again.
+        void ReleaseLock(RE::Actor* a) {
+            if (!a) return;
+            AnimUtil::StopTranslation(nullptr, 0, a);
+        }
 
-        AnimUtil::Position sceneCenter{center.x, center.y, center.z, centerAngle};
+        // Send one clip's animation event on the main thread and log the actual
+        // NotifyAnimationGraph result. `who`/`stageName` are string literals so
+        // they're safe to capture by value into the deferred task.
+        void NotifyClipLogged(RE::Actor* actor, const std::string& anim, const char* stageName, const char* who) {
+            if (!actor || anim.empty()) {
+                SKSE::log::info("[CompositePairedAnimation] [{}] {} clip: <none> (skipped)", stageName, who);
+                return;
+            }
+            const std::string actorName = actor->GetName();
+            auto handle = actor->CreateRefHandle();
+            SKSE::GetTaskInterface()->AddTask([handle, anim, stageName, who, actorName] {
+                auto ref = handle.get();
+                if (auto* a = ref.get()) {
+                    const bool ok = a->NotifyAnimationGraph(anim);
+                    SKSE::log::info("[CompositePairedAnimation] [{}] {} ({}) NotifyAnimationGraph('{}') => {}",
+                        stageName, who, actorName, anim, ok ? "OK" : "REJECTED");
+                } else {
+                    SKSE::log::warn("[CompositePairedAnimation] [{}] {} clip '{}' dropped (actor gone)",
+                        stageName, who, anim);
+                }
+            });
+        }
 
-        // rotation=0 → target shares player's world heading. The anim clips
-        // do the 180° themselves; adding it here would double-flip them and
-        // they'd visually face the same direction.
-        AnimUtil::Alignment targetAlignment{x, y, z, 1.0f, 0.0f, 0.0f};
-        AnimUtil::alignActor(target, sceneCenter, targetAlignment);
+        // Re-lock both actors at the scene poses and notify the clip pair for
+        // the given stage. Called on each stage entry; re-locking keeps the
+        // pair pinned across the transition blend. Empty clip names are skipped.
+        void FireStageClips(const Feed::StageClips& clips, const char* stageName) {
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            auto targetRef = feedTargetHandle_.get();
+            if (!player || !targetRef) return;
+            auto* target = targetRef->As<RE::Actor>();
+            if (!target) return;
 
-        SKSE::log::info("Positioned target - offset: ({:.2f}, {:.2f}, {:.2f}), matching player heading", x, y, z);
+            // Re-assert PLAYER heading (bypasses SetAngle interpolation). Target
+            // heading is left alone — RotateTargetToClosest already set it to
+            // face the player, which is what the fixed-asset clips expect.
+            player->data.angle.z = lockedPlayerYaw_;
+            const float targetYaw = target->data.angle.z;
+
+            AnimUtil::LockAtPosition(player, lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z, lockedPlayerYaw_, false);
+            AnimUtil::LockAtPosition(target, pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z, targetYaw, false);
+
+            SKSE::log::info("[CompositePairedAnimation] >>> {} stage: firing player='{}', target='{}'",
+                stageName, clips.player.empty() ? "<none>" : clips.player,
+                clips.target.empty() ? "<none>" : clips.target);
+
+            NotifyClipLogged(player, clips.player, stageName, "player");
+            NotifyClipLogged(target, clips.target, stageName, "target");
+
+            // TODO(bark): emit a victim pain bark here once CombatBark works.
+            // CombatBark::Play(target, CombatBark::Type::Hit) is wired and
+            // dispatches, but ObjectReference.Say selects no info for a
+            // pacified target (combat-topic conditions fail) so it's silent.
+            // See CombatBark.h for the investigation and the options.
+        }
+
+        // Idempotent per-actor cleanup. Sets stage_ = Idle FIRST so any
+        // re-entrant call (e.g. via MarkFeedEnded -> OnComplete) is a no-op.
+        void DoTeardown() {
+            if (stage_ == Stage::Idle) return;
+            stage_ = Stage::Idle;
+            stageTimer_ = 0.0f;
+            settleFramesRemaining_ = 0;
+
+            SKSE::log::info("[CompositePairedAnimation] Teardown");
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (player) {
+                ReleaseLock(player);
+                RestoreCollision(player);
+                AnimUtil::UnlockActorForPairedAnim(player);
+            }
+            if (auto target = feedTargetHandle_.get()) {
+                ReleaseLock(target.get());
+                RestoreCollision(target.get());
+                AnimUtil::UnlockActorForPairedAnim(target.get());
+                AnimUtil::setRestrained(target.get(), false);
+                // Re-evaluate AI packages so the NPC un-parks and resumes its
+                // routine after the graph reset (mirrors OStimNG updateAI()).
+                AnimUtil::RefreshActorAI(target.get());
+            }
+            feedTargetHandle_ = {};
+        }
+
+        // Full completion: teardown + notify the shared feed state. MarkFeedEnded
+        // calls OnComplete() -> DoTeardown() again, but DoTeardown already set
+        // stage_ = Idle so that nested call is a no-op (single execution).
+        void Finish() {
+            DoTeardown();
+            FeedAnimState::MarkFeedEnded();
+        }
     }
 
-    // Main entry point - play two single-actor feed animations in sync
-    bool Play(RE::Actor* target) {
+    bool Play(RE::Actor* target, const Feed::CompositePack& pack) {
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player || !target) {
             SKSE::log::error("[CompositePairedAnimation] Player or target is null");
@@ -96,37 +156,29 @@ namespace CompositePairedAnimation {
         auto* settings = Settings::GetSingleton();
         AnimUtil::setRestrained(target, true);
 
-        SKSE::log::info("[CompositePairedAnimation] Starting composite paired animation on {} (FormID: {:X})",
-            target->GetName(), target->GetFormID());
+        SKSE::log::info("[CompositePairedAnimation] Starting staged feed on {} (FormID: {:X}), pack '{}'",
+            target->GetName(), target->GetFormID(), pack.name);
 
         feedTargetHandle_ = target->GetHandle();
-        isActive_ = true;
+        pack_ = pack;
+        stage_ = Stage::Settle;
+        stageTimer_ = 0.0f;
 
         // Snapshot the player's pose at the start of the feed.
         lockedPlayerPos_ = player->GetPosition();
         lockedPlayerYaw_ = player->data.angle.z;
 
-        // Pacify the target unconditionally for the composite path. NPC
-        // head-tracking / look-at-player AI was slewing the target's heading
-        // each frame and causing a visible first-time rotation spin before
-        // the lock landed. Pacify halts that AI control; UndoPacifyActor
-        // is called by PairedAnimation::ExitFeedState during cleanup.
-        // AnimUtil::PacifyActor(target);
-
-        // Disable head-tracking + foot IK graph variables on both actors.
-        // Pacify stops AI packages but the behavior graph's internal
-        // head-tracking IK still slews the actor's effective rotation each
-        // frame — that's the real source of the visible first-time spin.
-        // Restored via UnlockActorForPairedAnim in OnComplete / ForceStop.
-        // (OStimNG's GameActor::lock uses the same four graph vars.)
+        // Disable head-tracking + foot IK graph variables on both actors. The
+        // behavior graph's head-tracking IK slews the actor's effective rotation
+        // each frame — the source of the visible first-frame spin. Restored via
+        // UnlockActorForPairedAnim in DoTeardown. (OStimNG's GameActor::lock uses
+        // the same four graph vars.)
         AnimUtil::LockActorForPairedAnim(player);
         AnimUtil::LockActorForPairedAnim(target);
 
-        // Disable character-vs-character collision so the two actors can
-        // overlap into the embrace pose. World collision is unaffected so
-        // they don't fall through the floor. kNoCharacterCollisions is the
-        // CommonLib-exposed bhkCharController flag (bit 27) — symmetric, so
-        // setting it on both is belt-and-suspenders.
+        // Disable character-vs-character collision so the two actors can overlap
+        // into the embrace pose. World collision is unaffected so they don't
+        // fall through the floor.
         if (auto* cc = player->GetCharController()) {
             cc->flags.set(RE::CHARACTER_FLAGS::kNoCharacterCollisions);
         }
@@ -147,177 +199,133 @@ namespace CompositePairedAnimation {
         };
 
         // Re-assert PLAYER heading directly (bypasses SetAngle interpolation).
-        // Target heading is NOT touched here — RotateTargetToClosest already
-        // set the target to face-opposite (= facing the player), which is
-        // what the asset-fixed clip expects. A direct face-same write here
-        // would undo that and the actors would face the same direction.
         player->data.angle.z = lockedPlayerYaw_;
 
-        // Stash anim names + arm the deferred phase. Tick() fires the
-        // position lock and NotifyAnimationGraph after settleFramesRemaining_
-        // hits zero — gives the head-tracking graph vars (queued above by
-        // LockActorForPairedAnim) at least 2-3 game-thread updates to settle
-        // before the new anim's transition blend starts. Without this delay,
-        // the blend begins with stale head-tracking IK and visibly spins.
-        pendingPlayerAnim_ = settings->NonCombat.PlayerStandingFrontAnim;
-        pendingTargetAnim_ = settings->NonCombat.TargetStandingFrontAnim;
+        // Defer the Intro a few frames so the graph-var changes above settle
+        // before the transition blend begins. Tick() drives the countdown.
         settleFramesRemaining_ = 3;
 
-        SKSE::log::info("[CompositePairedAnimation] Play stage 1 queued (graph vars + pacify); stage 2 deferred {} frames", settleFramesRemaining_);
+        SKSE::log::info("[CompositePairedAnimation] Settle queued; Intro deferred {} frames", settleFramesRemaining_);
         return true;
     }
 
-    // Deferred stage 2: fires from Tick() once head-tracking graph vars have
-    // had a few frames to settle. Locks both actors at their target world
-    // poses via TranslateTo and triggers the Nemesis graph events.
-    namespace {
-        void FireDeferredPlay() {
-            auto* player = RE::PlayerCharacter::GetSingleton();
-            auto targetRef = feedTargetHandle_.get();
-            if (!player || !targetRef) {
-                SKSE::log::warn("[CompositePairedAnimation] Deferred play aborted (actor missing)");
-                isActive_ = false;
-                return;
-            }
-            auto* target = targetRef->As<RE::Actor>();
-            if (!target) {
-                isActive_ = false;
-                return;
-            }
-
-            // Re-assert PLAYER heading. Target heading is left alone — it was
-            // set by RotateTargetToClosest (face-opposite of player), which
-            // is what the fixed-asset clip expects. Don't write face-same here.
-            player->data.angle.z = lockedPlayerYaw_;
-            const float targetYaw = target->data.angle.z;
-
-            AnimUtil::LockAtPosition(player, lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z, lockedPlayerYaw_, false);
-            AnimUtil::LockAtPosition(target, pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z, targetYaw, false);
-
-            AnimUtil::playAnimation(player, pendingPlayerAnim_);
-            AnimUtil::playAnimation(target, pendingTargetAnim_);
-
-            // TODO(bark): emit a victim pain bark here once CombatBark works.
-            // CombatBark::Play(target, CombatBark::Type::Hit) is wired and
-            // dispatches, but ObjectReference.Say selects no info for a
-            // pacified target (combat-topic conditions fail) so it's silent.
-            // See CombatBark.h for the investigation and the options.
-
-            SKSE::log::info("[CompositePairedAnimation] NotifyAnimationGraph: player='{}', target='{}'",
-                pendingPlayerAnim_, pendingTargetAnim_);
-            SKSE::log::info("[CompositePairedAnimation] Started successfully (deferred)");
+    void RequestStop() {
+        if (stage_ == Stage::Settle || stage_ == Stage::Intro || stage_ == Stage::Loop) {
+            SKSE::log::info("[CompositePairedAnimation] RequestStop -> Exit stage");
+            FireStageClips(pack_.exit, "Exit");
+            stage_ = Stage::Exit;
+            stageTimer_ = 0.0f;
+        } else {
+            SKSE::log::debug("[CompositePairedAnimation] RequestStop ignored (stage not interruptible)");
         }
     }
 
-    namespace {
-        void RestoreCollision(RE::Actor* a) {
-            if (!a) return;
-            if (auto* cc = a->GetCharController()) {
-                cc->flags.reset(RE::CHARACTER_FLAGS::kNoCharacterCollisions);
-            }
-        }
-
-        // Pair with AnimUtil::LockAtPosition — releases the engine's
-        // TranslateTo hold so the actor can move under anim/AI control again.
-        void ReleaseLock(RE::Actor* a) {
-            if (!a) return;
-            AnimUtil::StopTranslation(nullptr, 0, a);
-        }
-    }
-
-    // Called when feed animation completes normally
+    // Called by FeedAnimState::MarkFeedEnded — teardown only (no re-notify).
     void OnComplete() {
-        if (!isActive_) return;
-        SKSE::log::info("[CompositePairedAnimation] OnComplete - cleaning up");
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        ReleaseLock(player);
-        RestoreCollision(player);
-        AnimUtil::UnlockActorForPairedAnim(player);
-        if (auto target = feedTargetHandle_.get()) {
-            ReleaseLock(target.get());
-            RestoreCollision(target.get());
-            AnimUtil::UnlockActorForPairedAnim(target.get());
-            AnimUtil::setRestrained(target.get(), false);
-            // Re-evaluate AI packages so the NPC un-parks and resumes its
-            // routine after the graph reset (mirrors OStimNG updateAI()).
-            AnimUtil::RefreshActorAI(target.get());
-        }
-        feedTargetHandle_ = {};
-        isActive_ = false;
-        settleFramesRemaining_ = 0;
+        DoTeardown();
     }
 
-    // Force stop
+    // External hard abort: teardown + notify feed state.
     void ForceStop() {
-        SKSE::log::info("[CompositePairedAnimation] ForceStop called");
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (player) {
-            // StopCurrentIdle only tears down a PlayIdle/SetupSpecialIdle slot.
-            // Composite clips are started via NotifyAnimationGraph (raw behavior
-            // events), so no special idle is registered and this is a no-op.
-            // The graph state is exited by UnlockActorForPairedAnim's
-            // IdleForceDefaultState event instead. (Both OStimNG and GTS omit it.)
-            // if (auto* process = player->GetActorRuntimeData().currentProcess) {
-            //     process->StopCurrentIdle(player, true);
-            // }
-            ReleaseLock(player);
-            RestoreCollision(player);
-            AnimUtil::UnlockActorForPairedAnim(player);
-        }
-
-        if (auto target = feedTargetHandle_.get()) {
-             // No-op for composite clips — see player note above.
-             // if (auto* process = target->GetActorRuntimeData().currentProcess) {
-             //     process->StopCurrentIdle(target.get(), true);
-             // }
-             ReleaseLock(target.get());
-             RestoreCollision(target.get());
-             AnimUtil::UnlockActorForPairedAnim(target.get());
-             AnimUtil::setRestrained(target.get(), false);
-             // Re-evaluate AI packages so the NPC un-parks and resumes its
-             // routine after the graph reset (mirrors OStimNG updateAI()).
-             AnimUtil::RefreshActorAI(target.get());
-        }
-        feedTargetHandle_ = {};
-        isActive_ = false;
-        settleFramesRemaining_ = 0;
+        SKSE::log::info("[CompositePairedAnimation] ForceStop");
+        Finish();
     }
 
-    bool IsActive() { return isActive_; }
-    RE::NiPointer<RE::Actor> GetFeedTarget() {
-        auto ref = feedTargetHandle_.get();
-        if (!ref) return nullptr;
-        return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
-    }
+    void Tick(float delta) {
+        if (!IsActive()) return;
 
-    // Lightweight per-frame driver. Position lock is held by the engine via
-    // TranslateTo (set up in Play stage 2, released in OnComplete/ForceStop).
-    // This also fires the deferred Play stage 2 once head-tracking graph vars
-    // have settled, and watches for target invalidation (unload, death).
-    void Tick() {
-        if (!isActive_) return;
-
+        // Target validity. Death mid-Killing is the expected end of the kill;
+        // death/loss in any other stage is an abort. Both route through Finish().
         auto ref = feedTargetHandle_.get();
-        if (!ref) {
-            isActive_ = false;
-            settleFramesRemaining_ = 0;
-            return;
-        }
+        if (!ref) { Finish(); return; }
         auto* target = ref->As<RE::Actor>();
         if (!target || target->IsDead()) {
-            isActive_ = false;
-            settleFramesRemaining_ = 0;
+            Finish();
             return;
         }
 
-        // Deferred Play stage 2 — fires exactly once when the countdown
-        // reaches zero. Decrement-then-check so 3 means "fire on the 3rd Tick
-        // after Play()", giving the graph vars a few evaluations to settle.
-        if (settleFramesRemaining_ > 0) {
-            --settleFramesRemaining_;
-            if (settleFramesRemaining_ == 0) {
-                FireDeferredPlay();
+        // Settle: frame countdown, then fire the Intro clips.
+        if (stage_ == Stage::Settle) {
+            if (settleFramesRemaining_ > 0) {
+                --settleFramesRemaining_;
+                if (settleFramesRemaining_ == 0) {
+                    FireStageClips(pack_.intro, "Intro");
+                    stage_ = Stage::Intro;
+                    stageTimer_ = 0.0f;
+                }
             }
+            return;
+        }
+
+        stageTimer_ += delta;
+        auto* settings = Settings::GetSingleton();
+
+        switch (stage_) {
+        case Stage::Intro: {
+            if (stageTimer_ >= settings->NonCombat.CompositeIntroDuration) {
+                FireStageClips(pack_.loop, "Loop");
+                stage_ = Stage::Loop;
+                stageTimer_ = 0.0f;
+            }
+            break;
+        }
+
+        case Stage::Loop: {
+            // The feeding loop plays indefinitely — it never auto-transitions to
+            // Exit (only a player Stop does that, via RequestStop). The victim is
+            // killed purely by health loss: we constantly subtract HP each frame
+            // while feeding, and once HP falls to/below the lethal threshold we
+            // switch to the Kill (drained-dry) finisher.
+            bool drainedDry = false;
+            if (auto* av = target->AsActorValueOwner()) {
+                float cur = av->GetActorValue(RE::ActorValue::kHealth);
+                const float max = av->GetPermanentActorValue(RE::ActorValue::kHealth);
+
+                // Constant drain: a flat fraction of MAX health per second so the
+                // victim bleeds out linearly (not asymptotically). Applied here
+                // directly since Tick() runs on the main thread.
+                const float ratePct = settings->NonCombat.CompositeLoopDrainPercentPerSecond;
+                if (ratePct > 0.0f && max > 0.0f) {
+                    const float drain = max * (ratePct / 100.0f) * delta;
+                    if (drain > 0.0f) {
+                        av->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -drain);
+                        cur = std::max(0.0f, cur - drain);
+                    }
+                }
+
+                const float thr = settings->NonCombat.CompositeLethalThreshold;
+                if (max > 0.0f && cur <= max * thr) drainedDry = true;
+            }
+
+            if (drainedDry) {
+                SKSE::log::info("[CompositePairedAnimation] Loop -> Killing (victim drained dry)");
+                FeedAnimState::SetCurrentFeedLethal(true);
+                FireStageClips(pack_.kill, "Kill");  // empty -> keeps loop clip visually
+                stage_ = Stage::Killing;
+                stageTimer_ = 0.0f;
+            }
+            break;
+        }
+
+        case Stage::Exit: {
+            if (stageTimer_ >= settings->NonCombat.CompositeExitDuration) {
+                SKSE::log::info("[CompositePairedAnimation] Exit complete - victim released");
+                Finish();  // no kill
+            }
+            break;
+        }
+
+        case Stage::Killing: {
+            if (stageTimer_ >= settings->NonCombat.CompositeKillDuration) {
+                SKSE::log::info("[CompositePairedAnimation] Kill complete - draining victim dry");
+                AnimUtil::KillTarget(target);  // kill while still posed/locked
+                Finish();
+            }
+            break;
+        }
+
+        default:
+            break;
         }
     }
 }

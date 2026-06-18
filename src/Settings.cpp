@@ -123,6 +123,11 @@ void Settings::LoadINI() {
     NonCombat.UseCompositePairedAnimation = ini.GetBoolValue("NonCombat", "UseCompositePairedAnimation", NonCombat.UseCompositePairedAnimation);
     NonCombat.PlayerStandingFrontAnim = ini.GetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str());
     NonCombat.TargetStandingFrontAnim = ini.GetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str());
+    NonCombat.CompositeIntroDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration));
+    NonCombat.CompositeExitDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration));
+    NonCombat.CompositeKillDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeKillDuration", NonCombat.CompositeKillDuration));
+    NonCombat.CompositeLethalThreshold = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeLethalThreshold", NonCombat.CompositeLethalThreshold));
+    NonCombat.CompositeLoopDrainPercentPerSecond = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeLoopDrainPercentPerSecond", NonCombat.CompositeLoopDrainPercentPerSecond));
     NonCombat.TargetOffsetX = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX));
     NonCombat.TargetOffsetY = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY));
     NonCombat.TargetOffsetZ = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetZ", NonCombat.TargetOffsetZ));
@@ -305,6 +310,16 @@ void Settings::SaveINI() {
         "; Player-side single-actor animation event for standing front composite feed");
     ini.SetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str(),
         "; Target-side single-actor animation event for standing front composite feed");
+    ini.SetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration,
+        "; Staged composite: seconds Intro plays before Loop (fallback if clip emits no VFD_IntroEnd)");
+    ini.SetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration,
+        "; Staged composite: seconds Exit animation plays before teardown (fallback if no VFD_ExitEnd)");
+    ini.SetDoubleValue("NonCombat", "CompositeKillDuration", NonCombat.CompositeKillDuration,
+        "; Staged composite: seconds Kill animation plays before victim dies + teardown (fallback if no VFD_KillEnd)");
+    ini.SetDoubleValue("NonCombat", "CompositeLethalThreshold", NonCombat.CompositeLethalThreshold,
+        "; Staged composite: victim HP fraction (0-1) at/below which the feeding loop drains dry and kills");
+    ini.SetDoubleValue("NonCombat", "CompositeLoopDrainPercentPerSecond", NonCombat.CompositeLoopDrainPercentPerSecond,
+        "; Staged composite: constant victim HP drain per second (% of max) while the feeding loop runs (0 = off, drain only from animation bite events)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX,
         "; Target X offset from player in local coordinates (0=centered)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY,

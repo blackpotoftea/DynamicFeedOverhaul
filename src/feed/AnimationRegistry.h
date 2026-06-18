@@ -63,6 +63,24 @@ namespace Feed {
         int feedTypeID = 0; // Value for GraphVariable SkyPromptFeedType
     };
 
+    // Raw NotifyAnimationGraph event names for one stage of a composite feed.
+    // Either side may be empty (skips that actor's clip for the stage).
+    struct StageClips {
+        std::string player;
+        std::string target;
+    };
+
+    // A staged composite animation set: Intro -> Loop -> Exit (player stops) or
+    // Kill (victim drained dry). `kill` empty -> reuse loop clip visually while
+    // the kill timer runs. Direction/sex/isHungry drive pack selection (Phase 2).
+    struct CompositePack {
+        std::string name;
+        Direction direction = Direction::Front;
+        Sex sex = Sex::Unisex;
+        bool isHungry = false;
+        StageClips intro, loop, exit, kill;
+    };
+
     struct FeedContext {
         bool isCombat;
         bool isSneaking;
@@ -85,6 +103,10 @@ namespace Feed {
         // Returns nullptr if no match found
         const AnimationDefinition* GetBestMatch(const FeedContext& context) const;
 
+        // Find the best matching staged composite pack for the current context
+        // (filters by direction, sex, hunger). Returns nullptr if none loaded/match.
+        const CompositePack* GetBestCompositeMatch(const FeedContext& context) const;
+
         // Get the next animation in sequence (debug mode)
         // Filters to only cycle through contextually appropriate animations
         const AnimationDefinition* GetNextDebugAnimation(const FeedContext& context);
@@ -93,9 +115,11 @@ namespace Feed {
         void Clear();
 
         size_t GetLoadedCount() const { return animations_.size(); }
+        size_t GetLoadedCompositeCount() const { return compositePacks_.size(); }
 
     private:
         std::vector<AnimationDefinition> animations_;
+        std::vector<CompositePack> compositePacks_;
     };
 
     // Fallback animation selection (legacy logic for when no OAR animations are loaded)

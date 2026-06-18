@@ -2,6 +2,7 @@
 #include "feed/AnimEventSink.h"
 #include "feed/FeedAnimState.h"
 #include "feed/PairedAnimPromptSink.h"
+#include "feed/CompositePairedAnimation.h"
 #include "Settings.h"
 #include "utils/AnimUtil.h"
 #include <cmath>
@@ -25,7 +26,14 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
 
     const auto& tag = event->tag;
 
+    // Composite staged feed owns its own lifecycle (driven by Tick() timers),
+    // and its intro/loop/exit clips may emit PairEnd/IdleStop mid-sequence, so
+    // ignore those here while a composite feed is active to avoid an early teardown.
     if (tag == "PairEnd" || tag == "IdleStop") {
+        if (CompositePairedAnimation::IsActive()) {
+            SKSE::log::debug("{} ignored - composite feed owns its lifecycle", tag.c_str());
+            return RE::BSEventNotifyControl::kContinue;
+        }
         SKSE::log::info("{} detected - marking feed ended", tag.c_str());
 
         {

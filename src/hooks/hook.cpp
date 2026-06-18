@@ -24,7 +24,7 @@ namespace {
             // 0b. Composite paired-animation position lock — one bool check on
             //     the fast path; does positioning math only while a composite
             //     feed is active. Self-stops when target unloads/dies.
-            CompositePairedAnimation::Tick();
+            CompositePairedAnimation::Tick(a_delta);
 
             // 1. Periodic Check
             sink->periodicCheckTimer_ += a_delta;

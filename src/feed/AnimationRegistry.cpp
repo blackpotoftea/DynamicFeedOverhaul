@@ -19,6 +19,7 @@ namespace Feed {
 
     void AnimationRegistry::Clear() {
         animations_.clear();
+        compositePacks_.clear();
     }
 
     // Helper to parse enums from string
@@ -66,9 +67,37 @@ namespace Feed {
                         i >> j;
 
                         for (auto& [key, value] : j.items()) {
+                            // Staged composite pack: entry carries a "stages" object.
+                            if (value.contains("stages")) {
+                                CompositePack pack;
+                                pack.name = key;
+                                if (value.contains("direction")) pack.direction = ParseDirection(value["direction"]);
+                                if (value.contains("sex")) pack.sex = ParseSex(value["sex"]);
+                                if (value.contains("isHungry")) pack.isHungry = value["isHungry"].get<bool>();
+
+                                const auto& stages = value["stages"];
+                                auto readStage = [&stages](const char* name) -> StageClips {
+                                    StageClips clips;
+                                    if (stages.contains(name)) {
+                                        const auto& s = stages[name];
+                                        if (s.contains("player")) clips.player = s["player"].get<std::string>();
+                                        if (s.contains("target")) clips.target = s["target"].get<std::string>();
+                                    }
+                                    return clips;
+                                };
+                                pack.intro = readStage("intro");
+                                pack.loop  = readStage("loop");
+                                pack.exit  = readStage("exit");
+                                pack.kill  = readStage("kill");
+
+                                compositePacks_.push_back(std::move(pack));
+                                SKSE::log::debug("Loaded composite pack: {}", key);
+                                continue;
+                            }
+
                             AnimationDefinition def;
                             def.eventName = key;
-                            
+
                             if (value.contains("direction")) def.direction = ParseDirection(value["direction"]);
                             if (value.contains("sex")) def.sex = ParseSex(value["sex"]);
                             if (value.contains("type")) def.type = ParseType(value["type"]);
@@ -85,7 +114,7 @@ namespace Feed {
                 }
             }
         }
-        SKSE::log::info("Total animations loaded: {}", animations_.size());
+        SKSE::log::info("Total animations loaded: {} ({} composite packs)", animations_.size(), compositePacks_.size());
     }
 
     const AnimationDefinition* AnimationRegistry::GetBestMatch(const FeedContext& context) const {
@@ -173,6 +202,36 @@ namespace Feed {
         }
 
         // Default: Uniform random selection
+        std::uniform_int_distribution<> dis(0, static_cast<int>(candidates.size() - 1));
+        return candidates[dis(gen)];
+    }
+
+    const CompositePack* AnimationRegistry::GetBestCompositeMatch(const FeedContext& context) const {
+        if (compositePacks_.empty() || !context.player) return nullptr;
+
+        // Player sex (composite packs filter on the player, like GetBestMatch).
+        Sex playerSex = Sex::Male;
+        auto* base = context.player->GetBaseObject();
+        auto* npc = base ? base->As<RE::TESNPC>() : nullptr;
+        if (npc && npc->IsFemale()) playerSex = Sex::Female;
+
+        std::vector<const CompositePack*> candidates;
+        for (const auto& pack : compositePacks_) {
+            // Direction: Front/Back must match player position (Any always passes)
+            if (pack.direction == Direction::Front && context.isBehind) continue;
+            if (pack.direction == Direction::Back && !context.isBehind) continue;
+            // Sex: skip gender-specific packs that don't match the player
+            if (pack.sex != Sex::Unisex && pack.sex != playerSex) continue;
+            // Hunger: a sated player can't use hungry-only packs
+            if (pack.isHungry && !context.isHungry) continue;
+
+            candidates.push_back(&pack);
+        }
+
+        if (candidates.empty()) return nullptr;
+
+        thread_local std::random_device rd;
+        thread_local std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, static_cast<int>(candidates.size() - 1));
         return candidates[dis(gen)];
     }

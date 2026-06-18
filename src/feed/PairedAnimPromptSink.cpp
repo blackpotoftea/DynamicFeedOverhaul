@@ -213,9 +213,10 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
             // moment the composite feed started would otherwise re-trigger
             // HandleFeedAccepted.
             if (CompositePairedAnimation::IsActive()) {
-                SKSE::log::info("[Toggle] kUp during active composite feed - stopping");
-                CompositePairedAnimation::ForceStop();
-                FeedAnimState::MarkFeedEnded();
+                SKSE::log::info("[Toggle] kUp during active composite feed - requesting exit");
+                // Play the graceful exit animation; teardown + MarkFeedEnded
+                // happen when the exit clip finishes (driven by Tick()).
+                CompositePairedAnimation::RequestStop();
                 return;
             }
             SKSE::log::info("kUp on kHold - early release, executing non-lethal feed");
@@ -233,9 +234,10 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
             // touched — its prompt is hidden during play, so this branch
             // can't fire anyway, but the gate also makes the rule explicit.
             if (CompositePairedAnimation::IsActive()) {
-                SKSE::log::info("[Toggle] Feed key pressed during active composite feed - stopping");
-                CompositePairedAnimation::ForceStop();
-                FeedAnimState::MarkFeedEnded();
+                SKSE::log::info("[Toggle] Feed key pressed during active composite feed - requesting exit");
+                // Play the graceful exit animation; teardown + MarkFeedEnded
+                // happen when the exit clip finishes (driven by Tick()).
+                CompositePairedAnimation::RequestStop();
                 return;
             }
             bool holdComplete = (event.prompt.type == SkyPromptAPI::PromptType::kHold);
@@ -321,7 +323,34 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
         FeedAnimState::SetCurrentFeedLethal(false);
 
-        if (!CompositePairedAnimation::Play(feedTarget)) {
+        // Select a staged composite pack from the loaded *_DPA.json packs
+        // (filtered by direction/sex/hunger). If none match, fall back to a
+        // pack synthesized from the legacy ini clip pair (intro==loop, no
+        // exit/kill) so existing configs keep working.
+        bool isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
+
+        Feed::FeedContext ctx;
+        ctx.player = player;
+        ctx.target = feedTarget;
+        ctx.isCombat = playerInCombat;
+        ctx.isSneaking = player->IsSneaking();
+        ctx.isHungry = (vampireStage >= settings->Animation.HungryThreshold);
+        ctx.targetIsStanding = true;
+        ctx.isBehind = isBehind;
+        ctx.isLethal = false;
+
+        Feed::CompositePack pack;
+        if (const auto* match = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(ctx)) {
+            pack = *match;
+            SKSE::log::info("[HandleFeedAccepted] Composite pack '{}' selected (isBehind={})", pack.name, isBehind);
+        } else {
+            pack.name = "legacy_ini";
+            pack.intro = { settings->NonCombat.PlayerStandingFrontAnim, settings->NonCombat.TargetStandingFrontAnim };
+            pack.loop  = pack.intro;
+            SKSE::log::info("[HandleFeedAccepted] No composite pack matched - using legacy ini fallback");
+        }
+
+        if (!CompositePairedAnimation::Play(feedTarget, pack)) {
             SKSE::log::warn("[HandleFeedAccepted] CompositePairedAnimation::Play failed - tearing down feed state");
             FeedAnimState::MarkFeedEnded();
             return;
@@ -729,6 +758,13 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
 void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
     if (g_clientID.load(std::memory_order_acquire) == 0) return;
 
+    // While a staged composite feed is running the on-screen prompt is the
+    // "Stop Feed" toggle. Keep it shown no matter where the camera/crosshair
+    // points — don't hide or re-evaluate it (and don't run the legacy anim
+    // timeout, which would prematurely end a long feeding loop). The feed's own
+    // Tick() drives its lifecycle, and the prompt is refreshed in MarkFeedEnded.
+    if (CompositePairedAnimation::IsActive()) return;
+
     // Track last crosshair target for refresh after animations
     if (newTarget) {
         lastCrosshairActor_ = newTarget->GetHandle();
@@ -840,6 +876,11 @@ void PairedAnimPromptSink::OnMenuStateChange(bool isMenuOpen) {
 }
 
 void PairedAnimPromptSink::OnPeriodicValidation() {
+    // Don't invalidate/hide the prompt mid composite feed — the "Stop Feed"
+    // toggle must stay shown even when the crosshair is off the NPC. The feed
+    // ends via its own Tick() (player Stop or drained dry), not this check.
+    if (CompositePairedAnimation::IsActive()) return;
+
     // Early exit: If player isn't a feeding race (Vampire/Werewolf/VL), skip all validation
     // This avoids expensive IsValidFeedTarget checks when player can't feed
     // Note: When player transforms (via quest), they'll need to look at a target to trigger validation
