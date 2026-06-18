@@ -112,6 +112,13 @@ namespace AnimUtil {
     // state. Symmetric to LockActorForPairedAnim.
     void UnlockActorForPairedAnim(RE::Actor* actor);
 
+    // Kick the actor's AI to re-evaluate its packages so it resumes normal
+    // behavior after a paired scene. No-op on the player (the player has no
+    // package to re-pick). Mirrors OStimNG GameActor::updateAI(), which calls
+    // EvaluatePackage on scene teardown — without it the NPC's AI stays parked
+    // and the actor can stand frozen even after the graph reset.
+    void RefreshActorAI(RE::Actor* actor);
+
     // Continuous positioning - maintains position until stopped
     // updateFrequency: 1 = every frame, 2 = every other frame, etc. (default: 2 for ~30Hz at 60 FPS)
     void maintainActorPosition(RE::Actor* actor, float x, float y, float z, float rotation, const std::string& taskId, uint32_t updateFrequency = 2);

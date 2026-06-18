@@ -231,6 +231,9 @@ namespace CompositePairedAnimation {
             RestoreCollision(target.get());
             AnimUtil::UnlockActorForPairedAnim(target.get());
             AnimUtil::setRestrained(target.get(), false);
+            // Re-evaluate AI packages so the NPC un-parks and resumes its
+            // routine after the graph reset (mirrors OStimNG updateAI()).
+            AnimUtil::RefreshActorAI(target.get());
         }
         feedTargetHandle_ = {};
         isActive_ = false;
@@ -242,22 +245,31 @@ namespace CompositePairedAnimation {
         SKSE::log::info("[CompositePairedAnimation] ForceStop called");
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (player) {
-            if (auto* process = player->GetActorRuntimeData().currentProcess) {
-                process->StopCurrentIdle(player, true);
-            }
+            // StopCurrentIdle only tears down a PlayIdle/SetupSpecialIdle slot.
+            // Composite clips are started via NotifyAnimationGraph (raw behavior
+            // events), so no special idle is registered and this is a no-op.
+            // The graph state is exited by UnlockActorForPairedAnim's
+            // IdleForceDefaultState event instead. (Both OStimNG and GTS omit it.)
+            // if (auto* process = player->GetActorRuntimeData().currentProcess) {
+            //     process->StopCurrentIdle(player, true);
+            // }
             ReleaseLock(player);
             RestoreCollision(player);
             AnimUtil::UnlockActorForPairedAnim(player);
         }
 
         if (auto target = feedTargetHandle_.get()) {
-             if (auto* process = target->GetActorRuntimeData().currentProcess) {
-                process->StopCurrentIdle(target.get(), true);
-             }
+             // No-op for composite clips — see player note above.
+             // if (auto* process = target->GetActorRuntimeData().currentProcess) {
+             //     process->StopCurrentIdle(target.get(), true);
+             // }
              ReleaseLock(target.get());
              RestoreCollision(target.get());
              AnimUtil::UnlockActorForPairedAnim(target.get());
              AnimUtil::setRestrained(target.get(), false);
+             // Re-evaluate AI packages so the NPC un-parks and resumes its
+             // routine after the graph reset (mirrors OStimNG updateAI()).
+             AnimUtil::RefreshActorAI(target.get());
         }
         feedTargetHandle_ = {};
         isActive_ = false;

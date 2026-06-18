@@ -717,10 +717,16 @@ namespace AnimUtil {
     // graph back to its default state. Symmetric to LockActorForPairedAnim
     // but also fires the same anim-reset events OStimNG fires in unlock()
     // — without these, the actor can stay stuck in the composite anim pose
-    // after StopCurrentIdle / TranslateTo release. Player gets a sequence of
-    // reset events (vanilla skeleton has multiple "return to default" entry
-    // points); NPC gets the single IdleForceDefaultState which is the
-    // canonical NPC-graph reset.
+    // after the TranslateTo lock is released.
+    //
+    // Reset-event selection mirrors OStimNG GameActor::unlock and GTS
+    // PairedAnimationPositioning exactly: the split is HUMANOID vs CREATURE
+    // (keyed on the ActorTypeNPC keyword), NOT player vs NPC. Humanoids — which
+    // INCLUDE the player — reset cleanly via the single IdleForceDefaultState
+    // event. The multi-event "return to default" battery is only needed for
+    // creature graphs that lack that entry point. (Previously this branched on
+    // IsPlayerRef() and handed the humanoid player the creature battery, so the
+    // player never got IdleForceDefaultState and stayed frozen in the pose.)
     void UnlockActorForPairedAnim(RE::Actor* actor) {
         if (!actor) return;
         auto handle = actor->CreateRefHandle();
@@ -736,17 +742,38 @@ namespace AnimUtil {
             a->SetGraphVariableBool("bHeadTracking", true);
             a->SetGraphVariableBool("tdmHeadtrackingBehavior", true);
 
-            // Force the behavior graph back to its default state — same as
-            // OStimNG GameActor::unlock. Player vs NPC use different events.
-            if (a->IsPlayerRef()) {
+            // Force the behavior graph back to its default state.
+            auto* npcKeyword = RE::TESForm::LookupByID<RE::BGSKeyword>(0x00013794);  // ActorTypeNPC (Skyrim.esm)
+            const bool isHumanoid = npcKeyword && a->HasKeyword(npcKeyword);
+            if (isHumanoid) {
+                // Player and humanoid NPCs share the vanilla humanoid graph,
+                // which resets cleanly from any state via this single event.
+                a->NotifyAnimationGraph("IdleForceDefaultState");
+            } else {
+                // Creature graphs lack IdleForceDefaultState — fall back to the
+                // FNIS/return-to-default battery.
                 a->NotifyAnimationGraph("Reset");
                 a->NotifyAnimationGraph("ReturnToDefault");
                 a->NotifyAnimationGraph("FNISDefault");
                 a->NotifyAnimationGraph("IdleReturnToDefault");
                 a->NotifyAnimationGraph("ForceFurnExit");
                 a->NotifyAnimationGraph("ReturnDefaultState");
-            } else {
-                a->NotifyAnimationGraph("IdleForceDefaultState");
+            }
+        });
+    }
+
+    // Kick the actor's AI to re-evaluate its packages so it resumes normal
+    // behavior after a paired scene. No-op on the player. Mirrors OStimNG
+    // GameActor::updateAI() (form->EvaluatePackage()), called on scene
+    // teardown so the NPC un-parks and returns to its routine.
+    void RefreshActorAI(RE::Actor* actor) {
+        if (!actor || actor->IsPlayerRef()) return;
+        auto handle = actor->CreateRefHandle();
+        SKSE::GetTaskInterface()->AddTask([handle]() {
+            if (auto ref = handle.get()) {
+                if (auto* a = ref->As<RE::Actor>()) {
+                    a->EvaluatePackage();
+                }
             }
         });
     }
