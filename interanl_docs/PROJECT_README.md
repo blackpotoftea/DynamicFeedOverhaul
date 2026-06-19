@@ -29,3 +29,7 @@ player.addspell DLC1VampireChange
 
 
 
+---
+D:\mods\ModOrganizer\Portable_Skyrim_Special_Edition\mods\Open Animations Romance and Erotica\meshes\0SA\mod\0Sex\anim\OpS\StaSta\Em
+
+Animation location 

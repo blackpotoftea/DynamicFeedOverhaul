@@ -266,6 +266,9 @@ namespace CompositePairedAnimation {
                 FireStageClips(pack_.loop, "Loop");
                 stage_ = Stage::Loop;
                 stageTimer_ = 0.0f;
+                // Feeding has truly begun — gate the centralized overhaul trigger
+                // (fired in MarkFeedEnded). Stopping during Intro = no integration.
+                FeedAnimState::MarkFeedEngaged();
             }
             break;
         }

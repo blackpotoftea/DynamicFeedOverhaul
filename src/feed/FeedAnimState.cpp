@@ -17,11 +17,15 @@ namespace FeedAnimState {
     std::atomic<State> feedState{State::Idle};
     std::atomic<bool> currentFeedLethal{false};
     std::atomic<uint32_t> vfdTriggerCount{0};
+    std::atomic<bool> feedEngaged{false};
+    std::atomic<bool> feedHasOAR{false};
 
     void MarkFeedStarted() {
         feedState.store(State::Active, std::memory_order_release);
         currentFeedLethal.store(false, std::memory_order_release);
         vfdTriggerCount.store(0, std::memory_order_release);
+        feedEngaged.store(false, std::memory_order_release);
+        feedHasOAR.store(false, std::memory_order_release);
         SKSE::log::info("========== FEED STARTED ==========");
 
         // Apply time slowdown if enabled and player is in combat
@@ -48,6 +52,20 @@ namespace FeedAnimState {
         auto* timer = RE::BSTimer::GetSingleton();
         if (timer) {
             timer->SetGlobalTimeMultiplier(1.0f, true);
+        }
+
+        // Centralized vampire-overhaul trigger: fire ONCE here for both the
+        // legacy and composite paths, now that the feed is actually done.
+        // Gated on feedEngaged (skips aborted feeds) and read-and-cleared so a
+        // double MarkFeedEnded (timeout + event) can't double-fire. Runs BEFORE
+        // the active target is cleared below. isLethal/hasOAR are the per-feed
+        // context stashed at start (composite flips lethal true on the Kill stage).
+        if (ConsumeFeedEngaged()) {
+            if (auto t = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget()) {
+                PairedAnimation::RunFeedIntegration(t.get(), IsCurrentFeedLethal(), GetFeedHasOAR());
+            } else {
+                SKSE::log::warn("MarkFeedEnded: feed engaged but no active target for integration");
+            }
         }
 
         // Clear the active feed target (thread-safe). Per-actor cleanup
@@ -99,5 +117,21 @@ namespace FeedAnimState {
 
     uint32_t IncrementVFDTriggerCount() {
         return vfdTriggerCount.fetch_add(1, std::memory_order_acq_rel) + 1;
+    }
+
+    void MarkFeedEngaged() {
+        feedEngaged.store(true, std::memory_order_release);
+    }
+
+    bool ConsumeFeedEngaged() {
+        return feedEngaged.exchange(false, std::memory_order_acq_rel);
+    }
+
+    void SetFeedHasOAR(bool hasOAR) {
+        feedHasOAR.store(hasOAR, std::memory_order_release);
+    }
+
+    bool GetFeedHasOAR() {
+        return feedHasOAR.load(std::memory_order_acquire);
     }
 }

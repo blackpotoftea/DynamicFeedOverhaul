@@ -322,6 +322,9 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         });
 
         FeedAnimState::SetCurrentFeedLethal(false);
+        // Composite owns its own kill (KillTarget in the Kill stage), so flag
+        // hasOAR=true to suppress the vanilla manual-kill fallback in RunFeedIntegration.
+        FeedAnimState::SetFeedHasOAR(true);
 
         // Select a staged composite pack from the loaded *_DPA.json packs
         // (filtered by direction/sex/hunger). If none match, fall back to a
@@ -439,6 +442,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // Publish lethal state so the VFD_VampireFeedTrigger event handler can
         // decide variance vs fixed drain. Cleared on MarkFeedEnded/MarkFeedStarted.
         FeedAnimState::SetCurrentFeedLethal(isLethal);
+        // Stash hasOAR for the centralized RunFeedIntegration fired in MarkFeedEnded.
+        FeedAnimState::SetFeedHasOAR(hasOARAnimation);
 
         PairedAnimation::ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
         // Reset lethal flag after use (embrace flag reset by integration)
