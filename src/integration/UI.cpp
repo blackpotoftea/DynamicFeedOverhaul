@@ -373,6 +373,31 @@ void __stdcall UI::Settings::Render() {
                 changed = true;
             }
             ImGuiMCP::SetItemTooltip("Target-side single-actor animation event for composite paired feed");
+
+            ImGuiMCP::Separator();
+            ImGuiMCP::TextDisabled("Victim Health Bar");
+            changed |= ImGuiMCP::Checkbox("Show Victim Health Bar", &settings->HealthBarOverlay.Enable);
+            ImGuiMCP::SetItemTooltip("Draw the victim's health bar above their head for the duration of the composite feed");
+            if (settings->HealthBarOverlay.Enable) {
+                changed |= ImGuiMCP::SliderFloat("Bar Scale", &settings->HealthBarOverlay.Scale, 0.25f, 3.0f, "%.2fx");
+                ImGuiMCP::SetItemTooltip("Size multiplier applied to bar width and height");
+                changed |= ImGuiMCP::SliderFloat("Bar Width", &settings->HealthBarOverlay.Width, 40.0f, 400.0f, "%.0f px");
+                changed |= ImGuiMCP::SliderFloat("Bar Height", &settings->HealthBarOverlay.Height, 4.0f, 40.0f, "%.0f px");
+                changed |= ImGuiMCP::SliderFloat("Height Above Head", &settings->HealthBarOverlay.HeightOffset, -50.0f, 150.0f, "%.1f");
+                ImGuiMCP::SetItemTooltip("Vertical offset above the victim's head (game units)");
+                changed |= ImGuiMCP::SliderFloat("Screen Offset X", &settings->HealthBarOverlay.OffsetX, -300.0f, 300.0f, "%.0f px");
+                ImGuiMCP::SetItemTooltip("Fine-tune horizontal screen position (+ = right)");
+                changed |= ImGuiMCP::SliderFloat("Screen Offset Y", &settings->HealthBarOverlay.OffsetY, -300.0f, 300.0f, "%.0f px");
+                ImGuiMCP::SetItemTooltip("Fine-tune vertical screen position (+ = down)");
+                changed |= ImGuiMCP::Checkbox("Trailing Damage Bar", &settings->HealthBarOverlay.EnableTrailing);
+                ImGuiMCP::SetItemTooltip("Show a lagging 'chip' layer behind the bar that catches up after each drain");
+                if (settings->HealthBarOverlay.EnableTrailing) {
+                    changed |= ImGuiMCP::SliderFloat("Trailing Delay (s)", &settings->HealthBarOverlay.TrailingDelay, 0.0f, 2.0f, "%.2f");
+                    ImGuiMCP::SetItemTooltip("How long the trailing layer holds before sliding down");
+                    changed |= ImGuiMCP::SliderFloat("Trailing Speed", &settings->HealthBarOverlay.TrailingSpeed, 0.1f, 5.0f, "%.2f");
+                    ImGuiMCP::SetItemTooltip("Catch-up speed (bar fractions per second)");
+                }
+            }
         }
         changed |= ImGuiMCP::SliderFloat("Target Offset X", &settings->NonCombat.TargetOffsetX, -100.0f, 100.0f, "%.1f");
         changed |= ImGuiMCP::SliderFloat("Target Offset Y", &settings->NonCombat.TargetOffsetY, -100.0f, 100.0f, "%.1f");
@@ -420,6 +445,18 @@ void __stdcall UI::Settings::Render() {
             ImGuiMCP::TextDisabled("Non-lethal feeds (fixed, no variance)");
             changed |= ImGuiMCP::SliderFloat("Non-Lethal Chunk %", &settings->HealthDrain.NonLethalChunkPercent, 1.0f, 100.0f, "%.1f%%");
         }
+
+        ImGuiMCP::Separator();
+        ImGuiMCP::TextDisabled("Composite feed (gulps)");
+        ImGuiMCP::SetItemTooltip("The composite feeding loop drains HP in randomized chunks ('gulps') at randomized intervals");
+        changed |= ImGuiMCP::SliderFloat("Gulp Interval Min (s)", &settings->HealthDrain.GulpIntervalMin, 0.1f, 5.0f, "%.2f");
+        changed |= ImGuiMCP::SliderFloat("Gulp Interval Max (s)", &settings->HealthDrain.GulpIntervalMax, 0.1f, 5.0f, "%.2f");
+        ImGuiMCP::SetItemTooltip("Seconds between gulps (randomized between min and max)");
+        changed |= ImGuiMCP::SliderFloat("Gulp Drain Min %", &settings->HealthDrain.GulpPercentMin, 1.0f, 50.0f, "%.1f%%");
+        changed |= ImGuiMCP::SliderFloat("Gulp Drain Max %", &settings->HealthDrain.GulpPercentMax, 1.0f, 50.0f, "%.1f%%");
+        ImGuiMCP::SetItemTooltip("HP drained per gulp as a percent of the victim's max health");
+        changed |= ImGuiMCP::SliderFloat("Gulp Lethal Threshold", &settings->HealthDrain.GulpLethalThreshold, 0.0f, 0.5f, "%.2f");
+        ImGuiMCP::SetItemTooltip("Victim HP fraction at/below which the feeding loop drains dry and kills");
     }
 
     // Integration Settings

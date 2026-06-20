@@ -3,6 +3,7 @@
 #include "feed/PairedAnimPromptSink.h"
 #include "feed/PairedAnimation.h"
 #include "feed/CompositePairedAnimation.h"
+#include "feed/FeedHealthBarOverlay.h"
 #include "Settings.h"
 #include <atomic>
 
@@ -67,6 +68,9 @@ namespace FeedAnimState {
                 SKSE::log::warn("MarkFeedEnded: feed engaged but no active target for integration");
             }
         }
+
+        // Hide the victim's health bar (idempotent; no-op if none shown).
+        FeedHealthBarOverlay::GetSingleton()->Hide();
 
         // Clear the active feed target (thread-safe). Per-actor cleanup
         // (kill-move, graph vars, pacify) is owned by PairedAnimation::ExitFeedState,

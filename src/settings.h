@@ -60,8 +60,6 @@ public:
         float CompositeIntroDuration{ 2.0f };    // Seconds Intro plays before -> Loop (fallback if no VFD_IntroEnd)
         float CompositeExitDuration{ 2.0f };     // Seconds Exit plays before teardown (fallback if no VFD_ExitEnd)
         float CompositeKillDuration{ 2.5f };     // Seconds Kill plays before victim dies + teardown (fallback if no VFD_KillEnd)
-        float CompositeLethalThreshold{ 0.05f }; // Victim HP fraction (0-1) at/below which Loop -> Kill (drained dry)
-        float CompositeLoopDrainPercentPerSecond{ 10.0f }; // Constant victim HP drain per second (% of max) while feeding loop runs (0 = off)
         float TargetOffsetX{ 0.0f };   // Target X offset from player (local coords)
         float TargetOffsetY{ 25.0f };  // Target Y offset (positive = in front). ~20-30 matches Anub2P / OStim "standing apart" choreography.
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)
@@ -113,6 +111,22 @@ public:
         std::string FailureIconPath{ "Data\\Interface\\ImGuiIcons\\Icons\\vampireFangs_fail.png" }; // Icon shown on PlayIdle failure
     } IconOverlay;
 
+    // Victim health bar overlay (custom ImGui bar drawn above the victim during a feed)
+    struct {
+        bool Enable{ true };           // Show the victim's health bar during feeds
+        float Width{ 120.0f };         // Bar width in pixels (before Scale)
+        float Height{ 10.0f };         // Bar height in pixels (before Scale)
+        float Scale{ 1.0f };           // Size multiplier applied to width and height
+        float HeightOffset{ 25.0f };   // Height above the victim's head (game units)
+        float OffsetX{ 0.0f };         // Screen-space horizontal offset (pixels, + = right)
+        float OffsetY{ 0.0f };         // Screen-space vertical offset (pixels, + = down)
+        // Trailing "damage chip" layer: a lagging bar behind the front bar that holds for a
+        // beat after a hit, then slides down to catch up (shows how much was just drained).
+        bool EnableTrailing{ true };   // Show the trailing layer
+        float TrailingDelay{ 0.35f };  // Seconds the trailing layer holds before catching up
+        float TrailingSpeed{ 1.0f };   // Catch-up speed (bar fractions per second)
+    } HealthBarOverlay;
+
     // Animation selection settings
     struct {
         bool EnableRandomSelection{ true };     // Enable random animation from available list
@@ -133,6 +147,13 @@ public:
         float EscalationPerTrigger{ 1.2f };     // Multiplier on the roll for each successive trigger in same feed
         float NonLethalChunkPercent{ 10.0f };   // Fixed % per trigger on non-lethal feeds
         float MaxChunkCapPercent{ 95.0f };      // Safety cap so escalation can't one-shot to 1
+        // Composite feed "gulp" drain: the feeding loop removes a randomized chunk of HP at a
+        // randomized interval (like sucking blood in mouthfuls) rather than a smooth bleed.
+        float GulpIntervalMin{ 0.7f };          // Min seconds between gulps
+        float GulpIntervalMax{ 1.5f };          // Max seconds between gulps
+        float GulpPercentMin{ 7.0f };           // Min HP drained per gulp (% of max)
+        float GulpPercentMax{ 16.0f };          // Max HP drained per gulp (% of max)
+        float GulpLethalThreshold{ 0.05f };     // Victim HP fraction (0-1) at/below which Loop -> Kill (drained dry)
     } HealthDrain;
 
     // Integration settings

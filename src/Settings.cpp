@@ -126,8 +126,6 @@ void Settings::LoadINI() {
     NonCombat.CompositeIntroDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration));
     NonCombat.CompositeExitDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration));
     NonCombat.CompositeKillDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeKillDuration", NonCombat.CompositeKillDuration));
-    NonCombat.CompositeLethalThreshold = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeLethalThreshold", NonCombat.CompositeLethalThreshold));
-    NonCombat.CompositeLoopDrainPercentPerSecond = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeLoopDrainPercentPerSecond", NonCombat.CompositeLoopDrainPercentPerSecond));
     NonCombat.TargetOffsetX = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX));
     NonCombat.TargetOffsetY = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY));
     NonCombat.TargetOffsetZ = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetZ", NonCombat.TargetOffsetZ));
@@ -172,6 +170,18 @@ void Settings::LoadINI() {
     IconOverlay.IconPath = ini.GetValue("IconOverlay", "IconPath", IconOverlay.IconPath.c_str());
     IconOverlay.FailureIconPath = ini.GetValue("IconOverlay", "FailureIconPath", IconOverlay.FailureIconPath.c_str());
 
+    // HealthBarOverlay
+    HealthBarOverlay.Enable = ini.GetBoolValue("HealthBarOverlay", "Enable", HealthBarOverlay.Enable);
+    HealthBarOverlay.Width = static_cast<float>(ini.GetDoubleValue("HealthBarOverlay", "Width", HealthBarOverlay.Width));
+    HealthBarOverlay.Height = static_cast<float>(ini.GetDoubleValue("HealthBarOverlay", "Height", HealthBarOverlay.Height));
+    HealthBarOverlay.Scale = static_cast<float>(ini.GetDoubleValue("HealthBarOverlay", "Scale", HealthBarOverlay.Scale));
+    HealthBarOverlay.HeightOffset = static_cast<float>(ini.GetDoubleValue("HealthBarOverlay", "HeightOffset", HealthBarOverlay.HeightOffset));
+    HealthBarOverlay.OffsetX = static_cast<float>(ini.GetDoubleValue("HealthBarOverlay", "OffsetX", HealthBarOverlay.OffsetX));
+    HealthBarOverlay.OffsetY = static_cast<float>(ini.GetDoubleValue("HealthBarOverlay", "OffsetY", HealthBarOverlay.OffsetY));
+    HealthBarOverlay.EnableTrailing = ini.GetBoolValue("HealthBarOverlay", "EnableTrailing", HealthBarOverlay.EnableTrailing);
+    HealthBarOverlay.TrailingDelay = static_cast<float>(ini.GetDoubleValue("HealthBarOverlay", "TrailingDelay", HealthBarOverlay.TrailingDelay));
+    HealthBarOverlay.TrailingSpeed = static_cast<float>(ini.GetDoubleValue("HealthBarOverlay", "TrailingSpeed", HealthBarOverlay.TrailingSpeed));
+
     // Animation
     Animation.EnableRandomSelection = ini.GetBoolValue("Animation", "EnableRandomSelection", Animation.EnableRandomSelection);
     Animation.HungryThreshold = static_cast<int>(ini.GetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold));
@@ -188,6 +198,11 @@ void Settings::LoadINI() {
     HealthDrain.EscalationPerTrigger = static_cast<float>(ini.GetDoubleValue("HealthDrain", "EscalationPerTrigger", HealthDrain.EscalationPerTrigger));
     HealthDrain.NonLethalChunkPercent = static_cast<float>(ini.GetDoubleValue("HealthDrain", "NonLethalChunkPercent", HealthDrain.NonLethalChunkPercent));
     HealthDrain.MaxChunkCapPercent = static_cast<float>(ini.GetDoubleValue("HealthDrain", "MaxChunkCapPercent", HealthDrain.MaxChunkCapPercent));
+    HealthDrain.GulpIntervalMin = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpIntervalMin", HealthDrain.GulpIntervalMin));
+    HealthDrain.GulpIntervalMax = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpIntervalMax", HealthDrain.GulpIntervalMax));
+    HealthDrain.GulpPercentMin = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpPercentMin", HealthDrain.GulpPercentMin));
+    HealthDrain.GulpPercentMax = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpPercentMax", HealthDrain.GulpPercentMax));
+    HealthDrain.GulpLethalThreshold = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpLethalThreshold", HealthDrain.GulpLethalThreshold));
 
     // Integration
     Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
@@ -316,10 +331,6 @@ void Settings::SaveINI() {
         "; Staged composite: seconds Exit animation plays before teardown (fallback if no VFD_ExitEnd)");
     ini.SetDoubleValue("NonCombat", "CompositeKillDuration", NonCombat.CompositeKillDuration,
         "; Staged composite: seconds Kill animation plays before victim dies + teardown (fallback if no VFD_KillEnd)");
-    ini.SetDoubleValue("NonCombat", "CompositeLethalThreshold", NonCombat.CompositeLethalThreshold,
-        "; Staged composite: victim HP fraction (0-1) at/below which the feeding loop drains dry and kills");
-    ini.SetDoubleValue("NonCombat", "CompositeLoopDrainPercentPerSecond", NonCombat.CompositeLoopDrainPercentPerSecond,
-        "; Staged composite: constant victim HP drain per second (% of max) while the feeding loop runs (0 = off, drain only from animation bite events)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX,
         "; Target X offset from player in local coordinates (0=centered)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY,
@@ -399,6 +410,28 @@ void Settings::SaveINI() {
     ini.SetValue("IconOverlay", "FailureIconPath", IconOverlay.FailureIconPath.c_str(),
         "; Path to the icon shown when PlayIdle fails (PNG, JPG, etc.)");
 
+    // HealthBarOverlay
+    ini.SetBoolValue("HealthBarOverlay", "Enable", HealthBarOverlay.Enable,
+        "; Show the victim's health bar above their head during a feed (custom overlay, always reliable)");
+    ini.SetDoubleValue("HealthBarOverlay", "Width", HealthBarOverlay.Width,
+        "; Health bar width in pixels");
+    ini.SetDoubleValue("HealthBarOverlay", "Height", HealthBarOverlay.Height,
+        "; Health bar height in pixels");
+    ini.SetDoubleValue("HealthBarOverlay", "Scale", HealthBarOverlay.Scale,
+        "; Size multiplier applied to the bar width and height (1.0 = default)");
+    ini.SetDoubleValue("HealthBarOverlay", "HeightOffset", HealthBarOverlay.HeightOffset,
+        "; Height of the bar above the victim's head (game units)");
+    ini.SetDoubleValue("HealthBarOverlay", "OffsetX", HealthBarOverlay.OffsetX,
+        "; Screen-space horizontal offset in pixels (+ = right)");
+    ini.SetDoubleValue("HealthBarOverlay", "OffsetY", HealthBarOverlay.OffsetY,
+        "; Screen-space vertical offset in pixels (+ = down)");
+    ini.SetBoolValue("HealthBarOverlay", "EnableTrailing", HealthBarOverlay.EnableTrailing,
+        "; Show a trailing 'damage chip' layer that lags behind the front bar to show recent drain");
+    ini.SetDoubleValue("HealthBarOverlay", "TrailingDelay", HealthBarOverlay.TrailingDelay,
+        "; Seconds the trailing layer holds before sliding down to catch up");
+    ini.SetDoubleValue("HealthBarOverlay", "TrailingSpeed", HealthBarOverlay.TrailingSpeed,
+        "; Catch-up speed of the trailing layer (bar fractions per second)");
+
     // Animation
     ini.SetBoolValue("Animation", "EnableRandomSelection", Animation.EnableRandomSelection,
         "; Enable random animation selection from available FeedType lists");
@@ -428,6 +461,16 @@ void Settings::SaveINI() {
         "; Fixed % of current HP drained per trigger on non-lethal feeds (no variance, no escalation)");
     ini.SetDoubleValue("HealthDrain", "MaxChunkCapPercent", HealthDrain.MaxChunkCapPercent,
         "; Safety cap so escalation can't one-shot to 1 HP (default 95.0)");
+    ini.SetDoubleValue("HealthDrain", "GulpIntervalMin", HealthDrain.GulpIntervalMin,
+        "; Composite feed: minimum seconds between drain 'gulps'");
+    ini.SetDoubleValue("HealthDrain", "GulpIntervalMax", HealthDrain.GulpIntervalMax,
+        "; Composite feed: maximum seconds between drain 'gulps'");
+    ini.SetDoubleValue("HealthDrain", "GulpPercentMin", HealthDrain.GulpPercentMin,
+        "; Composite feed: minimum HP drained per gulp (% of victim max health)");
+    ini.SetDoubleValue("HealthDrain", "GulpPercentMax", HealthDrain.GulpPercentMax,
+        "; Composite feed: maximum HP drained per gulp (% of victim max health)");
+    ini.SetDoubleValue("HealthDrain", "GulpLethalThreshold", HealthDrain.GulpLethalThreshold,
+        "; Composite feed: victim HP fraction (0-1) at/below which the feeding loop drains dry and kills");
 
     // Integration
     ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,

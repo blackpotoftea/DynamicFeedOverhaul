@@ -4,7 +4,10 @@
 #include "PCH.h"
 #include "utils/AnimUtil.h"
 #include "feed/CombatBark.h"
+#include "feed/FeedHealthBarOverlay.h"
+#include <algorithm>
 #include <cmath>
+#include <random>
 
 namespace CompositePairedAnimation {
 
@@ -15,6 +18,16 @@ namespace CompositePairedAnimation {
         RE::ActorHandle feedTargetHandle_;
         Stage stage_ = Stage::Idle;
         float stageTimer_ = 0.0f;   // seconds elapsed in the current stage
+        float gulpTimer_ = 0.0f;    // counts down to the next drain "gulp" during Loop
+
+        // Uniform random in [lo, hi] (handles lo > hi / lo == hi).
+        float RandRange(float lo, float hi) {
+            if (hi < lo) std::swap(lo, hi);
+            if (hi <= lo) return lo;
+            thread_local std::mt19937 gen{ std::random_device{}() };
+            std::uniform_real_distribution<float> dist(lo, hi);
+            return dist(gen);
+        }
 
         // Settle phase: wait a few frames after Play() so the head-tracking /
         // foot-IK graph-var changes settle before the Intro blend starts,
@@ -164,6 +177,10 @@ namespace CompositePairedAnimation {
         stage_ = Stage::Settle;
         stageTimer_ = 0.0f;
 
+        // Show the victim's health bar for the whole feed (drains live as HP
+        // drops). Hidden centrally in FeedAnimState::MarkFeedEnded().
+        FeedHealthBarOverlay::GetSingleton()->Show(target);
+
         // Snapshot the player's pose at the start of the feed.
         lockedPlayerPos_ = player->GetPosition();
         lockedPlayerYaw_ = player->data.angle.z;
@@ -266,6 +283,9 @@ namespace CompositePairedAnimation {
                 FireStageClips(pack_.loop, "Loop");
                 stage_ = Stage::Loop;
                 stageTimer_ = 0.0f;
+                // Seed the first gulp a randomized moment after the bite latches.
+                gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,
+                                       settings->HealthDrain.GulpIntervalMax);
                 // Feeding has truly begun — gate the centralized overhaul trigger
                 // (fired in MarkFeedEnded). Stopping during Intro = no integration.
                 FeedAnimState::MarkFeedEngaged();
@@ -276,28 +296,36 @@ namespace CompositePairedAnimation {
         case Stage::Loop: {
             // The feeding loop plays indefinitely — it never auto-transitions to
             // Exit (only a player Stop does that, via RequestStop). The victim is
-            // killed purely by health loss: we constantly subtract HP each frame
-            // while feeding, and once HP falls to/below the lethal threshold we
-            // switch to the Kill (drained-dry) finisher.
+            // drained in randomized "gulps": every randomized interval a randomized
+            // chunk of HP is removed (like sucking blood in mouthfuls). Gulps floor
+            // at the lethal threshold so they never kill outright — once HP reaches
+            // that floor we switch to the Kill (drained-dry) finisher.
             bool drainedDry = false;
             if (auto* av = target->AsActorValueOwner()) {
-                float cur = av->GetActorValue(RE::ActorValue::kHealth);
                 const float max = av->GetPermanentActorValue(RE::ActorValue::kHealth);
+                const float thr = std::clamp(settings->HealthDrain.GulpLethalThreshold, 0.0f, 1.0f);
+                const float floorHP = max * thr;
 
-                // Constant drain: a flat fraction of MAX health per second so the
-                // victim bleeds out linearly (not asymptotically). Applied here
-                // directly since Tick() runs on the main thread.
-                const float ratePct = settings->NonCombat.CompositeLoopDrainPercentPerSecond;
-                if (ratePct > 0.0f && max > 0.0f) {
-                    const float drain = max * (ratePct / 100.0f) * delta;
-                    if (drain > 0.0f) {
-                        av->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -drain);
-                        cur = std::max(0.0f, cur - drain);
+                gulpTimer_ -= delta;
+                if (gulpTimer_ <= 0.0f && max > 0.0f) {
+                    const float cur = av->GetActorValue(RE::ActorValue::kHealth);
+                    const float pct = RandRange(settings->HealthDrain.GulpPercentMin,
+                                                settings->HealthDrain.GulpPercentMax);
+                    const float newHP = std::max(floorHP, cur - max * (pct / 100.0f));
+                    const float dmg = cur - newHP;
+                    if (dmg > 0.0f) {
+                        av->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -dmg);
                     }
+                    // Schedule the next gulp at a randomized interval.
+                    gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,
+                                           settings->HealthDrain.GulpIntervalMax);
+                    SKSE::log::debug("[CompositePairedAnimation] Gulp: -{:.1f} HP ({:.1f}%), next in {:.2f}s",
+                        dmg, pct, gulpTimer_);
                 }
 
-                const float thr = settings->NonCombat.CompositeLethalThreshold;
-                if (max > 0.0f && cur <= max * thr) drainedDry = true;
+                if (max > 0.0f && av->GetActorValue(RE::ActorValue::kHealth) <= floorHP + 0.5f) {
+                    drainedDry = true;
+                }
             }
 
             if (drainedDry) {

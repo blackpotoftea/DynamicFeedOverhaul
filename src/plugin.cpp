@@ -6,6 +6,7 @@
 #include "SkyPrompt/API.hpp"
 #include "SKSEMCP/SKSEMenuFramework.hpp"
 #include "feed/FeedIconOverlay.h"
+#include "feed/FeedHealthBarOverlay.h"
 #include "integration/OStimIntegration.h"
 #include "integration/PoiseIntegration.h"
 #include "integration/SacrosanctIntegration.h"
@@ -77,8 +78,9 @@ void OnDataLoaded()
 
         SKSEMenuFramework::AddHudElement([]() {
             FeedIconOverlay::GetSingleton()->RenderOverlay();
+            FeedHealthBarOverlay::GetSingleton()->RenderOverlay();
         });
-        SKSE::log::info("Successfully registered icon overlay HUD element with SKSEMenuFramework");
+        SKSE::log::info("Successfully registered icon + health bar overlay HUD elements with SKSEMenuFramework");
     } else {
         SKSE::log::error("SKSEMenuFramework not found - icon overlay will not render");
     }

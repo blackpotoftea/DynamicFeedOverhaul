@@ -4,6 +4,7 @@ set(sources ${sources}
     src/hooks/hook.cpp
     src/feed/CompositePairedAnimation.cpp
     src/feed/FeedIconOverlay.cpp
+    src/feed/FeedHealthBarOverlay.cpp
     src/feed/PairedAnimPromptSink.cpp
     src/feed/PairedAnimation.cpp
     src/feed/FeedAnimState.cpp
