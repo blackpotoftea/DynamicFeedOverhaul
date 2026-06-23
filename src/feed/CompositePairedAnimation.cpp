@@ -50,6 +50,7 @@ namespace CompositePairedAnimation {
 
         float posLogTimer_ = 0.0f;          // throttle for the per-frame position tracer
         bool playerReleased_ = false;       // player freed early (at Drained start) so it can move
+        float drainedDuration_ = 0.0f;      // random length rolled for this feed's Drained stage
     }
 
     bool IsActive() { return stage_ != Stage::Idle && stage_ != Stage::Done; }
@@ -468,7 +469,11 @@ namespace CompositePairedAnimation {
                     SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - player freed, no Drained clip, finishing");
                     Finish();
                 } else {
-                    SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - player freed -> Drained (victim only)");
+                    // Roll a random aftermath length in [Min, Max] for this feed.
+                    drainedDuration_ = RandRange(settings->NonCombat.CompositeDrainedDurationMin,
+                                                 settings->NonCombat.CompositeDrainedDurationMax);
+                    SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - player freed -> Drained (victim only, {:.2f}s)",
+                        drainedDuration_);
                     FireDrainedTargetOnly();
                     stage_ = Stage::Drained;
                     stageTimer_ = 0.0f;
@@ -478,8 +483,8 @@ namespace CompositePairedAnimation {
         }
 
         case Stage::Drained: {
-            if (stageTimer_ >= settings->NonCombat.CompositeDrainedDuration) {
-                SKSE::log::info("[CompositePairedAnimation] Drained aftermath complete - victim released alive");
+            if (stageTimer_ >= drainedDuration_) {  // random length rolled on entry, [Min, Max]
+                SKSE::log::info("[CompositePairedAnimation] Drained aftermath complete ({:.2f}s) - victim released alive", drainedDuration_);
                 Finish();  // victim survives; death only ever happens in the Loop
             }
             break;

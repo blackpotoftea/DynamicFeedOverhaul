@@ -74,10 +74,12 @@ namespace {
         }
 
         RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
-            if (a_event && a_event->opening) {
-                if (MenuCheck::IsMenuBlocked(a_event->menuName)) {
-                    PairedAnimPromptSink::GetSingleton()->OnMenuStateChange(true);
-                }
+            // Notify on BOTH open and close of a blocked menu. The close case
+            // matters during a composite feed: open hides the "Stop Feed" prompt
+            // and only OnMenuStateChange(false) re-shows it (OnCrosshairUpdate /
+            // OnPeriodicValidation early-return while a feed is active).
+            if (a_event && MenuCheck::IsMenuBlocked(a_event->menuName)) {
+                PairedAnimPromptSink::GetSingleton()->OnMenuStateChange(a_event->opening);
             }
             return RE::BSEventNotifyControl::kContinue;
         }

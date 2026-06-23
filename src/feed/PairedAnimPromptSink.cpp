@@ -878,6 +878,23 @@ void PairedAnimPromptSink::OnMenuStateChange(bool isMenuOpen) {
             HidePrompt();
             SKSE::log::debug("Menu opened, removing prompt");
         }
+        return;
+    }
+
+    // Menu closed. During a composite feed the "Stop Feed" toggle is restored
+    // only here: OnCrosshairUpdate / OnPeriodicValidation early-return while a
+    // feed is active, so without this the prompt stays hidden for the rest of
+    // the feed after opening/closing a menu. Non-feed prompts self-heal via
+    // OnPeriodicValidation, so they're left alone.
+    if (!CompositePairedAnimation::IsActive()) return;
+
+    // A nested blocked menu may still be open (or the game still paused) when
+    // an inner menu closes — wait for the outermost menu's close event.
+    if (MenuCheck::IsAnyBlockedMenuOpen()) return;
+
+    if (auto activeFeed = GetActiveFeedTarget()) {
+        ShowPrompt(activeFeed.get());
+        SKSE::log::debug("Menu closed during composite feed - restored Stop Feed prompt");
     }
 }
 
@@ -885,7 +902,18 @@ void PairedAnimPromptSink::OnPeriodicValidation() {
     // Don't invalidate/hide the prompt mid composite feed — the "Stop Feed"
     // toggle must stay shown even when the crosshair is off the NPC. The feed
     // ends via its own Tick() (player Stop or drained dry), not this check.
-    if (CompositePairedAnimation::IsActive()) return;
+    if (CompositePairedAnimation::IsActive()) {
+        // Self-heal: if a blocked menu hid the toggle (OnMenuStateChange) and has
+        // since closed, restore it. This backstops the menu-close event, whose
+        // guard can transiently see the game still paused during the close frame.
+        if (!GetTarget() && !MenuCheck::IsAnyBlockedMenuOpen()) {
+            if (auto activeFeed = GetActiveFeedTarget()) {
+                ShowPrompt(activeFeed.get());
+                SKSE::log::debug("Restored Stop Feed prompt after menu close (periodic self-heal)");
+            }
+        }
+        return;
+    }
 
     // Early exit: If player isn't a feeding race (Vampire/Werewolf/VL), skip all validation
     // This avoids expensive IsValidFeedTarget checks when player can't feed

@@ -125,7 +125,8 @@ void Settings::LoadINI() {
     NonCombat.TargetStandingFrontAnim = ini.GetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str());
     NonCombat.CompositeIntroDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration));
     NonCombat.CompositeExitDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration));
-    NonCombat.CompositeDrainedDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeDrainedDuration", NonCombat.CompositeDrainedDuration));
+    NonCombat.CompositeDrainedDurationMin = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeDrainedDurationMin", NonCombat.CompositeDrainedDurationMin));
+    NonCombat.CompositeDrainedDurationMax = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeDrainedDurationMax", NonCombat.CompositeDrainedDurationMax));
     NonCombat.TargetOffsetX = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX));
     NonCombat.TargetOffsetY = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY));
     NonCombat.TargetOffsetZ = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetZ", NonCombat.TargetOffsetZ));
@@ -329,8 +330,10 @@ void Settings::SaveINI() {
         "; Staged composite: seconds Intro plays before Loop (fallback if clip emits no VFD_IntroEnd)");
     ini.SetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration,
         "; Staged composite: seconds Exit (GoBack) plays before -> Drained (fallback if no VFD_GoBackEnd)");
-    ini.SetDoubleValue("NonCombat", "CompositeDrainedDuration", NonCombat.CompositeDrainedDuration,
-        "; Staged composite: seconds Drained idle aftermath plays before teardown (fallback if no VFD_DrainedEnd)");
+    ini.SetDoubleValue("NonCombat", "CompositeDrainedDurationMin", NonCombat.CompositeDrainedDurationMin,
+        "; Staged composite: Drained aftermath MIN seconds (a random length in [Min,Max] is rolled each feed; 0 = can skip)");
+    ini.SetDoubleValue("NonCombat", "CompositeDrainedDurationMax", NonCombat.CompositeDrainedDurationMax,
+        "; Staged composite: Drained aftermath MAX seconds (set up to the full Drained clip length, ~9.3s, to play it fully)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX,
         "; Target X offset from player in local coordinates (0=centered)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY,

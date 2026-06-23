@@ -375,6 +375,23 @@ void __stdcall UI::Settings::Render() {
             ImGuiMCP::SetItemTooltip("Target-side single-actor animation event for composite paired feed");
 
             ImGuiMCP::Separator();
+            ImGuiMCP::TextDisabled("Stage Timing (timer fallback; clip VFD_*End events override)");
+            changed |= ImGuiMCP::SliderFloat("Intro Duration", &settings->NonCombat.CompositeIntroDuration, 0.0f, 10.0f, "%.2f s");
+            ImGuiMCP::SetItemTooltip("Seconds the Intro (GoTo) clip plays before the feeding Loop");
+            changed |= ImGuiMCP::SliderFloat("Exit Duration", &settings->NonCombat.CompositeExitDuration, 0.0f, 10.0f, "%.2f s");
+            ImGuiMCP::SetItemTooltip("Seconds the Exit (GoBack) clip plays before the player is freed and Drained begins");
+
+            ImGuiMCP::TextDisabled("Drained Aftermath (random length per feed)");
+            changed |= ImGuiMCP::SliderFloat("Drained Min", &settings->NonCombat.CompositeDrainedDurationMin, 0.0f, 10.0f, "%.2f s");
+            ImGuiMCP::SetItemTooltip("Minimum seconds the victim's Drained idle plays (0 = can skip)");
+            changed |= ImGuiMCP::SliderFloat("Drained Max", &settings->NonCombat.CompositeDrainedDurationMax, 0.0f, 10.0f, "%.2f s");
+            ImGuiMCP::SetItemTooltip("Maximum seconds the victim's Drained idle plays (up to the full clip length, ~9.3s)");
+            // Keep the range valid: clamp Min <= Max whichever the user just moved.
+            if (settings->NonCombat.CompositeDrainedDurationMin > settings->NonCombat.CompositeDrainedDurationMax) {
+                settings->NonCombat.CompositeDrainedDurationMax = settings->NonCombat.CompositeDrainedDurationMin;
+            }
+
+            ImGuiMCP::Separator();
             ImGuiMCP::TextDisabled("Victim Health Bar");
             changed |= ImGuiMCP::Checkbox("Show Victim Health Bar", &settings->HealthBarOverlay.Enable);
             ImGuiMCP::SetItemTooltip("Draw the victim's health bar above their head for the duration of the composite feed");

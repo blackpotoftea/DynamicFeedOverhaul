@@ -4,10 +4,10 @@
     "sex": "Male",
     "isHungry": false,
     "stages": {
-      "intro": { "player": "_Em-GoToDevourVampireBiteMaleStanding_0", "target": "_Em-GoToDevourVampireBiteMaleStanding_1" },
-      "loop":  { "player": "_Em-DevourVampireBiteMaleStanding_0",     "target": "_Em-DevourVampireBiteMaleStanding_1" },
-      "exit":  { "player": "_Em-GoBackDevourVampireBiteMaleStanding_0", "target": "_Em-GoBackDevourVampireBiteMaleStanding_1" },
-      "kill":  { "player": "_Em-DevourDrainedMaleStanding_0",         "target": "_Em-DevourDrainedMaleStanding_1" }
+      "intro":   { "player": "_Em-GoToDevourVampireBiteMaleStanding_0",   "target": "_Em-GoToDevourVampireBiteMaleStanding_1" },
+      "loop":    { "player": "_Em-DevourVampireBiteMaleStanding_0",       "target": "_Em-DevourVampireBiteMaleStanding_1" },
+      "exit":    { "player": "_Em-GoBackDevourVampireBiteMaleStanding_0", "target": "_Em-GoBackDevourVampireBiteMaleStanding_1" },
+      "drained": { "player": "_Em-DevourDrainedFemaleStanding_0",         "target": "_Em-DevourDrainedFemaleStanding_1" }
     }
   },
   "em_devour_standing_female": {
@@ -15,10 +15,10 @@
     "sex": "Female",
     "isHungry": false,
     "stages": {
-      "intro": { "player": "_Em-GoToDevourVampireBiteFemaleStanding_0", "target": "_Em-GoToDevourVampireBiteFemaleStanding_1" },
-      "loop":  { "player": "_Em-DevourVampireBiteFemaleStanding_0",     "target": "_Em-DevourVampireBiteFemaleStanding_1" },
-      "exit":  { "player": "_Em-GoBackDevourVampireBiteFemaleStanding_0", "target": "_Em-GoBackDevourVampireBiteFemaleStanding_1" },
-      "kill":  { "player": "_Em-DevourDrainedFemaleStanding_0",         "target": "_Em-DevourDrainedFemaleStanding_1" }
+      "intro":   { "player": "_Em-GoToDevourVampireBiteFemaleStanding_0",   "target": "_Em-GoToDevourVampireBiteFemaleStanding_1" },
+      "loop":    { "player": "_Em-DevourVampireBiteFemaleStanding_0",       "target": "_Em-DevourVampireBiteFemaleStanding_1" },
+      "exit":    { "player": "_Em-GoBackDevourVampireBiteFemaleStanding_0", "target": "_Em-GoBackDevourVampireBiteFemaleStanding_1" },
+      "drained": { "player": "_Em-DevourDrainedMaleStanding_0",             "target": "_Em-DevourDrainedMaleStanding_1" }
     }
   }
 }

@@ -59,7 +59,10 @@ public:
         // Staged composite timing (hybrid: timer fallback; clip annotation events override)
         float CompositeIntroDuration{ 2.0f };    // Seconds Intro plays before -> Loop (fallback if no VFD_IntroEnd)
         float CompositeExitDuration{ 2.0f };     // Seconds Exit (GoBack) plays before -> Drained (fallback if no VFD_GoBackEnd)
-        float CompositeDrainedDuration{ 2.5f };  // Seconds Drained idle aftermath plays before teardown (fallback if no VFD_DrainedEnd)
+        // Drained idle aftermath: a random length in [Min, Max] is rolled each feed.
+        // Max can go up to the full Drained clip length (~9.3s) to play it in full; 0 skips it.
+        float CompositeDrainedDurationMin{ 0.0f };
+        float CompositeDrainedDurationMax{ 2.5f };
         float TargetOffsetX{ 0.0f };   // Target X offset from player (local coords)
         float TargetOffsetY{ 25.0f };  // Target Y offset (positive = in front). ~20-30 matches Anub2P / OStim "standing apart" choreography.
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)
