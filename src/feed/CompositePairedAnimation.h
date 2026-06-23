@@ -6,8 +6,13 @@
 // Multi-stage composite feed for STANDING non-combat targets. Plays two
 // single-actor clips in sync per stage and sequences them:
 //
-//   Settle -> Intro -> Loop -> Exit      (player presses Stop)
-//                          \-> Killing    (victim drained to near-zero HP)
+//   Settle -> Intro(GoTo) -> Loop(Devour) -> Exit(GoBack) -> Drained -> Done
+//                                \-> (drained dry in Loop) -> killed, Done
+//
+// Drain - and therefore death - happens ONLY in the Loop: every gulp removes
+// HP, and when the victim hits the lethal floor it is killed in place (no
+// GoBack/Drained on that path). If the player stops first, Exit plays the
+// step-back and Drained plays the survivor's idle aftermath before teardown.
 //
 // Each stage fires a {player,target} clip pair (raw NotifyAnimationGraph
 // events) and re-locks both actors at the scene offset. Transitions are driven

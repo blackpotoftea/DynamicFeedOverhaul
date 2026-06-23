@@ -322,14 +322,15 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         });
 
         FeedAnimState::SetCurrentFeedLethal(false);
-        // Composite owns its own kill (KillTarget in the Kill stage), so flag
-        // hasOAR=true to suppress the vanilla manual-kill fallback in RunFeedIntegration.
+        // Composite owns its own kill (KillTarget inline in the Loop when the
+        // victim is drained dry), so flag hasOAR=true to suppress the vanilla
+        // manual-kill fallback in RunFeedIntegration.
         FeedAnimState::SetFeedHasOAR(true);
 
         // Select a staged composite pack from the loaded *_DPA.json packs
         // (filtered by direction/sex/hunger). If none match, fall back to a
         // pack synthesized from the legacy ini clip pair (intro==loop, no
-        // exit/kill) so existing configs keep working.
+        // exit/drained) so existing configs keep working.
         bool isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
 
         Feed::FeedContext ctx;

@@ -70,15 +70,18 @@ namespace Feed {
         std::string target;
     };
 
-    // A staged composite animation set: Intro -> Loop -> Exit (player stops) or
-    // Kill (victim drained dry). `kill` empty -> reuse loop clip visually while
-    // the kill timer runs. Direction/sex/isHungry drive pack selection (Phase 2).
+    // A staged composite animation set. Two outcomes branch out of the Loop:
+    //   - victim drained dry IN the Loop  -> killed inline, no further clip
+    //   - player stops before dry         -> Exit (GoBack) -> Drained idle aftermath
+    // So `drained` is the survivor's woozy idle that plays after Exit; the kill is
+    // a Loop-stage action (drain only happens in the Loop), not a separate clip.
+    // Direction/sex/isHungry drive pack selection (Phase 2).
     struct CompositePack {
         std::string name;
         Direction direction = Direction::Front;
         Sex sex = Sex::Unisex;
         bool isHungry = false;
-        StageClips intro, loop, exit, kill;
+        StageClips intro, loop, exit, drained;
     };
 
     struct FeedContext {

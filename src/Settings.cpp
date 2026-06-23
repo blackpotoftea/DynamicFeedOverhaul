@@ -125,7 +125,7 @@ void Settings::LoadINI() {
     NonCombat.TargetStandingFrontAnim = ini.GetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str());
     NonCombat.CompositeIntroDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration));
     NonCombat.CompositeExitDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration));
-    NonCombat.CompositeKillDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeKillDuration", NonCombat.CompositeKillDuration));
+    NonCombat.CompositeDrainedDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeDrainedDuration", NonCombat.CompositeDrainedDuration));
     NonCombat.TargetOffsetX = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX));
     NonCombat.TargetOffsetY = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY));
     NonCombat.TargetOffsetZ = static_cast<float>(ini.GetDoubleValue("NonCombat", "TargetOffsetZ", NonCombat.TargetOffsetZ));
@@ -328,9 +328,9 @@ void Settings::SaveINI() {
     ini.SetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration,
         "; Staged composite: seconds Intro plays before Loop (fallback if clip emits no VFD_IntroEnd)");
     ini.SetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration,
-        "; Staged composite: seconds Exit animation plays before teardown (fallback if no VFD_ExitEnd)");
-    ini.SetDoubleValue("NonCombat", "CompositeKillDuration", NonCombat.CompositeKillDuration,
-        "; Staged composite: seconds Kill animation plays before victim dies + teardown (fallback if no VFD_KillEnd)");
+        "; Staged composite: seconds Exit (GoBack) plays before -> Drained (fallback if no VFD_GoBackEnd)");
+    ini.SetDoubleValue("NonCombat", "CompositeDrainedDuration", NonCombat.CompositeDrainedDuration,
+        "; Staged composite: seconds Drained idle aftermath plays before teardown (fallback if no VFD_DrainedEnd)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetX", NonCombat.TargetOffsetX,
         "; Target X offset from player in local coordinates (0=centered)");
     ini.SetDoubleValue("NonCombat", "TargetOffsetY", NonCombat.TargetOffsetY,

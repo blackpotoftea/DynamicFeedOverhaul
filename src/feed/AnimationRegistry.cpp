@@ -88,7 +88,7 @@ namespace Feed {
                                 pack.intro = readStage("intro");
                                 pack.loop  = readStage("loop");
                                 pack.exit  = readStage("exit");
-                                pack.kill  = readStage("kill");
+                                pack.drained = readStage("drained");
 
                                 compositePacks_.push_back(std::move(pack));
                                 SKSE::log::debug("Loaded composite pack: {}", key);

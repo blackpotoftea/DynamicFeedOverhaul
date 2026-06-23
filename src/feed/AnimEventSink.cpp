@@ -52,6 +52,15 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
         // AnimUtil's retry tick consumes this flag to confirm success and stop retrying.
         FeedAnimState::MarkKillMoveStartSeen();
     } else if (tag == "VFD_VampireFeedTrigger") {
+        // Composite feed drains via its own randomized gulp timer in
+        // CompositePairedAnimation::Tick(), so ignore the clip's drain trigger
+        // while it's active (mirrors the PairEnd/IdleStop guard above) - this is
+        // the single drain path for composite, avoiding a double drain.
+        if (CompositePairedAnimation::IsActive()) {
+            SKSE::log::debug("VFD_VampireFeedTrigger ignored - composite feed drains via its own gulp timer");
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
         auto* settings = Settings::GetSingleton();
         if (settings->HealthDrain.Enable) {
             uint32_t triggerIdx = FeedAnimState::IncrementVFDTriggerCount();

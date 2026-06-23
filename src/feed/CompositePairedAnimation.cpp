@@ -13,7 +13,11 @@ namespace CompositePairedAnimation {
 
     namespace {
         // Lifecycle stages. Active == not Idle/Done (see IsActive()).
-        enum class Stage { Idle, Settle, Intro, Loop, Exit, Killing, Done };
+        //   Settle -> Intro(GoTo) -> Loop(Devour) -> Exit(GoBack) -> Drained -> Done
+        // Drain (and therefore death) happens ONLY in Loop: when the victim is
+        // drained dry there it is killed inline. Drained is the survivor's idle
+        // aftermath played after the player steps back; it never kills.
+        enum class Stage { Idle, Settle, Intro, Loop, Exit, Drained, Done };
 
         RE::ActorHandle feedTargetHandle_;
         Stage stage_ = Stage::Idle;
@@ -41,7 +45,11 @@ namespace CompositePairedAnimation {
         // so animation root motion can't slide the scene out from under the lock.
         RE::NiPoint3 lockedPlayerPos_{};
         float lockedPlayerYaw_ = 0.0f;
-        RE::NiPoint3 pendingTargetPos_{};
+        RE::NiPoint3 pendingTargetPos_{};   // embrace anchor the victim is held at during the feed
+        RE::NiPoint3 releaseTargetPos_{};   // victim's own pre-feed spot; where it's released on teardown
+
+        float posLogTimer_ = 0.0f;          // throttle for the per-frame position tracer
+        bool playerReleased_ = false;       // player freed early (at Drained start) so it can move
     }
 
     bool IsActive() { return stage_ != Stage::Idle && stage_ != Stage::Done; }
@@ -65,6 +73,18 @@ namespace CompositePairedAnimation {
         void ReleaseLock(RE::Actor* a) {
             if (!a) return;
             AnimUtil::StopTranslation(nullptr, 0, a);
+        }
+
+        // Debug tracer: log the target NPC's current world position with a label,
+        // so a feed can be followed from trigger to exit to pinpoint exactly which
+        // step moves it. Reads the live position via the handle.
+        void LogTargetPos(const char* where) {
+            auto ref = feedTargetHandle_.get();
+            auto* t = ref ? ref->As<RE::Actor>() : nullptr;
+            if (!t) return;
+            const auto p = t->GetPosition();
+            SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) yaw={:.2f} stage={}",
+                where, p.x, p.y, p.z, t->data.angle.z, static_cast<int>(stage_));
         }
 
         // Send one clip's animation event on the main thread and log the actual
@@ -91,8 +111,10 @@ namespace CompositePairedAnimation {
         }
 
         // Re-lock both actors at the scene poses and notify the clip pair for
-        // the given stage. Called on each stage entry; re-locking keeps the
-        // pair pinned across the transition blend. Empty clip names are skipped.
+        // the given stage. Re-locking keeps them pinned so the (possibly
+        // moving) closing clips don't visibly drift; the final resting position
+        // is then forced deterministically in DoTeardown so the clip's baked
+        // root motion can't dump the actors onto the player. Empty clips skipped.
         void FireStageClips(const Feed::StageClips& clips, const char* stageName) {
             auto* player = RE::PlayerCharacter::GetSingleton();
             auto targetRef = feedTargetHandle_.get();
@@ -106,8 +128,15 @@ namespace CompositePairedAnimation {
             player->data.angle.z = lockedPlayerYaw_;
             const float targetYaw = target->data.angle.z;
 
-            AnimUtil::LockAtPosition(player, lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z, lockedPlayerYaw_, false);
-            AnimUtil::LockAtPosition(target, pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z, targetYaw, false);
+            {
+                std::string lbl = std::string("FireStageClips:") + stageName + ":pre-lock";
+                LogTargetPos(lbl.c_str());
+                SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} lock-dest=({:.1f}, {:.1f}, {:.1f})",
+                    std::string("FireStageClips:") + stageName, pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z);
+            }
+
+            // AnimUtil::LockAtPosition(player, lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z, lockedPlayerYaw_, false);
+            // AnimUtil::LockAtPosition(target, pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z, targetYaw, false);
 
             SKSE::log::info("[CompositePairedAnimation] >>> {} stage: firing player='{}', target='{}'",
                 stageName, clips.player.empty() ? "<none>" : clips.player,
@@ -123,6 +152,37 @@ namespace CompositePairedAnimation {
             // See CombatBark.h for the investigation and the options.
         }
 
+        // Free the PLAYER half of the feed early (at Drained start) so the player
+        // can move immediately after stepping back, without waiting out the
+        // victim's aftermath clip. Restores collision, the kill-move flag and the
+        // head/IK graph state (which also returns the graph to default so the
+        // player isn't stuck in the GoBack pose). Sets playerReleased_ so the
+        // final teardown does NOT SetPosition the player back onto the scene spot
+        // (they may have walked off by then).
+        void ReleasePlayer() {
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (!player || playerReleased_) return;
+            ReleaseLock(player);
+            RestoreCollision(player);
+            AnimUtil::SetInKillMove(player, false);
+            AnimUtil::UnlockActorForPairedAnim(player);
+            playerReleased_ = true;
+            SKSE::log::info("[CompositePairedAnimation] Player released early - free to move during Drained");
+        }
+
+        // Fire only the victim's Drained clip (the player is freed at this point,
+        // so its side of the aftermath is skipped).
+        void FireDrainedTargetOnly() {
+            auto targetRef = feedTargetHandle_.get();
+            if (!targetRef) return;
+            auto* target = targetRef->As<RE::Actor>();
+            if (!target) return;
+            LogTargetPos("FireStageClips:Drained:pre-lock");
+            SKSE::log::info("[CompositePairedAnimation] >>> Drained stage (victim only): firing target='{}'",
+                pack_.drained.target.empty() ? "<none>" : pack_.drained.target);
+            NotifyClipLogged(target, pack_.drained.target, "Drained", "target");
+        }
+
         // Idempotent per-actor cleanup. Sets stage_ = Idle FIRST so any
         // re-entrant call (e.g. via MarkFeedEnded -> OnComplete) is a no-op.
         void DoTeardown() {
@@ -133,19 +193,48 @@ namespace CompositePairedAnimation {
 
             SKSE::log::info("[CompositePairedAnimation] Teardown");
             auto* player = RE::PlayerCharacter::GetSingleton();
-            if (player) {
+            // Skip the player half if it was already freed at Drained start -
+            // re-pinning to lockedPlayerPos_ would teleport a player who has since
+            // walked away back onto the scene spot.
+            if (player && !playerReleased_) {
                 ReleaseLock(player);
+                // Force the final resting position back to the locked scene pose.
+                // Releasing the TranslateTo hold otherwise lets the closing clip's
+                // baked root motion snap the actor to the paired anchor (the
+                // player). SetPosition makes the end position deterministic.
+                player->SetPosition(lockedPlayerPos_, true);
                 RestoreCollision(player);
                 AnimUtil::UnlockActorForPairedAnim(player);
             }
             if (auto target = feedTargetHandle_.get()) {
+                if (auto* t = target->As<RE::Actor>()) {
+                    const auto p = t->GetPosition();
+                    SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) -> SetPos releaseSpot=({:.1f}, {:.1f}, {:.1f})",
+                        "Teardown:pre-SetPos", p.x, p.y, p.z, releaseTargetPos_.x, releaseTargetPos_.y, releaseTargetPos_.z);
+                }
                 ReleaseLock(target.get());
+                // Release the victim at its own pre-feed spot, not the embrace
+                // anchor (which == the player's position when TargetOffset is 0),
+                // otherwise it teleports on top of the player.
+                target.get()->SetPosition(releaseTargetPos_, true);
                 RestoreCollision(target.get());
                 AnimUtil::UnlockActorForPairedAnim(target.get());
                 AnimUtil::setRestrained(target.get(), false);
                 // Re-evaluate AI packages so the NPC un-parks and resumes its
                 // routine after the graph reset (mirrors OStimNG updateAI()).
                 AnimUtil::RefreshActorAI(target.get());
+
+                // Deferred tracer: where the victim actually ends up a frame after
+                // teardown (after SetPosition + any residual root motion settle).
+                auto h = target->CreateRefHandle();
+                SKSE::GetTaskInterface()->AddTask([h] {
+                    auto r = h.get();
+                    if (auto* a = r ? r->As<RE::Actor>() : nullptr) {
+                        const auto p = a->GetPosition();
+                        SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) (deferred, post-teardown)",
+                            "Teardown:post-SetPos", p.x, p.y, p.z);
+                    }
+                });
             }
             feedTargetHandle_ = {};
         }
@@ -176,6 +265,10 @@ namespace CompositePairedAnimation {
         pack_ = pack;
         stage_ = Stage::Settle;
         stageTimer_ = 0.0f;
+        posLogTimer_ = 0.0f;
+        playerReleased_ = false;
+
+        LogTargetPos("Play:trigger");
 
         // Show the victim's health bar for the whole feed (drains live as HP
         // drops). Hidden centrally in FeedAnimState::MarkFeedEnded().
@@ -184,6 +277,12 @@ namespace CompositePairedAnimation {
         // Snapshot the player's pose at the start of the feed.
         lockedPlayerPos_ = player->GetPosition();
         lockedPlayerYaw_ = player->data.angle.z;
+
+        // Snapshot the victim's own position BEFORE any lock moves it onto the
+        // embrace anchor. This is where it is released on teardown so it doesn't
+        // get snapped onto the player (with a zero TargetOffset the anchor IS the
+        // player's position).
+        releaseTargetPos_ = target->GetPosition();
 
         // Disable head-tracking + foot IK graph variables on both actors. The
         // behavior graph's head-tracking IK slews the actor's effective rotation
@@ -214,6 +313,13 @@ namespace CompositePairedAnimation {
             lockedPlayerPos_.y - sinR * offX + cosR * offY,
             lockedPlayerPos_.z + offZ
         };
+
+        SKSE::log::info("[CompositePairedAnimation] [POS] anchors | player=({:.1f}, {:.1f}, {:.1f}) "
+            "embraceAnchor=({:.1f}, {:.1f}, {:.1f}) releaseSpot=({:.1f}, {:.1f}, {:.1f}) offset=({:.1f},{:.1f},{:.1f})",
+            lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z,
+            pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z,
+            releaseTargetPos_.x, releaseTargetPos_.y, releaseTargetPos_.z,
+            offX, offY, offZ);
 
         // Re-assert PLAYER heading directly (bypasses SetAngle interpolation).
         player->data.angle.z = lockedPlayerYaw_;
@@ -259,6 +365,14 @@ namespace CompositePairedAnimation {
         if (!target || target->IsDead()) {
             Finish();
             return;
+        }
+
+        // Throttled position tracer (~5x/sec) so root-motion drift between the
+        // per-stage locks is visible in the log from trigger to exit.
+        posLogTimer_ += delta;
+        if (posLogTimer_ >= 0.2f) {
+            posLogTimer_ = 0.0f;
+            LogTargetPos("Tick");
         }
 
         // Settle: frame countdown, then fire the Intro clips.
@@ -329,28 +443,44 @@ namespace CompositePairedAnimation {
             }
 
             if (drainedDry) {
-                SKSE::log::info("[CompositePairedAnimation] Loop -> Killing (victim drained dry)");
+                // Death happens here, in the only stage that drains. There is no
+                // separate kill clip and no GoBack/Drained on the lethal path -
+                // the victim simply dies mid-bite.
+                SKSE::log::info("[CompositePairedAnimation] Loop: victim drained dry - killing in place");
                 FeedAnimState::SetCurrentFeedLethal(true);
-                FireStageClips(pack_.kill, "Kill");  // empty -> keeps loop clip visually
-                stage_ = Stage::Killing;
-                stageTimer_ = 0.0f;
+                AnimUtil::KillTarget(target);  // kill while still posed/locked
+                Finish();
             }
             break;
         }
 
         case Stage::Exit: {
             if (stageTimer_ >= settings->NonCombat.CompositeExitDuration) {
-                SKSE::log::info("[CompositePairedAnimation] Exit complete - victim released");
-                Finish();  // no kill
+                // GoBack is done and the player has physically stepped back, so
+                // free the player NOW - they can walk away immediately instead of
+                // waiting out the victim's aftermath. Only the victim continues into
+                // the Drained stage; the (target-side) teardown happens at its end.
+                ReleasePlayer();
+
+                // Enter Drained only if the victim actually has an aftermath clip.
+                // Otherwise there's nothing left to play - finish immediately.
+                if (pack_.drained.target.empty()) {
+                    SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - player freed, no Drained clip, finishing");
+                    Finish();
+                } else {
+                    SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - player freed -> Drained (victim only)");
+                    FireDrainedTargetOnly();
+                    stage_ = Stage::Drained;
+                    stageTimer_ = 0.0f;
+                }
             }
             break;
         }
 
-        case Stage::Killing: {
-            if (stageTimer_ >= settings->NonCombat.CompositeKillDuration) {
-                SKSE::log::info("[CompositePairedAnimation] Kill complete - draining victim dry");
-                AnimUtil::KillTarget(target);  // kill while still posed/locked
-                Finish();
+        case Stage::Drained: {
+            if (stageTimer_ >= settings->NonCombat.CompositeDrainedDuration) {
+                SKSE::log::info("[CompositePairedAnimation] Drained aftermath complete - victim released alive");
+                Finish();  // victim survives; death only ever happens in the Loop
             }
             break;
         }
