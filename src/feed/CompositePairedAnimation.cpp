@@ -5,6 +5,7 @@
 #include "utils/AnimUtil.h"
 #include "feed/CombatBark.h"
 #include "feed/FeedHealthBarOverlay.h"
+#include "feed/AnimEventSink.h"
 #include <algorithm>
 #include <cmath>
 #include <random>
@@ -208,6 +209,9 @@ namespace CompositePairedAnimation {
                 AnimUtil::UnlockActorForPairedAnim(player);
             }
             if (auto target = feedTargetHandle_.get()) {
+                if (auto* ta = target->As<RE::Actor>()) {
+                    AnimEventSink::RemoveFromActor(ta);  // stop listening on the victim
+                }
                 if (auto* t = target->As<RE::Actor>()) {
                     const auto p = t->GetPosition();
                     SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) -> SetPos releaseSpot=({:.1f}, {:.1f}, {:.1f})",
@@ -285,6 +289,11 @@ namespace CompositePairedAnimation {
         // player's position).
         releaseTargetPos_ = target->GetPosition();
 
+        // Listen on the TARGET's graph too. The player sink is registered
+        // elsewhere, but the Drained clip plays on the victim (the player is freed
+        // first), so its VFD_DrainedEnd annotation can only be heard from here.
+        AnimEventSink::AddToActor(target);
+
         // Disable head-tracking + foot IK graph variables on both actors. The
         // behavior graph's head-tracking IK slews the actor's effective rotation
         // each frame — the source of the visible first-frame spin. Restored via
@@ -342,6 +351,18 @@ namespace CompositePairedAnimation {
         } else {
             SKSE::log::debug("[CompositePairedAnimation] RequestStop ignored (stage not interruptible)");
         }
+    }
+
+    // Event-driven end of the Drained stage (AnimEventSink -> VFD_DrainedEnd).
+    // Only acts while in Drained so a stray event can't tear down a live feed;
+    // the rolled drainedDuration_ in Tick() is the fallback if it never fires.
+    void OnDrainedEnd() {
+        if (stage_ != Stage::Drained) {
+            SKSE::log::debug("[CompositePairedAnimation] VFD_DrainedEnd ignored (stage != Drained)");
+            return;
+        }
+        SKSE::log::info("[CompositePairedAnimation] VFD_DrainedEnd -> Drained complete (event-driven), victim released alive");
+        Finish();
     }
 
     // Called by FeedAnimState::MarkFeedEnded — teardown only (no re-notify).
@@ -483,8 +504,11 @@ namespace CompositePairedAnimation {
         }
 
         case Stage::Drained: {
-            if (stageTimer_ >= drainedDuration_) {  // random length rolled on entry, [Min, Max]
-                SKSE::log::info("[CompositePairedAnimation] Drained aftermath complete ({:.2f}s) - victim released alive", drainedDuration_);
+            // Fallback cap: VFD_DrainedEnd (OnDrainedEnd) normally ends this stage
+            // exactly when the clip finishes. This rolled [Min,Max] timer only fires
+            // if the clip carries no end annotation (or to bound a very long clip).
+            if (stageTimer_ >= drainedDuration_) {
+                SKSE::log::info("[CompositePairedAnimation] Drained timer cap reached ({:.2f}s, no VFD_DrainedEnd) - victim released alive", drainedDuration_);
                 Finish();  // victim survives; death only ever happens in the Loop
             }
             break;

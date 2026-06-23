@@ -98,6 +98,17 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
                 }
             }
         }
+    } else if (tag == "VFD_DrainedEnd") {
+        // The victim's Drained aftermath clip hit its end annotation -> end the
+        // Drained stage now (event-driven end, no length guessing). Composite
+        // guards that it only acts while actually in Drained. Deferred to the main
+        // thread to avoid racing feedTargetHandle_.
+        if (CompositePairedAnimation::IsActive()) {
+            SKSE::log::info("VFD_DrainedEnd detected - ending composite Drained stage");
+            SKSE::GetTaskInterface()->AddTask([] {
+                CompositePairedAnimation::OnDrainedEnd();
+            });
+        }
     } else {
          // Log all events during feed to discover weapon-related events
         //  SKSE::log::debug("[AnimEvent] {}", tag.c_str());
@@ -125,6 +136,19 @@ void AnimEventSink::Unregister() {
         player->RemoveAnimationGraphEventSink(GetSingleton());
         SKSE::log::debug("Animation event sink unregistered");
     }
+}
+
+void AnimEventSink::AddToActor(RE::Actor* actor) {
+    if (!actor) return;
+    actor->RemoveAnimationGraphEventSink(GetSingleton());  // avoid double-registration
+    actor->AddAnimationGraphEventSink(GetSingleton());
+    SKSE::log::debug("Animation event sink registered on {}", actor->GetName());
+}
+
+void AnimEventSink::RemoveFromActor(RE::Actor* actor) {
+    if (!actor) return;
+    actor->RemoveAnimationGraphEventSink(GetSingleton());  // idempotent
+    SKSE::log::debug("Animation event sink removed from {}", actor->GetName());
 }
 
 void AnimEventSink::CheckTimeout() {

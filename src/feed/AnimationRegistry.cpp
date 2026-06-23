@@ -236,6 +236,13 @@ namespace Feed {
         return candidates[dis(gen)];
     }
 
+    bool AnimationRegistry::HasCompositeBackPack() const {
+        for (const auto& pack : compositePacks_) {
+            if (pack.direction == Direction::Back) return true;
+        }
+        return false;
+    }
+
     const AnimationDefinition* AnimationRegistry::GetNextDebugAnimation(const FeedContext& context) {
         if (animations_.empty() || !context.player) return nullptr;
 

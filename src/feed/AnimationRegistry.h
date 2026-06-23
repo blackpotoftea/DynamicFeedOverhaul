@@ -110,6 +110,11 @@ namespace Feed {
         // (filters by direction, sex, hunger). Returns nullptr if none loaded/match.
         const CompositePack* GetBestCompositeMatch(const FeedContext& context) const;
 
+        // True if any loaded composite pack is authored for a Back (behind)
+        // approach. Lets the feed path force a front feed when no back animation
+        // exists, instead of rotating the victim to face away with no clip.
+        bool HasCompositeBackPack() const;
+
         // Get the next animation in sequence (debug mode)
         // Filters to only cycle through contextually appropriate animations
         const AnimationDefinition* GetNextDebugAnimation(const FeedContext& context);

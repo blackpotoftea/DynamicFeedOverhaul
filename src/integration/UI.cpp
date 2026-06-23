@@ -381,11 +381,11 @@ void __stdcall UI::Settings::Render() {
             changed |= ImGuiMCP::SliderFloat("Exit Duration", &settings->NonCombat.CompositeExitDuration, 0.0f, 10.0f, "%.2f s");
             ImGuiMCP::SetItemTooltip("Seconds the Exit (GoBack) clip plays before the player is freed and Drained begins");
 
-            ImGuiMCP::TextDisabled("Drained Aftermath (random length per feed)");
-            changed |= ImGuiMCP::SliderFloat("Drained Min", &settings->NonCombat.CompositeDrainedDurationMin, 0.0f, 10.0f, "%.2f s");
-            ImGuiMCP::SetItemTooltip("Minimum seconds the victim's Drained idle plays (0 = can skip)");
-            changed |= ImGuiMCP::SliderFloat("Drained Max", &settings->NonCombat.CompositeDrainedDurationMax, 0.0f, 10.0f, "%.2f s");
-            ImGuiMCP::SetItemTooltip("Maximum seconds the victim's Drained idle plays (up to the full clip length, ~9.3s)");
+            ImGuiMCP::TextDisabled("Drained Aftermath (timer cap; VFD_DrainedEnd ends it earlier)");
+            changed |= ImGuiMCP::SliderFloat("Drained Min", &settings->NonCombat.CompositeDrainedDurationMin, 0.0f, 15.0f, "%.2f s");
+            ImGuiMCP::SetItemTooltip("Min of the random fallback length, used only if the clip has no VFD_DrainedEnd event (0 = can skip)");
+            changed |= ImGuiMCP::SliderFloat("Drained Max", &settings->NonCombat.CompositeDrainedDurationMax, 0.0f, 15.0f, "%.2f s");
+            ImGuiMCP::SetItemTooltip("Max fallback length / safety cap. Set high to let VFD_DrainedEnd always end the stage on its own");
             // Keep the range valid: clamp Min <= Max whichever the user just moved.
             if (settings->NonCombat.CompositeDrainedDurationMin > settings->NonCombat.CompositeDrainedDurationMax) {
                 settings->NonCombat.CompositeDrainedDurationMax = settings->NonCombat.CompositeDrainedDurationMin;

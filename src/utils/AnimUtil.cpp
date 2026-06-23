@@ -1272,6 +1272,30 @@ namespace AnimUtil {
         return useBack;
     }
 
+    // Rotate target to explicitly face toward (faceAway=false) or away from
+    // (faceAway=true) the reference. Unlike RotateTargetToClosest this does NOT
+    // auto-pick the closer side - the caller forces the direction. Used by the
+    // composite feed to face the victim to the player when no back animation is
+    // loaded. Standalone so RotateTargetToClosest's shared behavior is unchanged.
+    void RotateTargetToReference(RE::Actor* target, RE::Actor* reference, bool faceAway) {
+        if (!target || !reference) return;
+
+        float angleToReference = GetAngleBetween(target, reference);
+        float newAngle = faceAway ? angleToReference + static_cast<float>(M_PI) : angleToReference;
+
+        // Normalize new angle to 0 to 2PI
+        while (newAngle < 0) newAngle += 2.0f * static_cast<float>(M_PI);
+        while (newAngle >= 2.0f * static_cast<float>(M_PI)) newAngle -= 2.0f * static_cast<float>(M_PI);
+
+        SKSE::log::debug("RotateTargetToReference: {} (new angle={:.2f})",
+            faceAway ? "BACK" : "FRONT", newAngle);
+
+        // SetAngle takes NiPoint3 with x, y, z angles - we only change z (heading)
+        RE::NiPoint3 angles = target->data.angle;
+        angles.z = newAngle;
+        target->SetAngle(angles);
+    }
+
     // Rotate target to face toward or away from reference (whichever is closer)
     // Returns true if rotated to face away (back animation), false if facing toward (front animation)
     bool RotateTargetToClosest(RE::Actor* target, RE::Actor* reference) {

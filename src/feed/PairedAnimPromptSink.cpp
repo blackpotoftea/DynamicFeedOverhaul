@@ -311,6 +311,15 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // player → face target. Previously skipped to avoid a chained spin
         // with LockAtPosition's face-same snap; with the anim's root motion
         // removed, the snap should no longer be visible.
+        // Front/back is decided from geometry BEFORE EnterFeedState rotates the
+        // victim. Only honor "behind" when a Back composite pack is actually
+        // loaded: with no back animation, a side/rear approach would otherwise be
+        // rotated to face away with no matching clip, leaving the player and
+        // victim facing the same direction. Force front in that case.
+        bool geometryBehind = AnimUtil::GetClosestDirection(feedTarget, player);
+        bool hasBackPack = Feed::AnimationRegistry::GetSingleton()->HasCompositeBackPack();
+        bool isBehind = geometryBehind && hasBackPack;
+
         PairedAnimation::SetFeedTarget(feedTarget);
         PairedAnimation::EnterFeedState({
             player, feedTarget, /*feedType=*/0, targetState,
@@ -320,6 +329,13 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
             settings->NonCombat.MinHeightDiff,
             settings->NonCombat.MaxHeightDiff,
         });
+
+        // EnterFeedState's auto front/back (RotateTargetToClosest) may have turned
+        // the victim to face away. When forcing front (no Back pack loaded),
+        // re-face the victim to the player; idempotent if it already faces front.
+        if (settings->NonCombat.EnableRotation && geometryBehind && !isBehind) {
+            AnimUtil::RotateTargetToReference(feedTarget, player, /*faceAway=*/false);
+        }
 
         FeedAnimState::SetCurrentFeedLethal(false);
         // Composite owns its own kill (KillTarget inline in the Loop when the
@@ -331,8 +347,6 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // (filtered by direction/sex/hunger). If none match, fall back to a
         // pack synthesized from the legacy ini clip pair (intro==loop, no
         // exit/drained) so existing configs keep working.
-        bool isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
-
         Feed::FeedContext ctx;
         ctx.player = player;
         ctx.target = feedTarget;
@@ -346,7 +360,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         Feed::CompositePack pack;
         if (const auto* match = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(ctx)) {
             pack = *match;
-            SKSE::log::info("[HandleFeedAccepted] Composite pack '{}' selected (isBehind={})", pack.name, isBehind);
+            SKSE::log::info("[HandleFeedAccepted] Composite pack '{}' selected (isBehind={}, geometryBehind={}, hasBackPack={})",
+                pack.name, isBehind, geometryBehind, hasBackPack);
         } else {
             pack.name = "legacy_ini";
             pack.intro = { settings->NonCombat.PlayerStandingFrontAnim, settings->NonCombat.TargetStandingFrontAnim };

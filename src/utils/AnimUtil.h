@@ -160,6 +160,8 @@ namespace AnimUtil {
     float GetAngleBetween(RE::Actor* from, RE::Actor* to);
     bool GetClosestDirection(RE::Actor* target, RE::Actor* reference);
     bool RotateTargetToClosest(RE::Actor* target, RE::Actor* reference);
+    // Force the target to face toward (faceAway=false) or away from the reference.
+    void RotateTargetToReference(RE::Actor* target, RE::Actor* reference, bool faceAway);
     void RotateAttackerToTarget(RE::Actor* attacker, RE::Actor* target);
     bool IsPlayerFacingTarget(RE::Actor* player, RE::Actor* target, float maxAngleDegrees = 90.0f);
 
