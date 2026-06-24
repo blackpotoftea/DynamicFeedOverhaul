@@ -65,3 +65,11 @@ Set one of these environment variables to auto-deploy on build:
 1. Use a Steamless-stripped Skyrim executable
 2. MO2 users: add `-forcesteamloader` to SKSE arguments
 3. VS Code: use the attach debugger configuration in `launch.json`
+
+## Credits & Licensing
+
+The bundled feed/devour animations (`meshes\actors\character\animations\DynamicFeedOverhaul\`)
+are derived from work by **acenetizen (Skyrim Ace Animations)** and are licensed
+under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/). As an
+adaptation they are redistributed under the same license. See [CREDITS.md](CREDITS.md)
+for full attribution and modification details.

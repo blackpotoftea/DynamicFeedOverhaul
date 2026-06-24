@@ -1,24 +1,24 @@
 {
-  "em_devour_standing_male": {
+  "dfo_devour_standing_male": {
     "direction": "Front",
     "sex": "Male",
     "isHungry": false,
     "stages": {
-      "intro":   { "player": "_Em-GoToDevourVampireBiteMaleStanding_0",   "target": "_Em-GoToDevourVampireBiteMaleStanding_1" },
-      "loop":    { "player": "_Em-DevourVampireBiteMaleStanding_0",       "target": "_Em-DevourVampireBiteMaleStanding_1" },
-      "exit":    { "player": "_Em-GoBackDevourVampireBiteMaleStanding_0", "target": "_Em-GoBackDevourVampireBiteMaleStanding_1" },
-      "drained": { "player": "_Em-DevourDrainedFemaleStanding_0",         "target": "_Em-DevourDrainedFemaleStanding_1" }
+      "intro":   { "player": "DFO_GoToDevourVampireBiteMaleStanding_0",   "target": "DFO_GoToDevourVampireBiteMaleStanding_1" },
+      "loop":    { "player": "DFO_DevourVampireBiteMaleStanding_0",       "target": "DFO_DevourVampireBiteMaleStanding_1" },
+      "exit":    { "player": "DFO_GoBackDevourVampireBiteMaleStanding_0", "target": "DFO_GoBackDevourVampireBiteMaleStanding_1" },
+      "drained": { "player": "DFO_DevourDrainedFemaleStanding_0",         "target": "DFO_DevourDrainedFemaleStanding_1" }
     }
   },
-  "em_devour_standing_female": {
+  "dfo_devour_standing_female": {
     "direction": "Front",
     "sex": "Female",
     "isHungry": false,
     "stages": {
-      "intro":   { "player": "_Em-GoToDevourVampireBiteFemaleStanding_0",   "target": "_Em-GoToDevourVampireBiteFemaleStanding_1" },
-      "loop":    { "player": "_Em-DevourVampireBiteFemaleStanding_0",       "target": "_Em-DevourVampireBiteFemaleStanding_1" },
-      "exit":    { "player": "_Em-GoBackDevourVampireBiteFemaleStanding_0", "target": "_Em-GoBackDevourVampireBiteFemaleStanding_1" },
-      "drained": { "player": "_Em-DevourDrainedMaleStanding_0",             "target": "_Em-DevourDrainedMaleStanding_1" }
+      "intro":   { "player": "DFO_GoToDevourVampireBiteFemaleStanding_0",   "target": "DFO_GoToDevourVampireBiteFemaleStanding_1" },
+      "loop":    { "player": "DFO_DevourVampireBiteFemaleStanding_0",       "target": "DFO_DevourVampireBiteFemaleStanding_1" },
+      "exit":    { "player": "DFO_GoBackDevourVampireBiteFemaleStanding_0", "target": "DFO_GoBackDevourVampireBiteFemaleStanding_1" },
+      "drained": { "player": "DFO_DevourDrainedMaleStanding_0",             "target": "DFO_DevourDrainedMaleStanding_1" }
     }
   }
 }
