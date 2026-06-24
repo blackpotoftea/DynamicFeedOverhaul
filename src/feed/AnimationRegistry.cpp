@@ -67,9 +67,12 @@ namespace Feed {
         for (const auto& entry : fs::directory_iterator(directoryPath)) {
             if (entry.is_regular_file()) {
                 std::string filename = entry.path().filename().string();
-                // Check for suffix _DPA.json
-                if (filename.length() >= 9 && 
-                    filename.substr(filename.length() - 9) == "_DPA.json") {
+                // Load every *_DFO.json file in the folder so other mods can drop in
+                // their own packs to extend the system. Each entry is a regular
+                // animation definition or a staged composite pack (decided by the
+                // "stages" key below); the mod ships main_DFO.json + main_c_DFO.json.
+                if (filename.length() >= 9 &&
+                    filename.substr(filename.length() - 9) == "_DFO.json") {
                     
                     try {
                         std::ifstream i(entry.path());

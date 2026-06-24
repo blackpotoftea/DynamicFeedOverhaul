@@ -1,0 +1,68 @@
+{
+  "dfo_devour_standing_male": {
+    "direction": "Front",
+    "sex": "Male",
+    "isHungry": false,
+    "stages": {
+      "intro":   { "player": "DFO_GoToDevourVampireBiteMaleStanding_0",   "target": "DFO_GoToDevourVampireBiteMaleStanding_1" },
+      "loop":    { "player": "DFO_DevourVampireBiteMaleStanding_0",       "target": "DFO_DevourVampireBiteMaleStanding_1" },
+      "exit":    { "player": "DFO_GoBackDevourVampireBiteMaleStanding_0", "target": "DFO_GoBackDevourVampireBiteMaleStanding_1" },
+      "drained": { "player": "DFO_DevourDrainedFemaleStanding_0",         "target": "DFO_DevourDrainedFemaleStanding_1" }
+    }
+  },
+  "dfo_devour_standing_female": {
+    "direction": "Front",
+    "sex": "Female",
+    "isHungry": false,
+    "stages": {
+      "intro":   { "player": "DFO_GoToDevourVampireBiteFemaleStanding_1",   "target": "DFO_GoToDevourVampireBiteFemaleStanding_0" },
+      "loop":    { "player": "DFO_DevourVampireBiteFemaleStanding_1",       "target": "DFO_DevourVampireBiteFemaleStanding_0" },
+      "exit":    { "player": "DFO_GoBackDevourVampireBiteFemaleStanding_1", "target": "DFO_GoBackDevourVampireBiteFemaleStanding_0" },
+      "drained": { "player": "DFO_DevourDrainedMaleStanding_1",             "target": "DFO_DevourDrainedMaleStanding_0" }
+    }
+  },
+  "dfo_furniture_bed_left": {
+    "direction": "left",
+    "sex": "Unisex",
+    "isHungry": false,
+    "furniture": "bed",
+    "stages": {
+      "intro": { "player": "DFO_VampireFeedBedLeftEnter" },
+      "loop":  { "player": "DFO_VampireFeedBedLeftLoop" },
+      "exit":  { "player": "DFO_VampireFeedBedLeftExit" }
+    }
+  },
+  "dfo_furniture_bed_right": {
+    "direction": "right",
+    "sex": "Unisex",
+    "isHungry": false,
+    "furniture": "bed",
+    "stages": {
+      "intro": { "player": "DFO_VampireFeedBedRightEnter" },
+      "loop":  { "player": "DFO_VampireFeedBedRightLoop" },
+      "exit":  { "player": "DFO_VampireFeedBedRightExit" }
+    }
+  },
+  "dfo_furniture_bedroll_left": {
+    "direction": "left",
+    "sex": "Unisex",
+    "isHungry": false,
+    "furniture": "bedroll",
+    "stages": {
+      "intro": { "player": "DFO_VampireFeedBedrollLeftKneelingEnter" },
+      "loop":  { "player": "DFO_VampireFeedBedrollLeftKneelingLoop" },
+      "exit":  { "player": "DFO_VampireFeedBedrollLeftKneelingExit" }
+    }
+  },
+  "dfo_furniture_bedroll_right": {
+    "direction": "right",
+    "sex": "Unisex",
+    "isHungry": false,
+    "furniture": "bedroll",
+    "stages": {
+      "intro": { "player": "DFO_VampireFeedBedrollRightKneelingEnter" },
+      "loop":  { "player": "DFO_VampireFeedBedrollRightKneelingLoop" },
+      "exit":  { "player": "DFO_VampireFeedBedrollRightKneelingExit" }
+    }
+  }
+}

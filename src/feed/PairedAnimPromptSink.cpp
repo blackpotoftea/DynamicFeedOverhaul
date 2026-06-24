@@ -375,7 +375,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
         // Select a staged composite pack. Furniture feeds use the player-only pack
         // already resolved above (it gated useComposite). Standing feeds select from
-        // the loaded *_DPA.json packs (filtered by direction/sex/hunger); if none
+        // the loaded *_DFO.json packs (filtered by direction/sex/hunger); if none
         // match, fall back to a pack synthesized from the legacy ini clip pair
         // (intro==loop, no exit/drained) so existing configs keep working.
         Feed::CompositePack pack;

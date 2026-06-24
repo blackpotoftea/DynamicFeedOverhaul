@@ -120,7 +120,8 @@ namespace Feed {
     public:
         static AnimationRegistry* GetSingleton();
 
-        // Load all *_DPA.json files from the specified directory
+        // Load all *_DFO.json files from the specified directory (other mods can
+        // add their own to extend; content decides regular def vs composite pack)
         void LoadAnimations(const std::string& directoryPath);
 
         // Find the best matching animation for the current context
