@@ -1,6 +1,7 @@
 #include "PCH.h"
 #include "SacrosanctIntegration.h"
 #include "VampireIntegrationUtils.h"
+#include "utils/SoundUtil.h"
 #include "feed/PairedAnimPromptSink.h"
 #include "feed/TargetState.h"
 
@@ -127,8 +128,8 @@ namespace SacrosanctIntegration {
         RE::BGSMessage* g_msgStrongBlood = nullptr;
         RE::BGSMessage* g_msgBloodBond = nullptr;
 
-        // Sounds - use vanilla SNDR directly
-        RE::BGSSoundDescriptorForm* g_feedSound = nullptr;
+        // Sounds: the vanilla feed sound now lives in SoundUtil (shared, not
+        // integration-owned). See SoundUtil::PlayFeedSound below.
 
         // Quests
         RE::TESQuest* g_playerVampireQuest = nullptr;
@@ -276,8 +277,7 @@ namespace SacrosanctIntegration {
         g_msgStrongBlood = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_StrongBlood");
         g_msgBloodBond = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_BloodBond");
 
-        // Sounds - vanilla NPCHumanVampireFeed [SNDR:000FF984]
-        g_feedSound = RE::TESDataHandler::GetSingleton()->LookupForm<RE::BGSSoundDescriptorForm>(0x0FF984, "Skyrim.esm");
+        // Sounds: vanilla NPCHumanVampireFeed now resolved lazily by SoundUtil.
 
         // Quests
         g_playerVampireQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerVampireQuest");
@@ -486,7 +486,7 @@ namespace SacrosanctIntegration {
 
         // === SOUNDS ===
         SKSE::log::debug("  [Sounds]");
-        SKSE::log::debug("    FeedSound: {}", g_feedSound ? "found" : "missing");
+        SKSE::log::debug("    FeedSound: {}", SoundUtil::GetFeedSound() ? "found" : "missing");
 
         // === FORMLISTS ===
         SKSE::log::debug("  [FormLists]");
@@ -530,7 +530,6 @@ namespace SacrosanctIntegration {
 
         // Use utility functions
         using VampireIntegrationUtils::CastSpell;
-        using VampireIntegrationUtils::PlaySound;
         using VampireIntegrationUtils::ShowMessage;
         using VampireIntegrationUtils::DispelSpell;
         using VampireIntegrationUtils::HasMagicEffect;
@@ -842,9 +841,7 @@ namespace SacrosanctIntegration {
         CallPreFeedPapyrus(context.target);
 
         // === STEP 3: Feed sound ===
-        if (g_feedSound) {
-            Helpers::PlaySound(g_feedSound, context.target);
-        }
+        SoundUtil::PlayFeedSound(context.target);
 
         // === STEP 4: Cast feed spell on target ===
         if (!context.target->IsDead() && g_scsFeedTargetSpell) {

@@ -3,6 +3,7 @@
 #include "Settings.h"
 #include "PCH.h"
 #include "utils/AnimUtil.h"
+#include "utils/SoundUtil.h"
 #include "feed/CombatBark.h"
 #include "feed/FeedHealthBarOverlay.h"
 #include "feed/AnimEventSink.h"
@@ -85,7 +86,7 @@ namespace CompositePairedAnimation {
             auto* t = ref ? ref->As<RE::Actor>() : nullptr;
             if (!t) return;
             const auto p = t->GetPosition();
-            SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) yaw={:.2f} stage={}",
+            SKSE::log::trace("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) yaw={:.2f} stage={}",
                 where, p.x, p.y, p.z, t->data.angle.z, static_cast<int>(stage_));
         }
 
@@ -419,6 +420,8 @@ namespace CompositePairedAnimation {
                 FireStageClips(pack_.loop, "Loop");
                 stage_ = Stage::Loop;
                 stageTimer_ = 0.0f;
+                // Drinking begins now — play the vampire feed sound once at the victim.
+                SoundUtil::PlayFeedSound(target);
                 // Seed the first gulp a randomized moment after the bite latches.
                 gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,
                                        settings->HealthDrain.GulpIntervalMax);
