@@ -1,0 +1,16 @@
+Animation assets in this folder
+===============================
+
+Original author: acenetizen (Skyrim Ace Animations)
+Source:          https://www.patreon.com/c/skyrimaceanimations/home
+License:         CC-BY-SA-4.0
+                 https://creativecommons.org/licenses/by-sa/4.0/
+
+Modifications:   Clips extracted and renamed (_Em- -> DPA_), reorganized under
+                 meshes\actors\character\animations\DynamicFeedOverhaul\, and wired
+                 to a custom Nemesis/FNIS behavior for Dynamic Feed Overhaul.
+                 No motion data was altered.
+
+These animation files are an adaptation of CC-BY-SA-4.0 material and are therefore
+distributed under the same license (ShareAlike). Keep this notice with the files
+if you redistribute them.
