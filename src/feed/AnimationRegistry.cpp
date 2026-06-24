@@ -28,6 +28,8 @@ namespace Feed {
         std::transform(s.begin(), s.end(), s.begin(), ::tolower);
         if (s == "back") return Direction::Back;
         if (s == "any") return Direction::Any;
+        if (s == "left") return Direction::Left;
+        if (s == "right") return Direction::Right;
         return Direction::Front;
     }
 
@@ -44,6 +46,14 @@ namespace Feed {
         std::transform(s.begin(), s.end(), s.begin(), ::tolower);
         if (s == "combat") return Type::Combat;
         return Type::Normal;
+    }
+
+    Furniture ParseFurniture(const std::string& str) {
+        std::string s = str;
+        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+        if (s == "bed") return Furniture::Bed;
+        if (s == "bedroll") return Furniture::Bedroll;
+        return Furniture::None;
     }
 
     void AnimationRegistry::LoadAnimations(const std::string& directoryPath) {
@@ -74,6 +84,7 @@ namespace Feed {
                                 if (value.contains("direction")) pack.direction = ParseDirection(value["direction"]);
                                 if (value.contains("sex")) pack.sex = ParseSex(value["sex"]);
                                 if (value.contains("isHungry")) pack.isHungry = value["isHungry"].get<bool>();
+                                if (value.contains("furniture")) pack.furniture = ParseFurniture(value["furniture"]);
 
                                 const auto& stages = value["stages"];
                                 auto readStage = [&stages](const char* name) -> StageClips {
@@ -90,8 +101,15 @@ namespace Feed {
                                 pack.exit  = readStage("exit");
                                 pack.drained = readStage("drained");
 
+                                // Player-only when no stage animates the target: the
+                                // victim is never given a clip, so the lifecycle leaves
+                                // it in place (used by the furniture bed/bedroll packs).
+                                pack.playerOnly = pack.intro.target.empty() && pack.loop.target.empty() &&
+                                                  pack.exit.target.empty() && pack.drained.target.empty();
+
+                                SKSE::log::debug("Loaded composite pack: {} (furniture={}, direction={}, playerOnly={})",
+                                    key, static_cast<int>(pack.furniture), static_cast<int>(pack.direction), pack.playerOnly);
                                 compositePacks_.push_back(std::move(pack));
-                                SKSE::log::debug("Loaded composite pack: {}", key);
                                 continue;
                             }
 
@@ -217,9 +235,16 @@ namespace Feed {
 
         std::vector<const CompositePack*> candidates;
         for (const auto& pack : compositePacks_) {
-            // Direction: Front/Back must match player position (Any always passes)
+            // Furniture: the pack's furniture kind must match the victim's. This
+            // keeps standing feeds (None) and bed/bedroll feeds in separate pools,
+            // so a player-only furniture pack is never rolled for a standing target.
+            if (pack.furniture != context.furniture) continue;
+            // Direction: Front/Back match player position (upright feeds); Left/Right
+            // match which side of the furniture the player is on. Any always passes.
             if (pack.direction == Direction::Front && context.isBehind) continue;
             if (pack.direction == Direction::Back && !context.isBehind) continue;
+            if (pack.direction == Direction::Left && !context.playerOnLeft) continue;
+            if (pack.direction == Direction::Right && context.playerOnLeft) continue;
             // Sex: skip gender-specific packs that don't match the player
             if (pack.sex != Sex::Unisex && pack.sex != playerSex) continue;
             // Hunger: a sated player can't use hungry-only packs

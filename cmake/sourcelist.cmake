@@ -12,6 +12,7 @@ set(sources ${sources}
     src/feed/CombatBark.cpp
     src/feed/WitnessDetection.cpp
     src/utils/AnimUtil.cpp
+    src/utils/SoundUtil.cpp
     src/integration/OStimIntegration.cpp
     src/integration/PoiseIntegration.cpp
     src/integration/SacrosanctIntegration.cpp

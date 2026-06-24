@@ -49,9 +49,18 @@ namespace Feed {
         inline constexpr const char* BACK_SNEAK_KM_A ="IdleVampireStandingBack"; // "KillMoveBackStab"; //pa_1HMSneakKillBackA
     }
 
-    enum class Direction { Front, Back, Any };
+    // Approach direction. Front/Back are matched against the player's position for
+    // upright feeds; Left/Right encode which side of the furniture the player feeds
+    // from for bed/bedroll packs (matched against playerOnLeft). Any always matches.
+    enum class Direction { Front, Back, Any, Left, Right };
     enum class Sex { Unisex, Female, Male };
     enum class Type { Normal, Combat };
+
+    // Furniture context a composite pack is authored for. None = a free-standing
+    // (upright) feed; Bed/Bedroll = the victim is lying in that furniture and the
+    // player plays a side-of-bed clip. Drives composite pack selection so a
+    // furniture pack is never rolled for a standing feed (and vice versa).
+    enum class Furniture { None, Bed, Bedroll };
 
     struct AnimationDefinition {
         std::string eventName; // Unique identifier from JSON key
@@ -81,6 +90,13 @@ namespace Feed {
         Direction direction = Direction::Front;
         Sex sex = Sex::Unisex;
         bool isHungry = false;
+        // Furniture this pack is authored for (default: free-standing feed). The
+        // left/right side is carried by `direction` (Left/Right) for furniture packs.
+        Furniture furniture = Furniture::None;
+        // True when NO stage carries a target clip: only the player is animated and
+        // the victim is left in place (no embrace-lock / collision / AI changes).
+        // Auto-detected at load time from the stage clips.
+        bool playerOnly = false;
         StageClips intro, loop, exit, drained;
     };
 
@@ -91,6 +107,11 @@ namespace Feed {
         bool isBehind;
         bool targetIsStanding; // true=Standing, false=Sleeping/Sitting
         bool isLethal = false;  // User selected lethal feed option
+        // Furniture the victim is in (None for a standing/upright feed) and which
+        // side the player is on. Used by GetBestCompositeMatch to pick a furniture
+        // pack and its left/right variant.
+        Furniture furniture = Furniture::None;
+        bool playerOnLeft = false;
         RE::Actor* player;
         RE::Actor* target;
     };

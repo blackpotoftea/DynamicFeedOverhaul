@@ -53,6 +53,8 @@ namespace CompositePairedAnimation {
         float posLogTimer_ = 0.0f;          // throttle for the per-frame position tracer
         bool playerReleased_ = false;       // player freed early (at Drained start) so it can move
         float drainedDuration_ = 0.0f;      // random length rolled for this feed's Drained stage
+        bool playerOnly_ = false;           // furniture feed: only the player is animated; the
+                                            // victim is left untouched in its bed/bedroll
     }
 
     bool IsActive() { return stage_ != Stage::Idle && stage_ != Stage::Done; }
@@ -213,34 +215,38 @@ namespace CompositePairedAnimation {
                 if (auto* ta = target->As<RE::Actor>()) {
                     AnimEventSink::RemoveFromActor(ta);  // stop listening on the victim
                 }
-                if (auto* t = target->As<RE::Actor>()) {
-                    const auto p = t->GetPosition();
-                    SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) -> SetPos releaseSpot=({:.1f}, {:.1f}, {:.1f})",
-                        "Teardown:pre-SetPos", p.x, p.y, p.z, releaseTargetPos_.x, releaseTargetPos_.y, releaseTargetPos_.z);
-                }
-                ReleaseLock(target.get());
-                // Release the victim at its own pre-feed spot, not the embrace
-                // anchor (which == the player's position when TargetOffset is 0),
-                // otherwise it teleports on top of the player.
-                target.get()->SetPosition(releaseTargetPos_, true);
-                RestoreCollision(target.get());
-                AnimUtil::UnlockActorForPairedAnim(target.get());
-                AnimUtil::setRestrained(target.get(), false);
-                // Re-evaluate AI packages so the NPC un-parks and resumes its
-                // routine after the graph reset (mirrors OStimNG updateAI()).
-                AnimUtil::RefreshActorAI(target.get());
-
-                // Deferred tracer: where the victim actually ends up a frame after
-                // teardown (after SetPosition + any residual root motion settle).
-                auto h = target->CreateRefHandle();
-                SKSE::GetTaskInterface()->AddTask([h] {
-                    auto r = h.get();
-                    if (auto* a = r ? r->As<RE::Actor>() : nullptr) {
-                        const auto p = a->GetPosition();
-                        SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) (deferred, post-teardown)",
-                            "Teardown:post-SetPos", p.x, p.y, p.z);
+                // Player-only (furniture) feeds never touched the victim, so there is
+                // nothing to undo on its side: leave it lying in its bed/bedroll.
+                if (!playerOnly_) {
+                    if (auto* t = target->As<RE::Actor>()) {
+                        const auto p = t->GetPosition();
+                        SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) -> SetPos releaseSpot=({:.1f}, {:.1f}, {:.1f})",
+                            "Teardown:pre-SetPos", p.x, p.y, p.z, releaseTargetPos_.x, releaseTargetPos_.y, releaseTargetPos_.z);
                     }
-                });
+                    ReleaseLock(target.get());
+                    // Release the victim at its own pre-feed spot, not the embrace
+                    // anchor (which == the player's position when TargetOffset is 0),
+                    // otherwise it teleports on top of the player.
+                    target.get()->SetPosition(releaseTargetPos_, true);
+                    RestoreCollision(target.get());
+                    AnimUtil::UnlockActorForPairedAnim(target.get());
+                    AnimUtil::setRestrained(target.get(), false);
+                    // Re-evaluate AI packages so the NPC un-parks and resumes its
+                    // routine after the graph reset (mirrors OStimNG updateAI()).
+                    AnimUtil::RefreshActorAI(target.get());
+
+                    // Deferred tracer: where the victim actually ends up a frame after
+                    // teardown (after SetPosition + any residual root motion settle).
+                    auto h = target->CreateRefHandle();
+                    SKSE::GetTaskInterface()->AddTask([h] {
+                        auto r = h.get();
+                        if (auto* a = r ? r->As<RE::Actor>() : nullptr) {
+                            const auto p = a->GetPosition();
+                            SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) (deferred, post-teardown)",
+                                "Teardown:post-SetPos", p.x, p.y, p.z);
+                        }
+                    });
+                }
             }
             feedTargetHandle_ = {};
         }
@@ -262,10 +268,6 @@ namespace CompositePairedAnimation {
         }
 
         auto* settings = Settings::GetSingleton();
-        AnimUtil::setRestrained(target, true);
-
-        SKSE::log::info("[CompositePairedAnimation] Starting staged feed on {} (FormID: {:X}), pack '{}'",
-            target->GetName(), target->GetFormID(), pack.name);
 
         feedTargetHandle_ = target->GetHandle();
         pack_ = pack;
@@ -273,6 +275,16 @@ namespace CompositePairedAnimation {
         stageTimer_ = 0.0f;
         posLogTimer_ = 0.0f;
         playerReleased_ = false;
+        playerOnly_ = pack.playerOnly;
+
+        SKSE::log::info("[CompositePairedAnimation] Starting staged feed on {} (FormID: {:X}), pack '{}' (playerOnly={})",
+            target->GetName(), target->GetFormID(), pack.name, playerOnly_);
+
+        // Player-only (furniture) feeds leave the victim in place: it keeps lying in
+        // its bed/bedroll and is never restrained, embrace-locked or collision-freed.
+        if (!playerOnly_) {
+            AnimUtil::setRestrained(target, true);
+        }
 
         LogTargetPos("Play:trigger");
 
@@ -301,16 +313,19 @@ namespace CompositePairedAnimation {
         // UnlockActorForPairedAnim in DoTeardown. (OStimNG's GameActor::lock uses
         // the same four graph vars.)
         AnimUtil::LockActorForPairedAnim(player);
-        AnimUtil::LockActorForPairedAnim(target);
+        if (!playerOnly_) AnimUtil::LockActorForPairedAnim(target);
 
         // Disable character-vs-character collision so the two actors can overlap
         // into the embrace pose. World collision is unaffected so they don't
-        // fall through the floor.
+        // fall through the floor. Player-only feeds never move the victim into the
+        // player, so the victim's collision is left as-is.
         if (auto* cc = player->GetCharController()) {
             cc->flags.set(RE::CHARACTER_FLAGS::kNoCharacterCollisions);
         }
-        if (auto* cc = target->GetCharController()) {
-            cc->flags.set(RE::CHARACTER_FLAGS::kNoCharacterCollisions);
+        if (!playerOnly_) {
+            if (auto* cc = target->GetCharController()) {
+                cc->flags.set(RE::CHARACTER_FLAGS::kNoCharacterCollisions);
+            }
         }
 
         // Compute target's locked world pose from the snapshot + settings offset.
@@ -422,6 +437,14 @@ namespace CompositePairedAnimation {
                 stageTimer_ = 0.0f;
                 // Drinking begins now — play the vampire feed sound once at the victim.
                 SoundUtil::PlayFeedSound(target);
+                // Fire the player's feed-trigger graph event ONCE, from code. The
+                // looping bite clip no longer carries the VFD_VampireFeedTrigger
+                // annotation (which re-fired it every cycle); driving it here at
+                // Loop entry means the player's feed reaction triggers exactly once.
+                // Deferred to the main thread (NotifyAnimationGraph requirement).
+                if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+                    NotifyClipLogged(player, "VFD_VampireFeedTrigger", "Loop", "feed-trigger");
+                }
                 // Seed the first gulp a randomized moment after the bite latches.
                 gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,
                                        settings->HealthDrain.GulpIntervalMax);
@@ -481,18 +504,19 @@ namespace CompositePairedAnimation {
 
         case Stage::Exit: {
             if (stageTimer_ >= settings->NonCombat.CompositeExitDuration) {
-                // GoBack is done and the player has physically stepped back, so
-                // free the player NOW - they can walk away immediately instead of
-                // waiting out the victim's aftermath. Only the victim continues into
-                // the Drained stage; the (target-side) teardown happens at its end.
-                ReleasePlayer();
-
-                // Enter Drained only if the victim actually has an aftermath clip.
-                // Otherwise there's nothing left to play - finish immediately.
                 if (pack_.drained.target.empty()) {
-                    SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - player freed, no Drained clip, finishing");
+                    // No victim aftermath clip (furniture / legacy fallback): finish
+                    // now. Teardown snaps the player back to the locked scene pose
+                    // for a deterministic return, rather than freeing it wherever the
+                    // GoBack clip's root motion happened to leave it.
+                    SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - no Drained clip, finishing");
                     Finish();
                 } else {
+                    // GoBack is done and the player has physically stepped back, so
+                    // free the player NOW - they can walk away immediately instead of
+                    // waiting out the victim's aftermath. Only the victim continues
+                    // into Drained; the (target-side) teardown happens at its end.
+                    ReleasePlayer();
                     // Roll a random aftermath length in [Min, Max] for this feed.
                     drainedDuration_ = RandRange(settings->NonCombat.CompositeDrainedDurationMin,
                                                  settings->NonCombat.CompositeDrainedDurationMax);

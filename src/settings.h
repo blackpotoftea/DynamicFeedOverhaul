@@ -54,6 +54,7 @@ public:
         float MinHeightDiff{ 10.0f };     // Minimum height diff to trigger adjustment
         float MaxHeightDiff{ 150.0f };    // Max height diff (~3-4 stair steps)
         bool UseCompositePairedAnimation{ true };  // Composite two single-actor animations to simulate a paired animation
+        bool UseCompositeFurnitureAnimation{ true };  // Use player-only composite packs for bed/bedroll feeds (victim stays in furniture)
         std::string PlayerStandingFrontAnim{ "Anub2PVampireFemaleIntro_0" };  // Player-side single-actor animation (intro/loop fallback)
         std::string TargetStandingFrontAnim{ "Anub2PVampireFemaleIntro_1" };  // Target-side single-actor animation (intro/loop fallback)
         // Staged composite timing (hybrid: timer fallback; clip annotation events override)

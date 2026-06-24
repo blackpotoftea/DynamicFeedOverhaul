@@ -354,6 +354,8 @@ void __stdcall UI::Settings::Render() {
         ImGuiMCP::Separator();
         ImGuiMCP::TextDisabled("Composite Paired Animation");
         changed |= ImGuiMCP::Checkbox("Use Composite Paired Animation", &settings->NonCombat.UseCompositePairedAnimation);
+        changed |= ImGuiMCP::Checkbox("Use Composite Furniture Animation", &settings->NonCombat.UseCompositeFurnitureAnimation);
+        ImGuiMCP::SetItemTooltip("Player-only bed/bedroll feeds: the player plays a side-of-bed clip while the sleeping victim stays in place");
         if (settings->NonCombat.UseCompositePairedAnimation) {
             static char playerAnimBuf[256] = "";
             static char targetAnimBuf[256] = "";

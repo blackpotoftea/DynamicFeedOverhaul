@@ -121,6 +121,7 @@ void Settings::LoadINI() {
     NonCombat.MinHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MinHeightDiff", NonCombat.MinHeightDiff));
     NonCombat.MaxHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MaxHeightDiff", NonCombat.MaxHeightDiff));
     NonCombat.UseCompositePairedAnimation = ini.GetBoolValue("NonCombat", "UseCompositePairedAnimation", NonCombat.UseCompositePairedAnimation);
+    NonCombat.UseCompositeFurnitureAnimation = ini.GetBoolValue("NonCombat", "UseCompositeFurnitureAnimation", NonCombat.UseCompositeFurnitureAnimation);
     NonCombat.PlayerStandingFrontAnim = ini.GetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str());
     NonCombat.TargetStandingFrontAnim = ini.GetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str());
     NonCombat.CompositeIntroDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration));
@@ -224,10 +225,10 @@ void Settings::LoadINI() {
         Input.FeedKey, Input.FeedGamepadKey, Input.SecondaryKey, Input.SecondaryGamepadKey);
     SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
         PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
-    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), CompositePaired={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, EnableLevelCheck={}, MaxLevelDiff={}",
+    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), CompositePaired={}, CompositeFurniture={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, EnableLevelCheck={}, MaxLevelDiff={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
-        NonCombat.UseCompositePairedAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
+        NonCombat.UseCompositePairedAnimation, NonCombat.UseCompositeFurnitureAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
         NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
     if (NonCombat.UseCompositePairedAnimation) {
         SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
@@ -322,6 +323,8 @@ void Settings::SaveINI() {
         "; Maximum height difference for adjustment (~3-4 stair steps)");
     ini.SetBoolValue("NonCombat", "UseCompositePairedAnimation", NonCombat.UseCompositePairedAnimation,
         "; Composite two single-actor animations to simulate a paired animation (requires custom animations)");
+    ini.SetBoolValue("NonCombat", "UseCompositeFurnitureAnimation", NonCombat.UseCompositeFurnitureAnimation,
+        "; Use player-only composite packs for bed/bedroll feeds: the player plays a side-of-bed clip while the sleeping victim stays in place (requires custom furniture animations)");
     ini.SetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str(),
         "; Player-side single-actor animation event for standing front composite feed");
     ini.SetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str(),
