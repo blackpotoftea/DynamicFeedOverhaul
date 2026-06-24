@@ -315,7 +315,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
     // For a furniture feed, only take the composite path when a matching player-only
     // bed/bedroll pack is actually loaded; otherwise fall through to the legacy solo
-    // bed/bedroll idle below. (Standing keeps its synthesized legacy_ini fallback.)
+    // bed/bedroll idle below. A standing feed likewise needs a matching *_DFO.json
+    // pack — with none loaded it falls through to the legacy single-actor idle.
     const Feed::CompositePack* furniturePack = nullptr;
     if (settings->NonCombat.UseCompositeFurnitureAnimation && isFurnitureFeed) {
         Feed::FeedContext fctx;
@@ -328,27 +329,44 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         furniturePack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(fctx);
     }
 
-    bool useComposite = (settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding) ||
-                        (furniturePack != nullptr);
+    // Standing composite: resolve a staged pack up-front (mirrors furniturePack).
+    // Front/back is only meaningful for an upright feed, and the geometry is needed
+    // both to pick the pack and, later, to correct the victim's facing. Only honor
+    // "behind" when a Back pack is loaded, else a rear approach would rotate the
+    // victim to face away with no matching clip. Standing clips come from the
+    // *_DFO.json packs — there is no INI-configured fallback anymore.
+    bool geometryBehind = false;
+    bool isBehind = false;
+    const Feed::CompositePack* standingPack = nullptr;
+    if (settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding && !isFurnitureFeed) {
+        geometryBehind = AnimUtil::GetClosestDirection(feedTarget, player);
+        const bool hasBackPack = Feed::AnimationRegistry::GetSingleton()->HasCompositeBackPack();
+        isBehind = geometryBehind && hasBackPack;
+
+        Feed::FeedContext ctx;
+        ctx.player = player;
+        ctx.target = feedTarget;
+        ctx.isCombat = playerInCombat;
+        ctx.isSneaking = player->IsSneaking();
+        ctx.isHungry = isHungry;
+        ctx.targetIsStanding = true;
+        ctx.isBehind = isBehind;
+        ctx.isLethal = false;
+        ctx.furniture = Feed::Furniture::None;
+        ctx.playerOnLeft = playerOnLeft;
+        standingPack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(ctx);
+    }
+
+    // Take the composite path only when an actual pack is available (furniture for a
+    // bed/bedroll victim, standing for an upright one). With no matching pack we fall
+    // through to the legacy single-actor path below.
+    const Feed::CompositePack* compositePack = furniturePack ? furniturePack : standingPack;
+    const bool useComposite = (compositePack != nullptr);
 
     if (useComposite) {
         // Composite path: two single-actor animations played in sync, with the
         // pair locked via Skyrim's native TranslateTo (set up in
         // CompositePairedAnimation::Play).
-        // Front/back is only meaningful for an upright (standing) feed. A furniture
-        // feed picks its pack from the bed/bedroll kind + side, never direction, and
-        // the sleeping victim must not be rotated, so skip the geometry entirely.
-        // For standing: only honor "behind" when a Back pack is loaded, else a rear
-        // approach would rotate the victim to face away with no matching clip.
-        bool geometryBehind = false;
-        bool hasBackPack = false;
-        bool isBehind = false;
-        if (!isFurnitureFeed) {
-            geometryBehind = AnimUtil::GetClosestDirection(feedTarget, player);
-            hasBackPack = Feed::AnimationRegistry::GetSingleton()->HasCompositeBackPack();
-            isBehind = geometryBehind && hasBackPack;
-        }
-
         PairedAnimation::SetFeedTarget(feedTarget);
         PairedAnimation::EnterFeedState({
             player, feedTarget, /*feedType=*/0, targetState,
@@ -373,39 +391,13 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // manual-kill fallback in RunFeedIntegration.
         FeedAnimState::SetFeedHasOAR(true);
 
-        // Select a staged composite pack. Furniture feeds use the player-only pack
-        // already resolved above (it gated useComposite). Standing feeds select from
-        // the loaded *_DFO.json packs (filtered by direction/sex/hunger); if none
-        // match, fall back to a pack synthesized from the legacy ini clip pair
-        // (intro==loop, no exit/drained) so existing configs keep working.
-        Feed::CompositePack pack;
+        Feed::CompositePack pack = *compositePack;
         if (isFurnitureFeed) {
-            pack = *furniturePack;  // non-null: it gated useComposite
             SKSE::log::info("[HandleFeedAccepted] Furniture composite pack '{}' selected (furniture={}, playerOnLeft={}, playerOnly={})",
                 pack.name, static_cast<int>(furnKind), playerOnLeft, pack.playerOnly);
         } else {
-            Feed::FeedContext ctx;
-            ctx.player = player;
-            ctx.target = feedTarget;
-            ctx.isCombat = playerInCombat;
-            ctx.isSneaking = player->IsSneaking();
-            ctx.isHungry = isHungry;
-            ctx.targetIsStanding = true;
-            ctx.isBehind = isBehind;
-            ctx.isLethal = false;
-            ctx.furniture = Feed::Furniture::None;
-            ctx.playerOnLeft = playerOnLeft;
-
-            if (const auto* match = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(ctx)) {
-                pack = *match;
-                SKSE::log::info("[HandleFeedAccepted] Composite pack '{}' selected (isBehind={}, geometryBehind={}, hasBackPack={})",
-                    pack.name, isBehind, geometryBehind, hasBackPack);
-            } else {
-                pack.name = "legacy_ini";
-                pack.intro = { settings->NonCombat.PlayerStandingFrontAnim, settings->NonCombat.TargetStandingFrontAnim };
-                pack.loop  = pack.intro;
-                SKSE::log::info("[HandleFeedAccepted] No composite pack matched - using legacy ini fallback");
-            }
+            SKSE::log::info("[HandleFeedAccepted] Standing composite pack '{}' selected (isBehind={}, geometryBehind={})",
+                pack.name, isBehind, geometryBehind);
         }
 
         if (!CompositePairedAnimation::Play(feedTarget, pack)) {

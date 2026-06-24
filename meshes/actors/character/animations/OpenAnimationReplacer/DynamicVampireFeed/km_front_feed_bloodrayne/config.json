@@ -1,0 +1,39 @@
+{
+    "name": "km_front_feed_bloodrayne",
+    "priority": 4277212,
+    "ignoreDontConvertAnnotationsToTriggersFlag": true,
+    "triggersFromAnnotationsOnly": true,
+    "conditions": [
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "CompareValues",
+                    "requiredVersion": "1.0.0.0",
+                    "Value A": {
+                        "graphVariable": "IsSkyPromptFeeding",
+                        "graphVariableType": "Bool"
+                    },
+                    "Comparison": "==",
+                    "Value B": {
+                        "value": 1.0
+                    }
+                },
+                {
+                    "condition": "CompareValues",
+                    "requiredVersion": "1.0.0.0",
+                    "Value A": {
+                        "graphVariable": "SkyPromptFeedType",
+                        "graphVariableType": "Int"
+                    },
+                    "Comparison": "==",
+                    "Value B": {
+                        "value": 821.0
+                    }
+                }
+            ]
+        }
+    ],
+    "pairedConditions": []
+}

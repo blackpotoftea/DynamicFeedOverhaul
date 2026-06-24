@@ -55,9 +55,8 @@ public:
         float MaxHeightDiff{ 150.0f };    // Max height diff (~3-4 stair steps)
         bool UseCompositePairedAnimation{ true };  // Composite two single-actor animations to simulate a paired animation
         bool UseCompositeFurnitureAnimation{ true };  // Use player-only composite packs for bed/bedroll feeds (victim stays in furniture)
-        std::string PlayerStandingFrontAnim{ "Anub2PVampireFemaleIntro_0" };  // Player-side single-actor animation (intro/loop fallback)
-        std::string TargetStandingFrontAnim{ "Anub2PVampireFemaleIntro_1" };  // Target-side single-actor animation (intro/loop fallback)
-        // Staged composite timing (hybrid: timer fallback; clip annotation events override)
+        // Staged composite timing. Intro/Exit are timer-driven (no clip annotation ends them);
+        // only the Drained aftermath is ended early by the victim's VFD_DrainedEnd event.
         float CompositeIntroDuration{ 2.0f };    // Seconds Intro plays before -> Loop (fallback if no VFD_IntroEnd)
         float CompositeExitDuration{ 2.0f };     // Seconds Exit (GoBack) plays before -> Drained (fallback if no VFD_GoBackEnd)
         // Drained idle aftermath: a random length in [Min, Max] is rolled each feed.

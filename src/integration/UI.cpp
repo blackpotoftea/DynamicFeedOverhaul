@@ -357,27 +357,10 @@ void __stdcall UI::Settings::Render() {
         changed |= ImGuiMCP::Checkbox("Use Composite Furniture Animation", &settings->NonCombat.UseCompositeFurnitureAnimation);
         ImGuiMCP::SetItemTooltip("Player-only bed/bedroll feeds: the player plays a side-of-bed clip while the sleeping victim stays in place");
         if (settings->NonCombat.UseCompositePairedAnimation) {
-            static char playerAnimBuf[256] = "";
-            static char targetAnimBuf[256] = "";
-            static bool animBufsInitialized = false;
-            if (!animBufsInitialized) {
-                strncpy(playerAnimBuf, settings->NonCombat.PlayerStandingFrontAnim.c_str(), sizeof(playerAnimBuf) - 1);
-                strncpy(targetAnimBuf, settings->NonCombat.TargetStandingFrontAnim.c_str(), sizeof(targetAnimBuf) - 1);
-                animBufsInitialized = true;
-            }
-            if (ImGuiMCP::InputText("Player Animation", playerAnimBuf, sizeof(playerAnimBuf))) {
-                settings->NonCombat.PlayerStandingFrontAnim = playerAnimBuf;
-                changed = true;
-            }
-            ImGuiMCP::SetItemTooltip("Player-side single-actor animation event for composite paired feed");
-            if (ImGuiMCP::InputText("Target Animation", targetAnimBuf, sizeof(targetAnimBuf))) {
-                settings->NonCombat.TargetStandingFrontAnim = targetAnimBuf;
-                changed = true;
-            }
-            ImGuiMCP::SetItemTooltip("Target-side single-actor animation event for composite paired feed");
+            ImGuiMCP::TextDisabled("Standing clips are loaded from the *_DFO.json composite packs");
 
             ImGuiMCP::Separator();
-            ImGuiMCP::TextDisabled("Stage Timing (timer fallback; clip VFD_*End events override)");
+            ImGuiMCP::TextDisabled("Stage Timing (Intro/Exit timer-driven; Drained ended early by VFD_DrainedEnd)");
             changed |= ImGuiMCP::SliderFloat("Intro Duration", &settings->NonCombat.CompositeIntroDuration, 0.0f, 10.0f, "%.2f s");
             ImGuiMCP::SetItemTooltip("Seconds the Intro (GoTo) clip plays before the feeding Loop");
             changed |= ImGuiMCP::SliderFloat("Exit Duration", &settings->NonCombat.CompositeExitDuration, 0.0f, 10.0f, "%.2f s");

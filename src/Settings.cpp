@@ -122,8 +122,6 @@ void Settings::LoadINI() {
     NonCombat.MaxHeightDiff = static_cast<float>(ini.GetDoubleValue("NonCombat", "MaxHeightDiff", NonCombat.MaxHeightDiff));
     NonCombat.UseCompositePairedAnimation = ini.GetBoolValue("NonCombat", "UseCompositePairedAnimation", NonCombat.UseCompositePairedAnimation);
     NonCombat.UseCompositeFurnitureAnimation = ini.GetBoolValue("NonCombat", "UseCompositeFurnitureAnimation", NonCombat.UseCompositeFurnitureAnimation);
-    NonCombat.PlayerStandingFrontAnim = ini.GetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str());
-    NonCombat.TargetStandingFrontAnim = ini.GetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str());
     NonCombat.CompositeIntroDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration));
     NonCombat.CompositeExitDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration));
     NonCombat.CompositeDrainedDurationMin = static_cast<float>(ini.GetDoubleValue("NonCombat", "CompositeDrainedDurationMin", NonCombat.CompositeDrainedDurationMin));
@@ -230,10 +228,6 @@ void Settings::LoadINI() {
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
         NonCombat.UseCompositePairedAnimation, NonCombat.UseCompositeFurnitureAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
         NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
-    if (NonCombat.UseCompositePairedAnimation) {
-        SKSE::log::info("  [NonCombat] PlayerAnim='{}', TargetAnim='{}'",
-            NonCombat.PlayerStandingFrontAnim, NonCombat.TargetStandingFrontAnim);
-    }
     SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
@@ -325,14 +319,10 @@ void Settings::SaveINI() {
         "; Composite two single-actor animations to simulate a paired animation (requires custom animations)");
     ini.SetBoolValue("NonCombat", "UseCompositeFurnitureAnimation", NonCombat.UseCompositeFurnitureAnimation,
         "; Use player-only composite packs for bed/bedroll feeds: the player plays a side-of-bed clip while the sleeping victim stays in place (requires custom furniture animations)");
-    ini.SetValue("NonCombat", "PlayerStandingFrontAnim", NonCombat.PlayerStandingFrontAnim.c_str(),
-        "; Player-side single-actor animation event for standing front composite feed");
-    ini.SetValue("NonCombat", "TargetStandingFrontAnim", NonCombat.TargetStandingFrontAnim.c_str(),
-        "; Target-side single-actor animation event for standing front composite feed");
     ini.SetDoubleValue("NonCombat", "CompositeIntroDuration", NonCombat.CompositeIntroDuration,
-        "; Staged composite: seconds Intro plays before Loop (fallback if clip emits no VFD_IntroEnd)");
+        "; Staged composite: seconds Intro plays before the feeding Loop (timer-driven)");
     ini.SetDoubleValue("NonCombat", "CompositeExitDuration", NonCombat.CompositeExitDuration,
-        "; Staged composite: seconds Exit (GoBack) plays before -> Drained (fallback if no VFD_GoBackEnd)");
+        "; Staged composite: seconds Exit (GoBack) plays before the player is freed and Drained begins (timer-driven)");
     ini.SetDoubleValue("NonCombat", "CompositeDrainedDurationMin", NonCombat.CompositeDrainedDurationMin,
         "; Staged composite: Drained aftermath MIN seconds (a random length in [Min,Max] is rolled each feed; 0 = can skip)");
     ini.SetDoubleValue("NonCombat", "CompositeDrainedDurationMax", NonCombat.CompositeDrainedDurationMax,
