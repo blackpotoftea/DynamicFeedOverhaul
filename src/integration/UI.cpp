@@ -305,8 +305,9 @@ void __stdcall UI::Settings::Render() {
         ImGuiMCP::SetItemTooltip("Never feed on specific NPCs (format: PluginName|0xFormID)");
     }
 
-    // Icon Overlay Settings
-    if (ImGuiMCP::CollapsingHeader("Icon Overlay")) {
+    // Overlay Settings
+    if (ImGuiMCP::CollapsingHeader("Overlay")) {
+        ImGuiMCP::TextDisabled("Icon");
         changed |= ImGuiMCP::Checkbox("Enable Icon Overlay", &settings->IconOverlay.EnableIconOverlay);
         if (settings->IconOverlay.EnableIconOverlay) {
             const char* positions[] = {"Above Head", "Right of Head"};
@@ -339,6 +340,31 @@ void __stdcall UI::Settings::Render() {
                 changed = true;
             }
             ImGuiMCP::SetItemTooltip("Icon shown when PlayIdle fails (e.g., Data\\Interface\\ImGuiIcons\\Icons\\vampireFangs_fail.png)");
+        }
+
+        ImGuiMCP::Separator();
+        ImGuiMCP::TextDisabled("Victim Health Bar");
+        changed |= ImGuiMCP::Checkbox("Show Victim Health Bar", &settings->HealthBarOverlay.Enable);
+        ImGuiMCP::SetItemTooltip("Draw the victim's health bar above their head for the duration of the composite feed");
+        if (settings->HealthBarOverlay.Enable) {
+            changed |= ImGuiMCP::SliderFloat("Bar Scale", &settings->HealthBarOverlay.Scale, 0.25f, 3.0f, "%.2fx");
+            ImGuiMCP::SetItemTooltip("Size multiplier applied to bar width and height");
+            changed |= ImGuiMCP::SliderFloat("Bar Width", &settings->HealthBarOverlay.Width, 40.0f, 400.0f, "%.0f px");
+            changed |= ImGuiMCP::SliderFloat("Bar Height", &settings->HealthBarOverlay.Height, 4.0f, 40.0f, "%.0f px");
+            changed |= ImGuiMCP::SliderFloat("Height Above Head", &settings->HealthBarOverlay.HeightOffset, -50.0f, 150.0f, "%.1f");
+            ImGuiMCP::SetItemTooltip("Vertical offset above the victim's head (game units)");
+            changed |= ImGuiMCP::SliderFloat("Screen Offset X", &settings->HealthBarOverlay.OffsetX, -300.0f, 300.0f, "%.0f px");
+            ImGuiMCP::SetItemTooltip("Fine-tune horizontal screen position (+ = right)");
+            changed |= ImGuiMCP::SliderFloat("Screen Offset Y", &settings->HealthBarOverlay.OffsetY, -300.0f, 300.0f, "%.0f px");
+            ImGuiMCP::SetItemTooltip("Fine-tune vertical screen position (+ = down)");
+            changed |= ImGuiMCP::Checkbox("Trailing Damage Bar", &settings->HealthBarOverlay.EnableTrailing);
+            ImGuiMCP::SetItemTooltip("Show a lagging 'chip' layer behind the bar that catches up after each drain");
+            if (settings->HealthBarOverlay.EnableTrailing) {
+                changed |= ImGuiMCP::SliderFloat("Trailing Delay (s)", &settings->HealthBarOverlay.TrailingDelay, 0.0f, 2.0f, "%.2f");
+                ImGuiMCP::SetItemTooltip("How long the trailing layer holds before sliding down");
+                changed |= ImGuiMCP::SliderFloat("Trailing Speed", &settings->HealthBarOverlay.TrailingSpeed, 0.1f, 5.0f, "%.2f");
+                ImGuiMCP::SetItemTooltip("Catch-up speed (bar fractions per second)");
+            }
         }
     }
 
@@ -375,31 +401,6 @@ void __stdcall UI::Settings::Render() {
             // Keep the range valid: clamp Min <= Max whichever the user just moved.
             if (settings->NonCombat.CompositeDrainedDurationMin > settings->NonCombat.CompositeDrainedDurationMax) {
                 settings->NonCombat.CompositeDrainedDurationMax = settings->NonCombat.CompositeDrainedDurationMin;
-            }
-
-            ImGuiMCP::Separator();
-            ImGuiMCP::TextDisabled("Victim Health Bar");
-            changed |= ImGuiMCP::Checkbox("Show Victim Health Bar", &settings->HealthBarOverlay.Enable);
-            ImGuiMCP::SetItemTooltip("Draw the victim's health bar above their head for the duration of the composite feed");
-            if (settings->HealthBarOverlay.Enable) {
-                changed |= ImGuiMCP::SliderFloat("Bar Scale", &settings->HealthBarOverlay.Scale, 0.25f, 3.0f, "%.2fx");
-                ImGuiMCP::SetItemTooltip("Size multiplier applied to bar width and height");
-                changed |= ImGuiMCP::SliderFloat("Bar Width", &settings->HealthBarOverlay.Width, 40.0f, 400.0f, "%.0f px");
-                changed |= ImGuiMCP::SliderFloat("Bar Height", &settings->HealthBarOverlay.Height, 4.0f, 40.0f, "%.0f px");
-                changed |= ImGuiMCP::SliderFloat("Height Above Head", &settings->HealthBarOverlay.HeightOffset, -50.0f, 150.0f, "%.1f");
-                ImGuiMCP::SetItemTooltip("Vertical offset above the victim's head (game units)");
-                changed |= ImGuiMCP::SliderFloat("Screen Offset X", &settings->HealthBarOverlay.OffsetX, -300.0f, 300.0f, "%.0f px");
-                ImGuiMCP::SetItemTooltip("Fine-tune horizontal screen position (+ = right)");
-                changed |= ImGuiMCP::SliderFloat("Screen Offset Y", &settings->HealthBarOverlay.OffsetY, -300.0f, 300.0f, "%.0f px");
-                ImGuiMCP::SetItemTooltip("Fine-tune vertical screen position (+ = down)");
-                changed |= ImGuiMCP::Checkbox("Trailing Damage Bar", &settings->HealthBarOverlay.EnableTrailing);
-                ImGuiMCP::SetItemTooltip("Show a lagging 'chip' layer behind the bar that catches up after each drain");
-                if (settings->HealthBarOverlay.EnableTrailing) {
-                    changed |= ImGuiMCP::SliderFloat("Trailing Delay (s)", &settings->HealthBarOverlay.TrailingDelay, 0.0f, 2.0f, "%.2f");
-                    ImGuiMCP::SetItemTooltip("How long the trailing layer holds before sliding down");
-                    changed |= ImGuiMCP::SliderFloat("Trailing Speed", &settings->HealthBarOverlay.TrailingSpeed, 0.1f, 5.0f, "%.2f");
-                    ImGuiMCP::SetItemTooltip("Catch-up speed (bar fractions per second)");
-                }
             }
         }
         changed |= ImGuiMCP::SliderFloat("Target Offset X", &settings->NonCombat.TargetOffsetX, -100.0f, 100.0f, "%.1f");
