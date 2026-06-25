@@ -35,6 +35,28 @@ namespace {
         }
         return result;
     }
+
+    // All witness-related settings in one collapsible section: the crime/bounty
+    // detection knobs plus the relationship/confidence combat reaction.
+    void RenderWitnessSettings(::Settings* settings, bool& changed) {
+        if (!ImGuiMCP::CollapsingHeader("Witness Detection")) return;
+
+        changed |= ImGuiMCP::Checkbox("Enable Witness Detection", &settings->Combat.EnableWitnessDetection);
+        if (settings->Combat.EnableWitnessDetection) {
+            changed |= ImGuiMCP::SliderFloat("Witness Detection Radius", &settings->Combat.WitnessDetectionRadius, 500.0f, 5000.0f, "%.0f units");
+            changed |= ImGuiMCP::SliderFloat("Witness Check Interval", &settings->Combat.WitnessCheckInterval, 0.1f, 2.0f, "%.1f sec");
+            changed |= ImGuiMCP::Checkbox("Witness Debug Logging", &settings->Combat.WitnessDebugLogging);
+        }
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Witness Combat Reaction", &settings->Combat.EnableWitnessCombatReaction);
+        ImGuiMCP::SetItemTooltip("Witnesses who survive a feed fight back if brave/hostile enough (otherwise only the bounty applies)");
+        if (settings->Combat.EnableWitnessCombatReaction) {
+            changed |= ImGuiMCP::SliderInt("Assault Confidence Threshold", &settings->Combat.AssaultConfidenceThreshold, 0, 4);
+            ImGuiMCP::SetItemTooltip("Minimum witness Confidence to fight back (neutral disposition): 0=Cowardly, 1=Cautious, 2=Average, 3=Brave, 4=Foolhardy");
+            changed |= ImGuiMCP::Checkbox("Relationship Aware", &settings->Combat.WitnessRelationshipAware);
+            ImGuiMCP::SetItemTooltip("Friends never attack or report you; foes/enemies always attack; others decide by Confidence. Off = Confidence only.");
+        }
+    }
 }
 
 void UI::Register() {
@@ -239,21 +261,11 @@ void __stdcall UI::Settings::Render() {
             }
         }
         ImGuiMCP::Separator();
-        changed |= ImGuiMCP::Checkbox("Enable Witness Detection", &settings->Combat.EnableWitnessDetection);
-        if (settings->Combat.EnableWitnessDetection) {
-            changed |= ImGuiMCP::SliderFloat("Witness Detection Radius", &settings->Combat.WitnessDetectionRadius, 500.0f, 5000.0f, "%.0f units");
-            changed |= ImGuiMCP::SliderFloat("Witness Check Interval", &settings->Combat.WitnessCheckInterval, 0.1f, 2.0f, "%.1f sec");
-            changed |= ImGuiMCP::Checkbox("Witness Debug Logging", &settings->Combat.WitnessDebugLogging);
-        }
-        ImGuiMCP::Separator();
-        changed |= ImGuiMCP::Checkbox("Witness Combat Reaction", &settings->Combat.EnableWitnessCombatReaction);
-        ImGuiMCP::SetItemTooltip("An awake victim who survives a feed fights back if brave enough (otherwise only the bounty applies)");
-        if (settings->Combat.EnableWitnessCombatReaction) {
-            changed |= ImGuiMCP::SliderInt("Assault Confidence Threshold", &settings->Combat.AssaultConfidenceThreshold, 0, 4);
-            ImGuiMCP::SetItemTooltip("Minimum victim Confidence to fight back: 0=Cowardly, 1=Cautious, 2=Average, 3=Brave, 4=Foolhardy");
-        }
         changed |= ImGuiMCP::SliderFloat("Prompt Delay (Combat)", &settings->Combat.PromptDelayCombatSeconds, 0.0f, 2.0f, "%.2f sec");
     }
+
+    // Witness Detection (crime/bounty + relationship/confidence combat reaction)
+    RenderWitnessSettings(settings, changed);
 
     // Filtering Settings
     if (ImGuiMCP::CollapsingHeader("Filtering")) {

@@ -1,6 +1,7 @@
 #include "WitnessDetection.h"
 #include "Settings.h"
 #include "TargetState.h"
+#include "papyrus/PapyrusCall.h"
 
 namespace {
     // Custom relocation for SendAssaultAlarm function not exposed in CommonLibSSE
@@ -10,6 +11,34 @@ namespace {
         using func_t = decltype(SendAssaultAlarm);
         REL::Relocation<func_t> func{ RELOCATION_ID(36429, 37424) };
         func(a_victim, a_assaulter, arg3);
+    }
+
+    // How a witness reacts to seeing/experiencing the feed:
+    //   kIgnore - friendly to the player: no attack, no crime report
+    //   kReport - registers the assault crime (bounty) but does not attack
+    //   kAttack - turns hostile and fights the player (also implies a report)
+    enum class WitnessReaction { kIgnore, kReport, kAttack };
+
+    // 3-tier witness model (friendly ignores, hostile attacks, neutral decides by
+    // Confidence). When relationship-awareness is off, fall back to a pure Confidence
+    // decision (report vs attack) and never ignore. The relationship/disposition and
+    // Confidence queries are general actor facts and live in TargetState; this stays
+    // here as the witness policy that consults settings.
+    WitnessReaction ClassifyWitness(RE::Actor* witness, RE::Actor* player) {
+        if (!witness || !player) return WitnessReaction::kIgnore;
+        auto* settings = Settings::GetSingleton();
+        const int conf = static_cast<int>(TargetState::GetConfidence(witness));
+        const bool brave = conf >= settings->Combat.AssaultConfidenceThreshold;
+
+        if (!settings->Combat.WitnessRelationshipAware) {
+            return brave ? WitnessReaction::kAttack : WitnessReaction::kReport;
+        }
+
+        switch (TargetState::GetDisposition(witness, player)) {
+        case TargetState::Disposition::Friendly: return WitnessReaction::kIgnore;
+        case TargetState::Disposition::Hostile:  return WitnessReaction::kAttack;
+        default:                                 return brave ? WitnessReaction::kAttack : WitnessReaction::kReport;
+        }
     }
 }
 
@@ -144,8 +173,9 @@ namespace WitnessDetection {
 
             withinRadiusCount++;
 
-            // Check if this actor can witness the feed
-            if (CanActorWitnessFeed(actor, player, target)) {
+            // Check if this actor can witness the feed and isn't friendly enough to let it slide.
+            if (CanActorWitnessFeed(actor, player, target) &&
+                ClassifyWitness(actor, player) != WitnessReaction::kIgnore) {
                 SKSE::log::trace("[WitnessDetection] Feed witnessed by: {} (distance: {:.1f})",
                     actor->GetName(), distance);
                 return actor;
@@ -205,15 +235,18 @@ namespace WitnessDetection {
         }
 
         // Check if the victim themselves should raise alarm (if awake and not a follower).
-        if (!target->IsPlayerTeammate()) {
-            if (TargetState::IsConsciousAndAware(target)) {
+        // A friendly victim (kIgnore) won't report you and must NOT short-circuit the
+        // scan below - a nearby non-friendly NPC can still see it and report.
+        if (!target->IsPlayerTeammate() && TargetState::IsConsciousAndAware(target)) {
+            if (ClassifyWitness(target, player) != WitnessReaction::kIgnore) {
                 if (settings->Combat.WitnessDebugLogging) {
                     SKSE::log::debug("[WitnessDetection] Victim {} is conscious and not a teammate - raising alarm",
                         target->GetName());
                 }
                 OnDetectedByWitness(player, target, target);  // Victim is their own witness
-                return;  // No need to check other witnesses if victim already alarmed
+                return;  // Victim reported; no need to scan for other witnesses
             }
+            // Friendly aware victim: skip self-report, fall through to the bystander scan.
         }
 
         // Use the WitnessDetection module to check for witnesses
@@ -277,5 +310,51 @@ namespace WitnessDetection {
         // Notify player
         auto message = fmt::format("You've been seen by {}!", witness->GetName());
         RE::DebugNotification(message.c_str());
+    }
+
+    void ApplyWitnessReactions(RE::Actor* player, RE::Actor* victim) {
+        auto* settings = Settings::GetSingleton();
+        if (!settings->Combat.EnableWitnessCombatReaction || !player) return;
+
+        // Start combat on a witness, deferred one frame so the feed teardown's
+        // restraint release / AI refresh has settled (else StartCombat can fizzle
+        // against a still-restrained actor).
+        auto startCombatDeferred = [](RE::Actor* w) {
+            auto handle = w->CreateRefHandle();
+            SKSE::GetTaskInterface()->AddTask([handle] {
+                auto ref = handle.get();
+                auto* witness = ref ? ref->As<RE::Actor>() : nullptr;
+                if (!witness || witness->IsDead()) return;
+                auto* pl = RE::PlayerCharacter::GetSingleton();
+                if (!pl) return;
+                SKSE::log::info("[WitnessDetection] {} turns hostile after witnessing the feed", witness->GetName());
+                PapyrusCall::StartCombat(witness, pl);
+            });
+        };
+
+        // 1. The victim itself - an awake, surviving, non-follower victim witnessed
+        //    its own assault. Attack only if the 3-tier model says so.
+        if (victim && !victim->IsDead() && !victim->IsDisabled() &&
+            !victim->IsPlayerTeammate() && TargetState::IsConsciousAndAware(victim) &&
+            ClassifyWitness(victim, player) == WitnessReaction::kAttack) {
+            startCombatDeferred(victim);
+        }
+
+        // 2. Bystanders who detected the feed (LOS + detection), excluding the victim.
+        auto* processLists = RE::ProcessLists::GetSingleton();
+        if (!processLists) return;
+        const auto playerPos = player->GetPosition();
+        const float radius = settings->Combat.WitnessDetectionRadius;
+        for (auto& actorHandle : processLists->highActorHandles) {
+            auto actorPtr = actorHandle.get();
+            if (!actorPtr) continue;
+            auto* actor = actorPtr.get();
+            if (!actor || actor == victim) continue;
+            if (actor->GetPosition().GetDistance(playerPos) > radius) continue;
+            if (!CanActorWitnessFeed(actor, player, victim)) continue;
+            if (ClassifyWitness(actor, player) == WitnessReaction::kAttack) {
+                startCombatDeferred(actor);
+            }
+        }
     }
 }

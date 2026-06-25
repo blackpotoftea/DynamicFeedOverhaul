@@ -128,6 +128,39 @@ namespace TargetState {
         return base->GetConfidenceLevel();
     }
 
+    // Personal relationship rank of `actor` toward `other`, in the Papyrus convention:
+    // +4 Lover, +3 Ally, +2 Confidant, +1 Friend, 0 Acquaintance, -1 Rival, -2 Foe,
+    // -3 Enemy, -4 Archnemesis. No relationship record (or a missing actor base) =>
+    // Acquaintance (0). Stored RELATIONSHIP_LEVEL runs 0=Lover..8=Archnemesis, hence 4-level.
+    inline int GetRelationshipRank(RE::Actor* actor, RE::Actor* other) {
+        if (!actor || !other) return 0;
+        auto* a = actor->GetActorBase();
+        auto* b = other->GetActorBase();
+        if (!a || !b) return 0;
+        if (auto* rel = RE::BGSRelationship::GetRelationship(a, b)) {
+            return 4 - static_cast<int>(rel->level.get());
+        }
+        return 0;
+    }
+
+    // Coarse disposition of `actor` toward `other`, combining personal relationship
+    // rank with group faction reaction (either one tips it). Friend+/Ally => Friendly;
+    // Foe-/Enemy => Hostile; everything else (Acquaintance/Rival, Neutral) => Neutral.
+    enum class Disposition { Friendly, Neutral, Hostile };
+
+    inline Disposition GetDisposition(RE::Actor* actor, RE::Actor* other) {
+        if (!actor || !other) return Disposition::Neutral;
+        const int rank = GetRelationshipRank(actor, other);
+        const auto reaction = actor->GetFactionReaction(other);
+        if (rank >= 1 || reaction == RE::FIGHT_REACTION::kAlly || reaction == RE::FIGHT_REACTION::kFriend) {
+            return Disposition::Friendly;
+        }
+        if (rank <= -2 || reaction == RE::FIGHT_REACTION::kEnemy) {
+            return Disposition::Hostile;
+        }
+        return Disposition::Neutral;
+    }
+
     // Check if actor is a vampire
     bool IsVampire(RE::Actor* actor);
 

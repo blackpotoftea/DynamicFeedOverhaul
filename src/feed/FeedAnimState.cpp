@@ -4,9 +4,8 @@
 #include "feed/PairedAnimation.h"
 #include "feed/CompositePairedAnimation.h"
 #include "feed/FeedHealthBarOverlay.h"
-#include "feed/TargetState.h"
+#include "feed/WitnessDetection.h"
 #include "Settings.h"
-#include "papyrus/PapyrusCall.h"
 #include <atomic>
 
 namespace FeedAnimState {
@@ -43,44 +42,6 @@ namespace FeedAnimState {
                 SKSE::log::info("Combat feed time slowdown applied: {}x", settings->Animation.TimeSlowdownMultiplier);
             }
         }
-    }
-
-    // Confidence-based reaction to a feed the victim witnessed. Runs at feed end,
-    // AFTER teardown has released the victim's restraint. An awake, surviving victim
-    // necessarily saw their own assault; if brave/foolhardy (Confidence >= threshold)
-    // they are put into combat against the player (assault model). Cowardly/cautious
-    // victims keep only the silent bounty applied during the feed (theft model) and
-    // may flee naturally via the assault alarm. Skipped for the dead, the
-    // asleep/unconscious (didn't witness it), and followers (won't turn on the player).
-    static void TriggerWitnessReaction(RE::NiPointer<RE::Actor> victim) {
-        auto* settings = Settings::GetSingleton();
-        if (!settings->Combat.EnableWitnessCombatReaction) return;
-
-        auto* v = victim.get();
-        if (!v || v->IsDead() || v->IsDisabled()) return;
-        if (v->IsPlayerTeammate()) return;                  // followers don't turn on you
-        if (!TargetState::IsConsciousAndAware(v)) return;   // asleep/unconscious = didn't witness it
-
-        const int conf = static_cast<int>(TargetState::GetConfidence(v));
-        if (conf < settings->Combat.AssaultConfidenceThreshold) {
-            SKSE::log::info("[WitnessReaction] {} confidence {} < threshold {} - theft model (bounty only, no attack)",
-                v->GetName(), conf, settings->Combat.AssaultConfidenceThreshold);
-            return;
-        }
-
-        // Defer a frame so the teardown's restraint release / AI refresh settles
-        // before combat starts, otherwise StartCombat can fizzle against a still-
-        // restrained actor.
-        auto handle = v->CreateRefHandle();
-        SKSE::GetTaskInterface()->AddTask([handle] {
-            auto ref = handle.get();
-            auto* actor = ref ? ref->As<RE::Actor>() : nullptr;
-            if (!actor || actor->IsDead()) return;
-            auto* player = RE::PlayerCharacter::GetSingleton();
-            if (!player) return;
-            SKSE::log::info("[WitnessReaction] {} is brave enough - starting combat against player", actor->GetName());
-            PapyrusCall::StartCombat(actor, player);
-        });
     }
 
     void MarkFeedEnded() {
@@ -124,9 +85,10 @@ namespace FeedAnimState {
         PairedAnimation::OnComplete();
         CompositePairedAnimation::OnComplete();
 
-        // After teardown released the restraint: a witnessed brave victim now fights
-        // back (deferred so the AI reset settles first); timid victims keep the bounty.
-        TriggerWitnessReaction(victim);
+        // After teardown released the restraint: evaluate the victim and any bystanders
+        // who saw the feed and start combat on those who turn hostile (3-tier
+        // relationship/confidence model; deferred so the AI reset settles first).
+        WitnessDetection::ApplyWitnessReactions(RE::PlayerCharacter::GetSingleton(), victim.get());
 
         FeedPromptSink::GetSingleton()->RefreshPrompt();
     }

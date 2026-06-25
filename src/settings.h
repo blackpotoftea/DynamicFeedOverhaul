@@ -90,6 +90,7 @@ public:
         float PromptDelayCombatSeconds{ 0.0f };  // Delay before showing prompt in combat (default 0 for immediate)
         bool EnableWitnessCombatReaction{ true }; // Awake victim of a witnessed feed fights back (else bounty only)
         int AssaultConfidenceThreshold{ 3 };     // Min victim Confidence to fight back (0=Cowardly..4=Foolhardy)
+        bool WitnessRelationshipAware{ true };   // Use relationship/faction (friendly ignore, hostile attack) vs confidence-only
     } Combat;
 
     // Target filtering settings

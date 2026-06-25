@@ -22,4 +22,10 @@ namespace WitnessDetection {
 
     // Handle witness detection - adds bounty and notifies player
     void OnDetectedByWitness(RE::Actor* player, RE::Actor* target, RE::Actor* witness);
+
+    // Called once at feed end: evaluates the victim and any bystanders who saw the
+    // feed against the relationship/confidence model and starts combat (deferred) on
+    // those who turn hostile. The bounty/report side is handled live during the feed
+    // by PerformWitnessCheck. Gated by Combat.EnableWitnessCombatReaction.
+    void ApplyWitnessReactions(RE::Actor* player, RE::Actor* victim);
 }
