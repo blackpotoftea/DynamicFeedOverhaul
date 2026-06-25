@@ -139,6 +139,8 @@ void Settings::LoadINI() {
     Combat.AllowStaggered = ini.GetBoolValue("Combat", "AllowStaggered", Combat.AllowStaggered);
     Combat.StaggerRequireLowerLevel = ini.GetBoolValue("Combat", "StaggerRequireLowerLevel", Combat.StaggerRequireLowerLevel);
     Combat.StaggerMaxLevelDifference = static_cast<int>(ini.GetLongValue("Combat", "StaggerMaxLevelDifference", Combat.StaggerMaxLevelDifference));
+    Combat.VampireLordLowLevelFeed = ini.GetBoolValue("Combat", "VampireLordLowLevelFeed", Combat.VampireLordLowLevelFeed);
+    Combat.VampireLordLowLevelFeedDifference = static_cast<int>(ini.GetLongValue("Combat", "VampireLordLowLevelFeedDifference", Combat.VampireLordLowLevelFeedDifference));
     Combat.EnableWitnessDetection = ini.GetBoolValue("Combat", "EnableWitnessDetection", Combat.EnableWitnessDetection);
     Combat.WitnessDetectionRadius = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessDetectionRadius", Combat.WitnessDetectionRadius));
     Combat.WitnessCheckInterval = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessCheckInterval", Combat.WitnessCheckInterval));
@@ -228,9 +230,10 @@ void Settings::LoadINI() {
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
         NonCombat.UseCompositePairedAnimation, NonCombat.UseCompositeFurnitureAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
         NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, WitnessCombatReaction={}, AssaultConfThreshold={}, RelationshipAware={}",
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, VLLowLevelFeed={}, VLLowLevelFeedDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, WitnessCombatReaction={}, AssaultConfThreshold={}, RelationshipAware={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
+        Combat.VampireLordLowLevelFeed, Combat.VampireLordLowLevelFeedDifference,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds,
         Combat.EnableWitnessCombatReaction, Combat.AssaultConfidenceThreshold, Combat.WitnessRelationshipAware);
     SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
@@ -360,6 +363,10 @@ void Settings::SaveINI() {
         "; Stagger feeding requires target to be lower level than player (ignored if poise mod detected)");
     ini.SetLongValue("Combat", "StaggerMaxLevelDifference", Combat.StaggerMaxLevelDifference,
         "; Target must be (playerLevel - this) or lower. E.g. player 20, diff 10 = target max level 10");
+    ini.SetBoolValue("Combat", "VampireLordLowLevelFeed", Combat.VampireLordLowLevelFeed,
+        "; Vampire Lord only: feed on much-weaker enemies at any health (no need to lower their health first). Normal-form combat stays gated by health/stagger to avoid prompt spam");
+    ini.SetLongValue("Combat", "VampireLordLowLevelFeedDifference", Combat.VampireLordLowLevelFeedDifference,
+        "; Target must be (playerLevel - this) or lower for the Vampire Lord low-level feed. E.g. player 30, diff 10 = target level 20 or lower");
     ini.SetBoolValue("Combat", "EnableWitnessDetection", Combat.EnableWitnessDetection,
         "; Stop feed if witnessed by nearby NPCs who detect the player");
     ini.SetDoubleValue("Combat", "WitnessDetectionRadius", Combat.WitnessDetectionRadius,

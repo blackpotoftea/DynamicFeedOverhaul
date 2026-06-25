@@ -139,14 +139,35 @@ void __stdcall UI::Debug::Render() {
             SKSE::log::warn("UI: PlayerVampireQuest not found");
         }
     }
-    if (ImGuiMCP::Button("Become Vampire Lord")) {
-        // TODO: Implement vampire lord transformation
-        SKSE::log::info("UI: Become Vampire Lord button pressed");
+    if (ImGuiMCP::Button("Grant Power (Vampire Lord)")) {
+        // Equivalent to console: player.addspell DLC1VampireChange
+        auto* vampireLordPower = RE::TESForm::LookupByEditorID<RE::SpellItem>("DLC1VampireChange");
+        if (vampireLordPower) {
+            player->AddSpell(vampireLordPower);
+            SKSE::log::info("UI: Granted Vampire Lord power (DLC1VampireChange)");
+        } else {
+            SKSE::log::warn("UI: DLC1VampireChange spell not found (Dawnguard required)");
+        }
     }
-    if (ImGuiMCP::Button("Become Werewolf")) {
-        // TODO: Implement werewolf transformation
-        SKSE::log::info("UI: Become Werewolf button pressed");
+    ImGuiMCP::SetItemTooltip("player.addspell DLC1VampireChange - grants the Vampire Lord transformation power");
+    if (ImGuiMCP::Button("Grant Power (Werewolf)")) {
+        // Equivalent to console: player.addspell WerewolfChange ; set PlayerIsWerewolf to 1
+        auto* werewolfPower = RE::TESForm::LookupByEditorID<RE::SpellItem>("WerewolfChange");
+        if (werewolfPower) {
+            player->AddSpell(werewolfPower);
+            SKSE::log::info("UI: Granted Werewolf power (WerewolfChange)");
+        } else {
+            SKSE::log::warn("UI: WerewolfChange spell not found");
+        }
+        auto* playerIsWerewolfGlobal = RE::TESForm::LookupByEditorID<RE::TESGlobal>("PlayerIsWerewolf");
+        if (playerIsWerewolfGlobal) {
+            playerIsWerewolfGlobal->value = 1.0f;
+            SKSE::log::info("UI: Set PlayerIsWerewolf global to 1");
+        } else {
+            SKSE::log::warn("UI: PlayerIsWerewolf global not found");
+        }
     }
+    ImGuiMCP::SetItemTooltip("player.addspell WerewolfChange + set PlayerIsWerewolf to 1");
 }
 
 void __stdcall UI::Settings::Render() {
@@ -259,6 +280,13 @@ void __stdcall UI::Settings::Render() {
             if (settings->Combat.StaggerRequireLowerLevel) {
                 changed |= ImGuiMCP::SliderInt("Stagger Max Level Diff", &settings->Combat.StaggerMaxLevelDifference, 0, 50);
             }
+        }
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Vampire Lord Low-Level Feed", &settings->Combat.VampireLordLowLevelFeed);
+        ImGuiMCP::SetItemTooltip("Vampire Lord only: feed on much-weaker enemies at any health (no need to lower their health first)");
+        if (settings->Combat.VampireLordLowLevelFeed) {
+            changed |= ImGuiMCP::SliderInt("VL Low-Level Feed Diff", &settings->Combat.VampireLordLowLevelFeedDifference, 0, 50);
+            ImGuiMCP::SetItemTooltip("Target must be at least this many levels below the player");
         }
         ImGuiMCP::Separator();
         changed |= ImGuiMCP::SliderFloat("Prompt Delay (Combat)", &settings->Combat.PromptDelayCombatSeconds, 0.0f, 2.0f, "%.2f sec");

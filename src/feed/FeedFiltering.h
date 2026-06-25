@@ -138,6 +138,25 @@ namespace FeedFiltering {
             return false;
         }
 
+        // Vampire Lord only: feed on much-weaker enemies at any health (bypasses health check).
+        // Keeps normal-form combat gated by health/stagger so the prompt isn't always eligible.
+        if (settings->Combat.VampireLordLowLevelFeed) {
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (player && TargetState::IsVampireLord(player)) {
+                int playerLevel = player->GetLevel();
+                int targetLevel = actor->GetLevel();
+                int maxAllowedLevel = playerLevel - settings->Combat.VampireLordLowLevelFeedDifference;
+
+                // Target must be (playerLevel - VampireLordLowLevelFeedDifference) or lower
+                if (targetLevel <= maxAllowedLevel) {
+                    SKSE::log::debug("Combat path: {} - allowed (Vampire Lord low-level feed: level {} <= max allowed {}, player {} - diff {})",
+                        actor->GetName(), targetLevel, maxAllowedLevel, playerLevel, settings->Combat.VampireLordLowLevelFeedDifference);
+                    return false;
+                }
+                // Not weak enough: fall through to the normal health check below
+            }
+        }
+
         // Check if low health is required
         if (settings->Combat.RequireLowHealth) {
             auto* avOwner = actor->AsActorValueOwner();

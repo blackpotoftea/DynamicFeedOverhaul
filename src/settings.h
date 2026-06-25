@@ -83,6 +83,8 @@ public:
         bool AllowStaggered{ true };     // Allow feeding on staggered targets (bypasses health check)
         bool StaggerRequireLowerLevel{ true };   // Stagger feeding requires target to be lower level than player
         int StaggerMaxLevelDifference{ 10 };     // Target must be (playerLevel - this) or lower (e.g. player 20, diff 10 = target max 10)
+        bool VampireLordLowLevelFeed{ true };        // Vampire Lord only: feed on much-weaker enemies at any health (combat)
+        int VampireLordLowLevelFeedDifference{ 10 }; // Target must be (playerLevel - this) or lower for VL low-level feed
         bool EnableWitnessDetection{ true };     // Stop feed if witnessed by NPCs
         float WitnessDetectionRadius{ 1500.0f }; // Detection radius in units (~1500 = reasonable distance)
         float WitnessCheckInterval{ 0.5f };      // How often to check for witnesses during feed (seconds)
