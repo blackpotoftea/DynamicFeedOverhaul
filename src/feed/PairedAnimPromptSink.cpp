@@ -22,6 +22,53 @@
 
 extern std::atomic<SkyPromptAPI::ClientID> g_clientID;
 
+namespace {
+    // True when the player's vampire stage has reached the "hungry" threshold.
+    // Centralizes the stage-vs-setting comparison used by both the composite
+    // resolver and the legacy feed path.
+    bool PlayerIsHungry() {
+        return PapyrusCall::GetVampireStage() >= Settings::GetSingleton()->Animation.HungryThreshold;
+    }
+
+    // Fills the EnterFeedState settings-derived fields (height/rotation) from
+    // Settings so the composite and legacy paths can't drift on them. Only
+    // feedType differs between the two callers.
+    void EnterFeedStateFromSettings(RE::Actor* player, RE::Actor* target,
+            int feedType, int targetState, bool playerInCombat, bool targetInCombat) {
+        auto* settings = Settings::GetSingleton();
+        PairedAnimation::EnterFeedState({
+            player, target, feedType, targetState,
+            playerInCombat, targetInCombat,
+            settings->NonCombat.EnableHeightAdjust,
+            settings->NonCombat.EnableRotation,
+            settings->NonCombat.MinHeightDiff,
+            settings->NonCombat.MaxHeightDiff,
+        });
+    }
+
+    // Combat-aware prompt delay: combat targets use the (typically shorter)
+    // combat delay, everyone else the idle delay.
+    float PromptDelayForTarget(RE::Actor* target) {
+        auto* settings = Settings::GetSingleton();
+        return target->IsInCombat() ? settings->Combat.PromptDelayCombatSeconds
+                                     : settings->General.PromptDelayIdleSeconds;
+    }
+
+    // Seconds elapsed since a steady_clock timestamp.
+    float SecondsSince(std::chrono::steady_clock::time_point since) {
+        return std::chrono::duration<float>(std::chrono::steady_clock::now() - since).count();
+    }
+
+    // Resolve an ObjectRefHandle to a live Actor NiPointer, or nullptr.
+    RE::NiPointer<RE::Actor> ActorFromHandle(const RE::ObjectRefHandle& handle) {
+        auto ref = handle.get();
+        if (!ref) {
+            return nullptr;
+        }
+        return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
+    }
+}
+
 // PairedAnimPromptSink Implementation
 
 PairedAnimPromptSink* PairedAnimPromptSink::GetSingleton() {
@@ -109,10 +156,8 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
             // hold-to-kill choice — so show a plain single-press "Feed" and let the
             // composite own lethality. Only the legacy fallback path uses the
             // EnableLethalFeed hold-to-kill prompt.
-            int ts = 0;
-            bool gb = false, ib = false, furn = false;
             bool willUseComposite = player &&
-                ResolveCompositePack(player, target, ts, gb, ib, furn) != nullptr;
+                CompositePairedAnimation::Resolve(player, target).pack != nullptr;
 
             bool canLethal = settings->NonCombat.EnableLethalFeed &&
                             !(settings->NonCombat.ExcludeEssentialFromLethal && isEssential);
@@ -273,88 +318,6 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
 
 
 
-// Single source of truth for the composite-vs-legacy decision. Both the prompt
-// callback (to choose "Feed" vs "Feed (Hold to Kill)") and HandleFeedAccepted (to
-// pick the actual feed path) call this, so they can never drift. Read-only — only
-// reads actor/world/registry/settings state; all mutation stays in HandleFeedAccepted.
-const Feed::CompositePack* PairedAnimPromptSink::ResolveCompositePack(
-    RE::Actor* player, RE::Actor* target,
-    int& outTargetState, bool& outGeometryBehind,
-    bool& outIsBehind, bool& outIsFurnitureFeed) {
-    outTargetState = Feed::kStanding;
-    outGeometryBehind = false;
-    outIsBehind = false;
-    outIsFurnitureFeed = false;
-    if (!player || !target) return nullptr;
-
-    auto* settings = Settings::GetSingleton();
-
-    bool isInCombat = false;  // target's combat state (only the resolved state is used here)
-    const int targetState = AnimUtil::DetermineTargetState(target, isInCombat);
-    outTargetState = targetState;
-
-    const bool playerInCombat = player->IsInCombat();
-    const int vampireStage = PapyrusCall::GetVampireStage();
-
-    // Furniture context: a target sleeping in a bed/bedroll can use a player-only
-    // composite pack (the player plays a side-of-bed clip; the victim stays put).
-    auto furnitureRef = TargetState::GetFurnitureReference(target);
-    Feed::Furniture furnKind = Feed::Furniture::None;
-    bool playerOnLeft = false;
-    if (targetState == Feed::kSleeping && furnitureRef) {
-        furnKind = PairedAnimation::IsBedroll(furnitureRef.get()) ? Feed::Furniture::Bedroll
-                                                                  : Feed::Furniture::Bed;
-        playerOnLeft = PairedAnimation::IsPlayerOnLeftSide(target);
-    }
-    const bool isFurnitureFeed = (furnKind != Feed::Furniture::None);
-    outIsFurnitureFeed = isFurnitureFeed;
-    const bool isHungry = (vampireStage >= settings->Animation.HungryThreshold);
-
-    // For a furniture feed, only take the composite path when a matching player-only
-    // bed/bedroll pack is actually loaded; otherwise fall through to the legacy solo
-    // bed/bedroll idle. A standing feed likewise needs a matching *_DFO.json pack.
-    const Feed::CompositePack* furniturePack = nullptr;
-    if (settings->NonCombat.UseCompositeFurnitureAnimation && isFurnitureFeed) {
-        Feed::FeedContext fctx;
-        fctx.player = player;
-        fctx.target = target;
-        fctx.isHungry = isHungry;
-        fctx.isBehind = false;
-        fctx.furniture = furnKind;
-        fctx.playerOnLeft = playerOnLeft;
-        furniturePack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(fctx);
-    }
-
-    // Standing composite: front/back is only meaningful for an upright feed, and the
-    // geometry is needed both to pick the pack and, later, to correct the victim's
-    // facing. Only honor "behind" when a Back pack is loaded, else a rear approach
-    // would rotate the victim to face away with no matching clip.
-    const Feed::CompositePack* standingPack = nullptr;
-    if (settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding && !isFurnitureFeed) {
-        const bool geometryBehind = AnimUtil::GetClosestDirection(target, player);
-        const bool hasBackPack = Feed::AnimationRegistry::GetSingleton()->HasCompositeBackPack();
-        const bool isBehind = geometryBehind && hasBackPack;
-        outGeometryBehind = geometryBehind;
-        outIsBehind = isBehind;
-
-        Feed::FeedContext ctx;
-        ctx.player = player;
-        ctx.target = target;
-        ctx.isCombat = playerInCombat;
-        ctx.isSneaking = player->IsSneaking();
-        ctx.isHungry = isHungry;
-        ctx.targetIsStanding = true;
-        ctx.isBehind = isBehind;
-        ctx.isLethal = false;
-        ctx.furniture = Feed::Furniture::None;
-        ctx.playerOnLeft = playerOnLeft;
-        standingPack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(ctx);
-    }
-
-    // Furniture pack wins over standing when both somehow resolve (precedence preserved).
-    return furniturePack ? furniturePack : standingPack;
-}
-
 // We have 2 animation systems Vannila Idle and OAR which we set via GraphVariable
 // We need both select idle -> set correct graph variable to match OAR animations
 void PairedAnimPromptSink::HandleFeedAccepted() {
@@ -403,19 +366,18 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
     // Player's combat state forces lethal feed
     bool playerInCombat = player->IsInCombat();
-    int vampireStage = PapyrusCall::GetVampireStage();
 
     // Resolve the composite pack (and the geometry/furniture context it implies)
     // through the SAME helper the prompt callback uses, so the prompt label and the
     // actual feed path can never disagree on whether this is a composite feed. With
     // no matching pack the resolver returns nullptr and we fall through to the legacy
     // single-actor path below.
-    int targetState = Feed::kStanding;
-    bool geometryBehind = false;
-    bool isBehind = false;
-    bool isFurnitureFeed = false;
-    const Feed::CompositePack* compositePack = ResolveCompositePack(
-        player, feedTarget, targetState, geometryBehind, isBehind, isFurnitureFeed);
+    auto resolution = CompositePairedAnimation::Resolve(player, feedTarget);
+    int targetState = resolution.targetState;
+    bool geometryBehind = resolution.geometryBehind;
+    bool isBehind = resolution.isBehind;
+    bool isFurnitureFeed = resolution.isFurnitureFeed;
+    const Feed::CompositePack* compositePack = resolution.pack;
     const bool useComposite = (compositePack != nullptr);
 
     SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
@@ -425,14 +387,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // pair locked via Skyrim's native TranslateTo (set up in
         // CompositePairedAnimation::Play).
         PairedAnimation::SetFeedTarget(feedTarget);
-        PairedAnimation::EnterFeedState({
-            player, feedTarget, /*feedType=*/0, targetState,
-            playerInCombat, isInCombat,
-            settings->NonCombat.EnableHeightAdjust,
-            settings->NonCombat.EnableRotation,
-            settings->NonCombat.MinHeightDiff,
-            settings->NonCombat.MaxHeightDiff,
-        });
+        EnterFeedStateFromSettings(player, feedTarget, /*feedType=*/0, targetState,
+                                   playerInCombat, isInCombat);
 
         // EnterFeedState's auto front/back (RotateTargetToClosest) may have turned
         // the victim to face away. When forcing front (no Back pack loaded),
@@ -467,14 +423,9 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         ShowPrompt(feedTarget);
         return;
     } else {
-        // Calculate direction for animation selection (can be done immediately)
-        bool isBehind = false;
-        if (targetState == Feed::kStanding) {
-            isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
-        } else {
-            // For sitting/sleeping, just detect direction without rotating
-            isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
-        }
+        // Calculate direction for animation selection (can be done immediately).
+        // Same detection for standing and sitting/sleeping — neither rotates here.
+        bool isBehind = AnimUtil::GetClosestDirection(feedTarget, player);
 
         // --- New Registry Logic ---
         Feed::FeedContext context;
@@ -482,7 +433,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         context.target = feedTarget;
         context.isCombat = playerInCombat;  // Use PLAYER's combat state (forces lethal animations)
         context.isSneaking = player->IsSneaking();
-        context.isHungry = (vampireStage >= settings->Animation.HungryThreshold);
+        context.isHungry = PlayerIsHungry();
         context.targetIsStanding = (targetState == Feed::kStanding);
         context.isBehind = isBehind;
         context.isLethal = wantLethal || playerInCombat;  // User choice OR forced by player combat
@@ -534,14 +485,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         // Centralized per-actor setup: kill-move flag, conditional pacify,
         // height/rotation positioning, graph vars. Symmetric teardown lives
         // in PairedAnimation::ExitFeedState (called from OnComplete).
-        PairedAnimation::EnterFeedState({
-            player, feedTarget, feedType, targetState,
-            playerInCombat, isInCombat,
-            settings->NonCombat.EnableHeightAdjust,
-            settings->NonCombat.EnableRotation,
-            settings->NonCombat.MinHeightDiff,
-            settings->NonCombat.MaxHeightDiff,
-        });
+        EnterFeedStateFromSettings(player, feedTarget, feedType, targetState,
+                                   playerInCombat, isInCombat);
 
         // Publish lethal state so the VFD_VampireFeedTrigger event handler can
         // decide variance vs fixed drain. Cleared on MarkFeedEnded/MarkFeedStarted.
@@ -600,11 +545,7 @@ void PairedAnimPromptSink::SetActiveFeedTarget(RE::Actor* target) {
 
 RE::NiPointer<RE::Actor> PairedAnimPromptSink::GetActiveFeedTarget() const {
     std::lock_guard<std::mutex> lock(targetMutex_);
-    auto ref = activeFeedTargetHandle_.get();
-    if (!ref) {
-        return nullptr;
-    }
-    return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
+    return ActorFromHandle(activeFeedTargetHandle_);
 }
 
 void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
@@ -665,13 +606,8 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
 }
 
 RE::NiPointer<RE::Actor> PairedAnimPromptSink::GetTarget() const {
-    auto handle = GetTargetHandle();
-    auto ref = handle.get();
-    if (!ref) {
-        return nullptr;
-    }
     // NiPointer<Actor> keeps ref alive in the caller's scope
-    return RE::NiPointer<RE::Actor>(ref->As<RE::Actor>());
+    return ActorFromHandle(GetTargetHandle());
 }
 
 bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
@@ -899,10 +835,8 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
 
     if (isValidTarget && newTarget) {
         auto newTargetHandle = newTarget->GetHandle();
-        auto settings = Settings::GetSingleton();
         // Use combat-specific delay (default 0) if target is in combat, otherwise general delay
-        bool targetInCombat = newTarget->IsInCombat();
-        float delaySeconds = targetInCombat ? settings->Combat.PromptDelayCombatSeconds : settings->General.PromptDelayIdleSeconds;
+        float delaySeconds = PromptDelayForTarget(newTarget);
 
         // Feed just ended - show prompt immediately (no delay)
         if (feedJustEnded) {
@@ -920,8 +854,7 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
         }
         // Same pending target - check if delay has elapsed
         else if (pendingTarget_ == newTargetHandle) {
-            auto elapsed = std::chrono::steady_clock::now() - pendingTargetTime_;
-            float elapsedSeconds = std::chrono::duration<float>(elapsed).count();
+            float elapsedSeconds = SecondsSince(pendingTargetTime_);
 
             if (elapsedSeconds >= delaySeconds) {
                 pendingTarget_.reset();
@@ -952,13 +885,9 @@ void PairedAnimPromptSink::TickPendingPrompt() {
 
     RE::Actor* actor = ref->As<RE::Actor>();
 
-    auto* settings = Settings::GetSingleton();
-    bool targetInCombat = actor->IsInCombat();
-    float delaySeconds = targetInCombat ? settings->Combat.PromptDelayCombatSeconds
-                                        : settings->General.PromptDelayIdleSeconds;
+    float delaySeconds = PromptDelayForTarget(actor);
 
-    auto elapsed = std::chrono::steady_clock::now() - pendingTargetTime_;
-    float elapsedSeconds = std::chrono::duration<float>(elapsed).count();
+    float elapsedSeconds = SecondsSince(pendingTargetTime_);
 
     if (elapsedSeconds < delaySeconds) return;
 

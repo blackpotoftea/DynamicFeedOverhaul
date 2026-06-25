@@ -11,7 +11,6 @@
 
 // Forward declarations
 class Settings;
-namespace Feed { struct CompositePack; }
 
 /// Definition of a prompt that can be shown to the player
 struct PromptDef {
@@ -84,16 +83,6 @@ private:
     PairedAnimPromptSink();
 
     void RegisterCorePromptCallback();
-
-    // Single source of truth for "will this target use a composite (staged) feed?".
-    // Resolves the matching composite pack (furniture or standing) exactly the way
-    // HandleFeedAccepted does, returning it (or nullptr) and reporting the geometry /
-    // furniture context it derived. Read-only: safe to call from the prompt callback
-    // so the prompt label and the actual feed path can never disagree.
-    static const Feed::CompositePack* ResolveCompositePack(
-        RE::Actor* player, RE::Actor* target,
-        int& outTargetState, bool& outGeometryBehind,
-        bool& outIsBehind, bool& outIsFurnitureFeed);
 
     void HandleFeedAcceptedTest();  // Minimal test for kill move playback
     void HandleTimingOut();

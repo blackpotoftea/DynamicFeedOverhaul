@@ -3,6 +3,8 @@
 #include "feed/TargetState.h"
 #include "Settings.h"
 #include "PCH.h"
+#include "feed/PairedAnimation.h"
+#include "papyrus/PapyrusCall.h"
 #include "utils/AnimUtil.h"
 #include "utils/SoundUtil.h"
 #include "feed/CombatBark.h"
@@ -316,6 +318,78 @@ namespace CompositePairedAnimation {
                 stageTimer_ = 0.0f;
             }
         }
+    }
+
+    Resolution Resolve(RE::Actor* player, RE::Actor* target) {
+        Resolution res;
+        if (!player || !target) return res;
+
+        auto* settings = Settings::GetSingleton();
+
+        bool isInCombat = false;  // target's combat state (only the resolved state is used here)
+        const int targetState = AnimUtil::DetermineTargetState(target, isInCombat);
+        res.targetState = targetState;
+
+        const bool playerInCombat = player->IsInCombat();
+
+        // Furniture context: a target sleeping in a bed/bedroll can use a player-only
+        // composite pack (the player plays a side-of-bed clip; the victim stays put).
+        auto furnitureRef = TargetState::GetFurnitureReference(target);
+        Feed::Furniture furnKind = Feed::Furniture::None;
+        bool playerOnLeft = false;
+        if (targetState == Feed::kSleeping && furnitureRef) {
+            furnKind = PairedAnimation::IsBedroll(furnitureRef.get()) ? Feed::Furniture::Bedroll
+                                                                      : Feed::Furniture::Bed;
+            playerOnLeft = PairedAnimation::IsPlayerOnLeftSide(target);
+        }
+        const bool isFurnitureFeed = (furnKind != Feed::Furniture::None);
+        res.isFurnitureFeed = isFurnitureFeed;
+        const bool isHungry = (PapyrusCall::GetVampireStage() >= settings->Animation.HungryThreshold);
+
+        // For a furniture feed, only take the composite path when a matching player-only
+        // bed/bedroll pack is actually loaded; otherwise fall through to the legacy solo
+        // bed/bedroll idle. A standing feed likewise needs a matching *_DFO.json pack.
+        const Feed::CompositePack* furniturePack = nullptr;
+        if (settings->NonCombat.UseCompositeFurnitureAnimation && isFurnitureFeed) {
+            Feed::FeedContext fctx;
+            fctx.player = player;
+            fctx.target = target;
+            fctx.isHungry = isHungry;
+            fctx.isBehind = false;
+            fctx.furniture = furnKind;
+            fctx.playerOnLeft = playerOnLeft;
+            furniturePack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(fctx);
+        }
+
+        // Standing composite: front/back is only meaningful for an upright feed, and the
+        // geometry is needed both to pick the pack and, later, to correct the victim's
+        // facing. Only honor "behind" when a Back pack is loaded, else a rear approach
+        // would rotate the victim to face away with no matching clip.
+        const Feed::CompositePack* standingPack = nullptr;
+        if (settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding && !isFurnitureFeed) {
+            const bool geometryBehind = AnimUtil::GetClosestDirection(target, player);
+            const bool hasBackPack = Feed::AnimationRegistry::GetSingleton()->HasCompositeBackPack();
+            const bool isBehind = geometryBehind && hasBackPack;
+            res.geometryBehind = geometryBehind;
+            res.isBehind = isBehind;
+
+            Feed::FeedContext ctx;
+            ctx.player = player;
+            ctx.target = target;
+            ctx.isCombat = playerInCombat;
+            ctx.isSneaking = player->IsSneaking();
+            ctx.isHungry = isHungry;
+            ctx.targetIsStanding = true;
+            ctx.isBehind = isBehind;
+            ctx.isLethal = false;
+            ctx.furniture = Feed::Furniture::None;
+            ctx.playerOnLeft = playerOnLeft;
+            standingPack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(ctx);
+        }
+
+        // Furniture pack wins over standing when both somehow resolve (precedence preserved).
+        res.pack = furniturePack ? furniturePack : standingPack;
+        return res;
     }
 
     bool Play(RE::Actor* target, const Feed::CompositePack& pack) {
