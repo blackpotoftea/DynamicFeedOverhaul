@@ -158,6 +158,7 @@ public:
         float GulpPercentMin{ 7.0f };           // Min HP drained per gulp (% of max)
         float GulpPercentMax{ 16.0f };          // Max HP drained per gulp (% of max)
         float GulpLethalThreshold{ 0.05f };     // Victim HP fraction (0-1) at/below which Loop -> Kill (drained dry)
+        float GulpProtectedFloor{ 0.15f };      // HP fraction (0-1) floor for essential/protected victims (ExcludeEssentialFromLethal): never drained below this, never killed
     } HealthDrain;
 
     // Integration settings

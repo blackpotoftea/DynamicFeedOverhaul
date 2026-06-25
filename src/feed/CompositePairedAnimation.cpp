@@ -1,5 +1,6 @@
 #include "feed/CompositePairedAnimation.h"
 #include "feed/FeedAnimState.h"
+#include "feed/TargetState.h"
 #include "Settings.h"
 #include "PCH.h"
 #include "utils/AnimUtil.h"
@@ -55,6 +56,8 @@ namespace CompositePairedAnimation {
         float drainedDuration_ = 0.0f;      // random length rolled for this feed's Drained stage
         bool playerOnly_ = false;           // furniture feed: only the player is animated; the
                                             // victim is left untouched in its bed/bedroll
+        bool protectedFromKill_ = false;    // essential/protected victim (ExcludeEssentialFromLethal):
+                                            // the drain floors above the kill band and never kills
     }
 
     bool IsActive() { return stage_ != Stage::Idle && stage_ != Stage::Done; }
@@ -136,10 +139,11 @@ namespace CompositePairedAnimation {
             {
                 std::string lbl = std::string("FireStageClips:") + stageName + ":pre-lock";
                 LogTargetPos(lbl.c_str());
-                SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} lock-dest=({:.1f}, {:.1f}, {:.1f})",
+                SKSE::log::trace("[CompositePairedAnimation] [POS] {:<22} lock-dest=({:.1f}, {:.1f}, {:.1f})",
                     std::string("FireStageClips:") + stageName, pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z);
             }
 
+            // TODO cleanup lock position not needed
             // AnimUtil::LockAtPosition(player, lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z, lockedPlayerYaw_, false);
             // AnimUtil::LockAtPosition(target, pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z, targetYaw, false);
 
@@ -220,7 +224,7 @@ namespace CompositePairedAnimation {
                 if (!playerOnly_) {
                     if (auto* t = target->As<RE::Actor>()) {
                         const auto p = t->GetPosition();
-                        SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) -> SetPos releaseSpot=({:.1f}, {:.1f}, {:.1f})",
+                        SKSE::log::trace("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) -> SetPos releaseSpot=({:.1f}, {:.1f}, {:.1f})",
                             "Teardown:pre-SetPos", p.x, p.y, p.z, releaseTargetPos_.x, releaseTargetPos_.y, releaseTargetPos_.z);
                     }
                     ReleaseLock(target.get());
@@ -242,7 +246,7 @@ namespace CompositePairedAnimation {
                         auto r = h.get();
                         if (auto* a = r ? r->As<RE::Actor>() : nullptr) {
                             const auto p = a->GetPosition();
-                            SKSE::log::info("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) (deferred, post-teardown)",
+                            SKSE::log::trace("[CompositePairedAnimation] [POS] {:<22} target=({:.1f}, {:.1f}, {:.1f}) (deferred, post-teardown)",
                                 "Teardown:post-SetPos", p.x, p.y, p.z);
                         }
                     });
@@ -330,6 +334,9 @@ namespace CompositePairedAnimation {
         posLogTimer_ = 0.0f;
         playerReleased_ = false;
         playerOnly_ = pack.playerOnly;
+        // Essential/protected victims are never drained to death when the setting is on.
+        protectedFromKill_ = settings->NonCombat.ExcludeEssentialFromLethal &&
+                             TargetState::IsEssentialOrProtected(target);
 
         SKSE::log::info("[CompositePairedAnimation] Starting staged feed on {} (FormID: {:X}), pack '{}' (playerOnly={})",
             target->GetName(), target->GetFormID(), pack.name, playerOnly_);
@@ -394,7 +401,7 @@ namespace CompositePairedAnimation {
             lockedPlayerPos_.z + offZ
         };
 
-        SKSE::log::info("[CompositePairedAnimation] [POS] anchors | player=({:.1f}, {:.1f}, {:.1f}) "
+        SKSE::log::trace("[CompositePairedAnimation] [POS] anchors | player=({:.1f}, {:.1f}, {:.1f}) "
             "embraceAnchor=({:.1f}, {:.1f}, {:.1f}) releaseSpot=({:.1f}, {:.1f}, {:.1f}) offset=({:.1f},{:.1f},{:.1f})",
             lockedPlayerPos_.x, lockedPlayerPos_.y, lockedPlayerPos_.z,
             pendingTargetPos_.x, pendingTargetPos_.y, pendingTargetPos_.z,
@@ -531,8 +538,14 @@ namespace CompositePairedAnimation {
             bool drainedDry = false;
             if (auto* av = target->AsActorValueOwner()) {
                 const float max = av->GetPermanentActorValue(RE::ActorValue::kHealth);
-                const float thr = std::clamp(settings->HealthDrain.GulpLethalThreshold, 0.0f, 1.0f);
-                const float floorHP = max * thr;
+                const float killThr = std::clamp(settings->HealthDrain.GulpLethalThreshold, 0.0f, 1.0f);
+                const float killFloorHP = max * killThr;
+                // Essential/protected victims (when ExcludeEssentialFromLethal is on) are
+                // never drained to death: raise the gulp floor above the kill band so the
+                // feed can continue but the victim always survives (it ends only on Stop).
+                const float floorHP = protectedFromKill_
+                    ? max * std::max(killThr, std::clamp(settings->HealthDrain.GulpProtectedFloor, 0.0f, 1.0f))
+                    : killFloorHP;
 
                 gulpTimer_ -= delta;
                 if (gulpTimer_ <= 0.0f && max > 0.0f) {
@@ -551,7 +564,9 @@ namespace CompositePairedAnimation {
                         dmg, pct, gulpTimer_);
                 }
 
-                if (max > 0.0f && av->GetActorValue(RE::ActorValue::kHealth) <= floorHP + 0.5f) {
+                // Only a non-protected victim can be drained dry (and thus killed).
+                if (!protectedFromKill_ && max > 0.0f &&
+                    av->GetActorValue(RE::ActorValue::kHealth) <= killFloorHP + 0.5f) {
                     drainedDry = true;
                 }
             }

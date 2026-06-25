@@ -104,11 +104,28 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
             });
         }
         else {
-            // Non-combat
+            // Non-combat. If this feed will run as a composite (staged drain-toggle)
+            // animation, the kill is governed by how long the player feeds, not by a
+            // hold-to-kill choice — so show a plain single-press "Feed" and let the
+            // composite own lethality. Only the legacy fallback path uses the
+            // EnableLethalFeed hold-to-kill prompt.
+            int ts = 0;
+            bool gb = false, ib = false, furn = false;
+            bool willUseComposite = player &&
+                ResolveCompositePack(player, target, ts, gb, ib, furn) != nullptr;
+
             bool canLethal = settings->NonCombat.EnableLethalFeed &&
                             !(settings->NonCombat.ExcludeEssentialFromLethal && isEssential);
 
-            if (canLethal) {
+            if (willUseComposite) {
+                prompts.push_back({
+                    .text = "Feed",
+                    .type = SkyPromptAPI::PromptType::kSinglePress,
+                    .color = 0xFFFFFFFF,
+                    .priority = 1000,
+                    .onAccept = nullptr  // composite controls lethality via the drain toggle
+                });
+            } else if (canLethal) {
                 prompts.push_back({
                     .text = "Feed (Hold to Kill)",
                     .type = SkyPromptAPI::PromptType::kHold,
@@ -256,6 +273,88 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
 
 
 
+// Single source of truth for the composite-vs-legacy decision. Both the prompt
+// callback (to choose "Feed" vs "Feed (Hold to Kill)") and HandleFeedAccepted (to
+// pick the actual feed path) call this, so they can never drift. Read-only — only
+// reads actor/world/registry/settings state; all mutation stays in HandleFeedAccepted.
+const Feed::CompositePack* PairedAnimPromptSink::ResolveCompositePack(
+    RE::Actor* player, RE::Actor* target,
+    int& outTargetState, bool& outGeometryBehind,
+    bool& outIsBehind, bool& outIsFurnitureFeed) {
+    outTargetState = Feed::kStanding;
+    outGeometryBehind = false;
+    outIsBehind = false;
+    outIsFurnitureFeed = false;
+    if (!player || !target) return nullptr;
+
+    auto* settings = Settings::GetSingleton();
+
+    bool isInCombat = false;  // target's combat state (only the resolved state is used here)
+    const int targetState = AnimUtil::DetermineTargetState(target, isInCombat);
+    outTargetState = targetState;
+
+    const bool playerInCombat = player->IsInCombat();
+    const int vampireStage = PapyrusCall::GetVampireStage();
+
+    // Furniture context: a target sleeping in a bed/bedroll can use a player-only
+    // composite pack (the player plays a side-of-bed clip; the victim stays put).
+    auto furnitureRef = TargetState::GetFurnitureReference(target);
+    Feed::Furniture furnKind = Feed::Furniture::None;
+    bool playerOnLeft = false;
+    if (targetState == Feed::kSleeping && furnitureRef) {
+        furnKind = PairedAnimation::IsBedroll(furnitureRef.get()) ? Feed::Furniture::Bedroll
+                                                                  : Feed::Furniture::Bed;
+        playerOnLeft = PairedAnimation::IsPlayerOnLeftSide(target);
+    }
+    const bool isFurnitureFeed = (furnKind != Feed::Furniture::None);
+    outIsFurnitureFeed = isFurnitureFeed;
+    const bool isHungry = (vampireStage >= settings->Animation.HungryThreshold);
+
+    // For a furniture feed, only take the composite path when a matching player-only
+    // bed/bedroll pack is actually loaded; otherwise fall through to the legacy solo
+    // bed/bedroll idle. A standing feed likewise needs a matching *_DFO.json pack.
+    const Feed::CompositePack* furniturePack = nullptr;
+    if (settings->NonCombat.UseCompositeFurnitureAnimation && isFurnitureFeed) {
+        Feed::FeedContext fctx;
+        fctx.player = player;
+        fctx.target = target;
+        fctx.isHungry = isHungry;
+        fctx.isBehind = false;
+        fctx.furniture = furnKind;
+        fctx.playerOnLeft = playerOnLeft;
+        furniturePack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(fctx);
+    }
+
+    // Standing composite: front/back is only meaningful for an upright feed, and the
+    // geometry is needed both to pick the pack and, later, to correct the victim's
+    // facing. Only honor "behind" when a Back pack is loaded, else a rear approach
+    // would rotate the victim to face away with no matching clip.
+    const Feed::CompositePack* standingPack = nullptr;
+    if (settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding && !isFurnitureFeed) {
+        const bool geometryBehind = AnimUtil::GetClosestDirection(target, player);
+        const bool hasBackPack = Feed::AnimationRegistry::GetSingleton()->HasCompositeBackPack();
+        const bool isBehind = geometryBehind && hasBackPack;
+        outGeometryBehind = geometryBehind;
+        outIsBehind = isBehind;
+
+        Feed::FeedContext ctx;
+        ctx.player = player;
+        ctx.target = target;
+        ctx.isCombat = playerInCombat;
+        ctx.isSneaking = player->IsSneaking();
+        ctx.isHungry = isHungry;
+        ctx.targetIsStanding = true;
+        ctx.isBehind = isBehind;
+        ctx.isLethal = false;
+        ctx.furniture = Feed::Furniture::None;
+        ctx.playerOnLeft = playerOnLeft;
+        standingPack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(ctx);
+    }
+
+    // Furniture pack wins over standing when both somehow resolve (precedence preserved).
+    return furniturePack ? furniturePack : standingPack;
+}
+
 // We have 2 animation systems Vannila Idle and OAR which we set via GraphVariable
 // We need both select idle -> set correct graph variable to match OAR animations
 void PairedAnimPromptSink::HandleFeedAccepted() {
@@ -264,6 +363,13 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
     // Safe to use raw pointer now - NiPointer keeps it alive for entire function scope
     RE::Actor* feedTarget = feedTargetPtr.get();
+
+    // One-shot snapshot of the lethal-hold flag, cleared immediately so a stale
+    // `true` can't leak into a later feed. Only the legacy path consults it; the
+    // composite path returns early (and never reset it before), and the non-lethal
+    // "Feed" prompt's onAccept doesn't reset it either.
+    const bool wantLethal = isLethalFeedInProgress_;
+    isLethalFeedInProgress_ = false;
 
     auto* settings = Settings::GetSingleton();
 
@@ -293,75 +399,26 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     }
 
     bool isInCombat = false;  // Target's combat state
-    int targetState = AnimUtil::DetermineTargetState(feedTarget, isInCombat);
+    AnimUtil::DetermineTargetState(feedTarget, isInCombat);  // sets isInCombat; targetState comes from the resolver
 
     // Player's combat state forces lethal feed
     bool playerInCombat = player->IsInCombat();
-    SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
-
     int vampireStage = PapyrusCall::GetVampireStage();
 
-    // Furniture context: a target sleeping in a bed/bedroll can use a player-only
-    // composite pack (the player plays a side-of-bed clip; the victim stays put).
-    Feed::Furniture furnKind = Feed::Furniture::None;
-    bool playerOnLeft = false;
-    if (targetState == Feed::kSleeping && furnitureRef) {
-        furnKind = PairedAnimation::IsBedroll(furnitureRef.get()) ? Feed::Furniture::Bedroll
-                                                                  : Feed::Furniture::Bed;
-        playerOnLeft = PairedAnimation::IsPlayerOnLeftSide(feedTarget);
-    }
-    const bool isFurnitureFeed = (furnKind != Feed::Furniture::None);
-    const bool isHungry = (vampireStage >= settings->Animation.HungryThreshold);
-
-    // For a furniture feed, only take the composite path when a matching player-only
-    // bed/bedroll pack is actually loaded; otherwise fall through to the legacy solo
-    // bed/bedroll idle below. A standing feed likewise needs a matching *_DFO.json
-    // pack — with none loaded it falls through to the legacy single-actor idle.
-    const Feed::CompositePack* furniturePack = nullptr;
-    if (settings->NonCombat.UseCompositeFurnitureAnimation && isFurnitureFeed) {
-        Feed::FeedContext fctx;
-        fctx.player = player;
-        fctx.target = feedTarget;
-        fctx.isHungry = isHungry;
-        fctx.isBehind = false;
-        fctx.furniture = furnKind;
-        fctx.playerOnLeft = playerOnLeft;
-        furniturePack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(fctx);
-    }
-
-    // Standing composite: resolve a staged pack up-front (mirrors furniturePack).
-    // Front/back is only meaningful for an upright feed, and the geometry is needed
-    // both to pick the pack and, later, to correct the victim's facing. Only honor
-    // "behind" when a Back pack is loaded, else a rear approach would rotate the
-    // victim to face away with no matching clip. Standing clips come from the
-    // *_DFO.json packs — there is no INI-configured fallback anymore.
+    // Resolve the composite pack (and the geometry/furniture context it implies)
+    // through the SAME helper the prompt callback uses, so the prompt label and the
+    // actual feed path can never disagree on whether this is a composite feed. With
+    // no matching pack the resolver returns nullptr and we fall through to the legacy
+    // single-actor path below.
+    int targetState = Feed::kStanding;
     bool geometryBehind = false;
     bool isBehind = false;
-    const Feed::CompositePack* standingPack = nullptr;
-    if (settings->NonCombat.UseCompositePairedAnimation && targetState == Feed::kStanding && !isFurnitureFeed) {
-        geometryBehind = AnimUtil::GetClosestDirection(feedTarget, player);
-        const bool hasBackPack = Feed::AnimationRegistry::GetSingleton()->HasCompositeBackPack();
-        isBehind = geometryBehind && hasBackPack;
-
-        Feed::FeedContext ctx;
-        ctx.player = player;
-        ctx.target = feedTarget;
-        ctx.isCombat = playerInCombat;
-        ctx.isSneaking = player->IsSneaking();
-        ctx.isHungry = isHungry;
-        ctx.targetIsStanding = true;
-        ctx.isBehind = isBehind;
-        ctx.isLethal = false;
-        ctx.furniture = Feed::Furniture::None;
-        ctx.playerOnLeft = playerOnLeft;
-        standingPack = Feed::AnimationRegistry::GetSingleton()->GetBestCompositeMatch(ctx);
-    }
-
-    // Take the composite path only when an actual pack is available (furniture for a
-    // bed/bedroll victim, standing for an upright one). With no matching pack we fall
-    // through to the legacy single-actor path below.
-    const Feed::CompositePack* compositePack = furniturePack ? furniturePack : standingPack;
+    bool isFurnitureFeed = false;
+    const Feed::CompositePack* compositePack = ResolveCompositePack(
+        player, feedTarget, targetState, geometryBehind, isBehind, isFurnitureFeed);
     const bool useComposite = (compositePack != nullptr);
+
+    SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
 
     if (useComposite) {
         // Composite path: two single-actor animations played in sync, with the
@@ -393,8 +450,8 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
 
         Feed::CompositePack pack = *compositePack;
         if (isFurnitureFeed) {
-            SKSE::log::info("[HandleFeedAccepted] Furniture composite pack '{}' selected (furniture={}, playerOnLeft={}, playerOnly={})",
-                pack.name, static_cast<int>(furnKind), playerOnLeft, pack.playerOnly);
+            SKSE::log::info("[HandleFeedAccepted] Furniture composite pack '{}' selected (furniture={}, dir={}, playerOnly={})",
+                pack.name, static_cast<int>(pack.furniture), static_cast<int>(pack.direction), pack.playerOnly);
         } else {
             SKSE::log::info("[HandleFeedAccepted] Standing composite pack '{}' selected (isBehind={}, geometryBehind={})",
                 pack.name, isBehind, geometryBehind);
@@ -428,7 +485,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         context.isHungry = (vampireStage >= settings->Animation.HungryThreshold);
         context.targetIsStanding = (targetState == Feed::kStanding);
         context.isBehind = isBehind;
-        context.isLethal = isLethalFeedInProgress_ || playerInCombat;  // User choice OR forced by player combat
+        context.isLethal = wantLethal || playerInCombat;  // User choice OR forced by player combat
 
         const Feed::AnimationDefinition* anim = nullptr;
 
@@ -449,7 +506,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         }
 
         // Override with user's choice if they held button for lethal feed
-        if (isLethalFeedInProgress_) {
+        if (wantLethal) {
             isLethal = true;
             SKSE::log::info("Lethal feed triggered by hold duration");
         }
@@ -493,8 +550,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
         FeedAnimState::SetFeedHasOAR(hasOARAnimation);
 
         PairedAnimation::ExecuteFeed(idleEditorID, feedTarget, isPairedAnim, isLethal, hasOARAnimation);
-        // Reset lethal flag after use (embrace flag reset by integration)
-        isLethalFeedInProgress_ = false;
+        // (lethal flag already cleared at the top of HandleFeedAccepted)
     }
 }
 

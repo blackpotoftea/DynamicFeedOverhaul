@@ -199,6 +199,7 @@ void Settings::LoadINI() {
     HealthDrain.GulpPercentMin = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpPercentMin", HealthDrain.GulpPercentMin));
     HealthDrain.GulpPercentMax = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpPercentMax", HealthDrain.GulpPercentMax));
     HealthDrain.GulpLethalThreshold = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpLethalThreshold", HealthDrain.GulpLethalThreshold));
+    HealthDrain.GulpProtectedFloor = static_cast<float>(ini.GetDoubleValue("HealthDrain", "GulpProtectedFloor", HealthDrain.GulpProtectedFloor));
 
     // Integration
     Integration.EnableSacrosanct = ini.GetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct);
@@ -465,6 +466,8 @@ void Settings::SaveINI() {
         "; Composite feed: maximum HP drained per gulp (% of victim max health)");
     ini.SetDoubleValue("HealthDrain", "GulpLethalThreshold", HealthDrain.GulpLethalThreshold,
         "; Composite feed: victim HP fraction (0-1) at/below which the feeding loop drains dry and kills");
+    ini.SetDoubleValue("HealthDrain", "GulpProtectedFloor", HealthDrain.GulpProtectedFloor,
+        "; Composite feed: HP fraction (0-1) floor for essential/protected victims when ExcludeEssentialFromLethal is on - they drain to this floor but are never killed");
 
     // Integration
     ini.SetBoolValue("Integration", "EnableSacrosanct", Integration.EnableSacrosanct,

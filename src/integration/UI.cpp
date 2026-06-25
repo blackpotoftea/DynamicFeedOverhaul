@@ -478,6 +478,8 @@ void __stdcall UI::Settings::Render() {
         ImGuiMCP::SetItemTooltip("HP drained per gulp as a percent of the victim's max health");
         changed |= ImGuiMCP::SliderFloat("Gulp Lethal Threshold", &settings->HealthDrain.GulpLethalThreshold, 0.0f, 0.5f, "%.2f");
         ImGuiMCP::SetItemTooltip("Victim HP fraction at/below which the feeding loop drains dry and kills");
+        changed |= ImGuiMCP::SliderFloat("Gulp Protected Floor", &settings->HealthDrain.GulpProtectedFloor, 0.0f, 0.5f, "%.2f");
+        ImGuiMCP::SetItemTooltip("HP fraction floor for essential/protected victims (Exclude Essential From Lethal): drained to here but never killed");
     }
 
     // Integration Settings
