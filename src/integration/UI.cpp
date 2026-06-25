@@ -4,6 +4,7 @@
 #include "../papyrus/PapyrusCall.h"
 #include "../utils/log.h"
 #include "../utils/AnimUtil.h"
+#include "../utils/SoundUtil.h"
 #include "VampireIntegrationUtils.h"
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -133,18 +134,18 @@ void __stdcall UI::Settings::Render() {
     // General Settings
     if (ImGuiMCP::CollapsingHeader("General")) {
         changed |= ImGuiMCP::Checkbox("Enable Mod", &settings->General.EnableMod);
-        if (ImGuiMCP::Checkbox("Debug Logging", &settings->General.DebugLogging)) {
-            changed = true;
-            // Apply log level immediately when this toggle changes
-            if (settings->General.DebugLogging) {
-                spdlog::set_level(spdlog::level::trace);
-                spdlog::flush_on(spdlog::level::trace);
-            } else {
-                spdlog::set_level(spdlog::level::info);
-                spdlog::flush_on(spdlog::level::info);
-            }
+        // Log level dropdown (maps to spdlog verbosity, applied immediately)
+        static const char* logLevels[] = {"trace", "debug", "info", "warn", "error"};
+        int logLevelIdx = 2;  // default: info
+        for (int i = 0; i < 5; ++i) {
+            if (settings->General.LogLevel == logLevels[i]) { logLevelIdx = i; break; }
         }
-        ImGuiMCP::SetItemTooltip("Enable verbose trace logging");
+        if (ImGuiMCP::Combo("Log Level", &logLevelIdx, logLevels, 5)) {
+            settings->General.LogLevel = logLevels[logLevelIdx];
+            ApplyLogLevel(ParseLogLevel(settings->General.LogLevel));
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("Log verbosity. 'trace' is the most detailed, 'error' the least.");
         if (ImGuiMCP::Button("Clear Log")) {
             ClearLog();
         }
@@ -409,6 +410,24 @@ void __stdcall UI::Settings::Render() {
 
     // Sound Settings
     if (ImGuiMCP::CollapsingHeader("Sound")) {
+        // Default vampire feed sound (used across the mod: composite anim + integrations)
+        static char feedSoundBuf[256] = "";
+        static bool feedSoundInitialized = false;
+        if (!feedSoundInitialized) {
+            strncpy(feedSoundBuf, settings->Animation.FeedSoundForm.c_str(), sizeof(feedSoundBuf) - 1);
+            feedSoundInitialized = true;
+        }
+        if (ImGuiMCP::InputText("Feed Sound Form", feedSoundBuf, sizeof(feedSoundBuf))) {
+            settings->Animation.FeedSoundForm = feedSoundBuf;
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("Default vampire feed sound played during feeds (composite animation + Sacrosanct/Sacrilege integrations). Format: PluginName|0xFormID. Empty = disabled. Default: Skyrim.esm|0x0FF984 (NPCHumanVampireFeed).");
+        if (ImGuiMCP::Button("Test Feed Sound")) {
+            SoundUtil::PlayFeedSoundTest();
+        }
+        ImGuiMCP::SetItemTooltip("Play the currently configured feed sound once at the player (preview).");
+
+        ImGuiMCP::Separator();
         static char failureSoundBuf[256] = "";
         static bool failureSoundInitialized = false;
         if (!failureSoundInitialized) {

@@ -14,7 +14,7 @@ public:
     // General settings
     struct {
         bool EnableMod{ true };
-        bool DebugLogging{ false };
+        std::string LogLevel{ "info" };  // Log verbosity: trace, debug, info, warn, error
         bool EnableWerewolf{ false };     // Enable for Werewolf form
         bool EnableVampireLord{ true };  // Enable for Vampire Lord form
         bool ForceVampire{ false };  // Debug: skip vampire check
@@ -66,7 +66,7 @@ public:
         float TargetOffsetX{ 0.0f };   // Target X offset from player (local coords)
         float TargetOffsetY{ 25.0f };  // Target Y offset (positive = in front). ~20-30 matches Anub2P / OStim "standing apart" choreography.
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)
-        bool EnableLethalFeed{ false };      // Enable hold-to-kill feature for non-combat targets
+        bool EnableLethalFeed{ true };      // Enable hold-to-kill feature for non-combat targets
         float LethalHoldDuration{ 5.0f };    // Seconds to hold button for lethal feed
         bool ExcludeEssentialFromLethal{ true };  // Don't show kill prompt for Essential actors
         bool EnableRotation{ true };         // Rotate player/target to face each other before feed
@@ -136,6 +136,7 @@ public:
         int HungryThreshold{ 3 };               // Hunger stage >= this uses hungry animations (1-4)
         bool EnableTimeSlowdown{ true };        // Enable time slowdown when paired feed starts
         float TimeSlowdownMultiplier{ 0.6f };   // Time multiplier during feed (0.4 = 40% speed)
+        std::string FeedSoundForm{ "Skyrim.esm|0x0FF984" };    // Default vampire feed sound played during feeds (composite animation + integrations). Format: PluginName|0xFormID. Empty = disabled. Default: NPCHumanVampireFeed.
         std::string FailureSoundForm{ "Skyrim.esm|0x3C73C" };   // Sound played at player on PlayIdle failure. Format: PluginName|0xFormID. Empty = disabled. Default: WPNBlockBlade1HandVsOtherSD (sword-parry clang).
     } Animation;
 

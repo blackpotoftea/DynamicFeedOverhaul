@@ -1,5 +1,6 @@
 #include "PCH.h"
 #include "Settings.h"
+#include "utils/log.h"
 #include <sstream>
 
 // Helper to parse comma-separated string into vector
@@ -77,18 +78,12 @@ void Settings::LoadINI() {
 
     // General
     General.EnableMod = ini.GetBoolValue("General", "EnableMod", General.EnableMod);
-    General.DebugLogging = ini.GetBoolValue("General", "DebugLogging", General.DebugLogging);
+    General.LogLevel = ini.GetValue("General", "LogLevel", General.LogLevel.c_str());
     General.EnableWerewolf = ini.GetBoolValue("General", "EnableWerewolf", General.EnableWerewolf);
     General.EnableVampireLord = ini.GetBoolValue("General", "EnableVampireLord", General.EnableVampireLord);
 
-    // Update log level based on INI setting
-    if (General.DebugLogging) {
-        spdlog::set_level(spdlog::level::trace);
-        spdlog::flush_on(spdlog::level::trace);
-    } else {
-        spdlog::set_level(spdlog::level::info);
-        spdlog::flush_on(spdlog::level::info);
-    }
+    // Apply the configured log verbosity
+    ApplyLogLevel(ParseLogLevel(General.LogLevel));
 
     General.ForceVampire = ini.GetBoolValue("General", "ForceVampire", General.ForceVampire);
     General.CheckHungerStage = ini.GetBoolValue("General", "CheckHungerStage", General.CheckHungerStage);
@@ -187,6 +182,7 @@ void Settings::LoadINI() {
     Animation.HungryThreshold = static_cast<int>(ini.GetLongValue("Animation", "HungryThreshold", Animation.HungryThreshold));
     Animation.EnableTimeSlowdown = ini.GetBoolValue("Animation", "EnableTimeSlowdown", Animation.EnableTimeSlowdown);
     Animation.TimeSlowdownMultiplier = static_cast<float>(ini.GetDoubleValue("Animation", "TimeSlowdownMultiplier", Animation.TimeSlowdownMultiplier));
+    Animation.FeedSoundForm = ini.GetValue("Animation", "FeedSoundForm", Animation.FeedSoundForm.c_str());
     Animation.FailureSoundForm = ini.GetValue("Animation", "FailureSoundForm", Animation.FailureSoundForm.c_str());
 
     // HealthDrain
@@ -216,8 +212,8 @@ void Settings::LoadINI() {
     Integration.EnableVampireFeedProxy = ini.GetBoolValue("Integration", "EnableVampireFeedProxy", Integration.EnableVampireFeedProxy);
 
     SKSE::log::info("Settings loaded:");
-    SKSE::log::info("  [General] EnableMod={}, DebugLogging={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
-        General.EnableMod, General.DebugLogging, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
+    SKSE::log::info("  [General] EnableMod={}, LogLevel={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
+        General.EnableMod, General.LogLevel, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
         General.CheckHungerStage, General.MinHungerStage, General.ForceFeedType, General.DebugAnimationCycle, General.AnimationTimeout, General.PeriodicCheckInterval, General.PromptDelayIdleSeconds);
     SKSE::log::info("  [Input] FeedKey=0x{:X}, FeedGamepadKey=0x{:X}, SecondaryKey=0x{:X}, SecondaryGamepadKey=0x{:X}",
         Input.FeedKey, Input.FeedGamepadKey, Input.SecondaryKey, Input.SecondaryGamepadKey);
@@ -236,9 +232,9 @@ void Settings::LoadINI() {
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
-    SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}, FailureSoundForm='{}'",
+    SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}, FeedSoundForm='{}', FailureSoundForm='{}'",
         Animation.EnableRandomSelection, Animation.HungryThreshold, Animation.EnableTimeSlowdown, Animation.TimeSlowdownMultiplier,
-        Animation.FailureSoundForm);
+        Animation.FeedSoundForm, Animation.FailureSoundForm);
     SKSE::log::info("  [HealthDrain] Enable={}, FloorTargetAtOneHP={}, OnNPC={}, LethalMin={}, LethalMax={}, Escalation={}, NonLethal={}, Cap={}",
         HealthDrain.Enable, HealthDrain.FloorTargetAtOneHP, HealthDrain.DrainOnNPC,
         HealthDrain.LethalChunkMinPercent, HealthDrain.LethalChunkMaxPercent,
@@ -255,8 +251,8 @@ void Settings::SaveINI() {
     // General
     ini.SetBoolValue("General", "EnableMod", General.EnableMod,
         "; Enable or disable the entire mod");
-    ini.SetBoolValue("General", "DebugLogging", General.DebugLogging,
-        "; Enable detailed debug logging");
+    ini.SetValue("General", "LogLevel", General.LogLevel.c_str(),
+        "; Log verbosity: trace, debug, info, warn, error");
     ini.SetBoolValue("General", "EnableWerewolf", General.EnableWerewolf,
         "; Enable for Werewolf form (EXPERIMENTAL: May be buggy and needs more work)");
     ini.SetBoolValue("General", "EnableVampireLord", General.EnableVampireLord,
@@ -437,6 +433,8 @@ void Settings::SaveINI() {
         "; Enable time slowdown effect when paired feed animation starts");
     ini.SetDoubleValue("Animation", "TimeSlowdownMultiplier", Animation.TimeSlowdownMultiplier,
         "; Time multiplier during feed (0.4 = 40% speed, 1.0 = normal speed)");
+    ini.SetValue("Animation", "FeedSoundForm", Animation.FeedSoundForm.c_str(),
+        "; Default vampire feed sound played during feeds (composite animation + Sacrosanct/Sacrilege integrations). Format: PluginName|0xFormID. Empty = disabled. Default: NPCHumanVampireFeed (Skyrim.esm|0x0FF984).");
     ini.SetValue("Animation", "FailureSoundForm", Animation.FailureSoundForm.c_str(),
         "; Sound played at player when feed animation fails to start (after all retries). Format: PluginName|0xFormID. Empty = disabled. Default: WPNBlockBlade1HandVsOtherSD (Skyrim.esm|0x3C73C).");
 
