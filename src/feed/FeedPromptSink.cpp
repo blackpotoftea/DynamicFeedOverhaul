@@ -1,5 +1,5 @@
 #include "PCH.h"
-#include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedPromptSink.h"
 #include "feed/AnimEventSink.h"
 #include "Settings.h"
 #include "feed/TargetState.h"
@@ -69,19 +69,19 @@ namespace {
     }
 }
 
-// PairedAnimPromptSink Implementation
+// FeedPromptSink Implementation
 
-PairedAnimPromptSink* PairedAnimPromptSink::GetSingleton() {
-    static PairedAnimPromptSink singleton;
+FeedPromptSink* FeedPromptSink::GetSingleton() {
+    static FeedPromptSink singleton;
     return &singleton;
 }
 
-PairedAnimPromptSink::PairedAnimPromptSink() {
+FeedPromptSink::FeedPromptSink() {
     UpdateFeedButtons();
     RegisterCorePromptCallback();
 }
 
-void PairedAnimPromptSink::RegisterCorePromptCallback() {
+void FeedPromptSink::RegisterCorePromptCallback() {
     RegisterPromptCallback([](RE::Actor* target) -> std::vector<PromptDef> {
         std::vector<PromptDef> prompts;
         if (!target) return prompts;
@@ -93,7 +93,7 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
         // PairedAnimation::ExecuteFeed path retains its original behavior
         // (prompt hidden, no toggle).
         if (CompositePairedAnimation::IsActive()) {
-            auto activeFeed = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget();
+            auto activeFeed = FeedPromptSink::GetSingleton()->GetActiveFeedTarget();
             if (activeFeed && activeFeed.get() == target) {
                 prompts.push_back({
                     .text = "Stop Feed",
@@ -146,7 +146,7 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
                 .priority = 1000,
                 .onAccept = [](RE::Actor*, bool) {
                     // Combat feed is always lethal
-                    PairedAnimPromptSink::GetSingleton()->isLethalFeedInProgress_ = true;
+                    FeedPromptSink::GetSingleton()->isLethalFeedInProgress_ = true;
                 }
             });
         }
@@ -179,7 +179,7 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
                     .priority = 1000,
                     .onAccept = [](RE::Actor*, bool holdComplete) {
                         // Only set state - ProcessEvent calls HandleFeedAccepted
-                        PairedAnimPromptSink::GetSingleton()->isLethalFeedInProgress_ = holdComplete;
+                        FeedPromptSink::GetSingleton()->isLethalFeedInProgress_ = holdComplete;
                     }
                 });
             } else {
@@ -197,7 +197,7 @@ void PairedAnimPromptSink::RegisterCorePromptCallback() {
     });
 }
 
-void PairedAnimPromptSink::UpdateFeedButtons() {
+void FeedPromptSink::UpdateFeedButtons() {
     auto* settings = Settings::GetSingleton();
 
     // Primary button bindings
@@ -220,16 +220,16 @@ void PairedAnimPromptSink::UpdateFeedButtons() {
     }
 }
 
-void PairedAnimPromptSink::RegisterPromptCallback(PromptCallback callback) {
+void FeedPromptSink::RegisterPromptCallback(PromptCallback callback) {
     promptCallbacks_.push_back(std::move(callback));
     SKSE::log::info("Registered prompt callback (total: {})", promptCallbacks_.size());
 }
 
-std::span<const SkyPromptAPI::Prompt> PairedAnimPromptSink::GetPrompts() const {
+std::span<const SkyPromptAPI::Prompt> FeedPromptSink::GetPrompts() const {
     return prompts_;
 }
 
-void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
+void FeedPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
     SKSE::log::info("ProcessEvent - eventType: {}, promptType: {}, actionID: {}, text: '{}'",
         static_cast<int>(event.type),
         static_cast<int>(event.prompt.type),
@@ -320,7 +320,7 @@ void PairedAnimPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
 
 // We have 2 animation systems Vannila Idle and OAR which we set via GraphVariable
 // We need both select idle -> set correct graph variable to match OAR animations
-void PairedAnimPromptSink::HandleFeedAccepted() {
+void FeedPromptSink::HandleFeedAccepted() {
     auto feedTargetPtr = GetTarget();
     if (!feedTargetPtr) return;
 
@@ -499,7 +499,7 @@ void PairedAnimPromptSink::HandleFeedAccepted() {
     }
 }
 
-void PairedAnimPromptSink::HandleTimingOut() {
+void FeedPromptSink::HandleTimingOut() {
     if (!GetTarget() || g_clientID.load(std::memory_order_acquire) == 0) return;
 
     auto* player = RE::PlayerCharacter::GetSingleton();
@@ -523,18 +523,18 @@ void PairedAnimPromptSink::HandleTimingOut() {
 }
 
 // Thread-safe wrapper methods for currentTargetHandle_
-void PairedAnimPromptSink::SetTargetHandle(const RE::ObjectRefHandle& handle) {
+void FeedPromptSink::SetTargetHandle(const RE::ObjectRefHandle& handle) {
     std::lock_guard<std::mutex> lock(targetMutex_);
     currentTargetHandle_ = handle;
 }
 
-RE::ObjectRefHandle PairedAnimPromptSink::GetTargetHandle() const {
+RE::ObjectRefHandle FeedPromptSink::GetTargetHandle() const {
     std::lock_guard<std::mutex> lock(targetMutex_);
     return currentTargetHandle_;
 }
 
 // Thread-safe wrapper methods for activeFeedTargetHandle_
-void PairedAnimPromptSink::SetActiveFeedTarget(RE::Actor* target) {
+void FeedPromptSink::SetActiveFeedTarget(RE::Actor* target) {
     std::lock_guard<std::mutex> lock(targetMutex_);
     if (target) {
         activeFeedTargetHandle_ = target->GetHandle();
@@ -543,12 +543,12 @@ void PairedAnimPromptSink::SetActiveFeedTarget(RE::Actor* target) {
     }
 }
 
-RE::NiPointer<RE::Actor> PairedAnimPromptSink::GetActiveFeedTarget() const {
+RE::NiPointer<RE::Actor> FeedPromptSink::GetActiveFeedTarget() const {
     std::lock_guard<std::mutex> lock(targetMutex_);
     return ActorFromHandle(activeFeedTargetHandle_);
 }
 
-void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
+void FeedPromptSink::SetTarget(RE::Actor* target) {
     // Store new target as handle
     if (target) {
         SetTargetHandle(target->GetHandle());
@@ -605,12 +605,12 @@ void PairedAnimPromptSink::SetTarget(RE::Actor* target) {
     }
 }
 
-RE::NiPointer<RE::Actor> PairedAnimPromptSink::GetTarget() const {
+RE::NiPointer<RE::Actor> FeedPromptSink::GetTarget() const {
     // NiPointer<Actor> keeps ref alive in the caller's scope
     return ActorFromHandle(GetTargetHandle());
 }
 
-bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
+bool FeedPromptSink::IsExcluded(RE::Actor* actor) {
     if (!actor) {
         SKSE::log::debug("IsExcluded: actor is null");
         return true;
@@ -672,7 +672,7 @@ bool PairedAnimPromptSink::IsExcluded(RE::Actor* actor) {
     return false;
 }
 
-bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
+bool FeedPromptSink::IsValidFeedTarget(RE::Actor* target) {
     if (!target) {
         SKSE::log::debug("IsValidFeedTarget: false - no target");
         return false;
@@ -799,7 +799,7 @@ bool PairedAnimPromptSink::IsValidFeedTarget(RE::Actor* target) {
 }
 
 // Event Handlers
-void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
+void FeedPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
     if (g_clientID.load(std::memory_order_acquire) == 0) return;
 
     // While a staged composite feed is running the on-screen prompt is the
@@ -873,7 +873,7 @@ void PairedAnimPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
     }
 }
 
-void PairedAnimPromptSink::TickPendingPrompt() {
+void FeedPromptSink::TickPendingPrompt() {
     if (g_clientID.load(std::memory_order_acquire) == 0) return;
     if (!pendingTarget_) return;
 
@@ -903,7 +903,7 @@ void PairedAnimPromptSink::TickPendingPrompt() {
         actor->GetName(), actor->GetFormID(), elapsedSeconds);
 }
 
-void PairedAnimPromptSink::OnMenuStateChange(bool isMenuOpen) {
+void FeedPromptSink::OnMenuStateChange(bool isMenuOpen) {
     if (isMenuOpen) {
         if (GetTarget()) {
             HidePrompt();
@@ -929,7 +929,7 @@ void PairedAnimPromptSink::OnMenuStateChange(bool isMenuOpen) {
     }
 }
 
-void PairedAnimPromptSink::OnPeriodicValidation() {
+void FeedPromptSink::OnPeriodicValidation() {
     // Don't invalidate/hide the prompt mid composite feed — the "Stop Feed"
     // toggle must stay shown even when the crosshair is off the NPC. The feed
     // ends via its own Tick() (player Stop or drained dry), not this check.
@@ -987,7 +987,7 @@ void PairedAnimPromptSink::OnPeriodicValidation() {
     }
 }
 
-void PairedAnimPromptSink::RefreshPrompt() {
+void FeedPromptSink::RefreshPrompt() {
     if (g_clientID.load(std::memory_order_acquire) == 0) return;
 
     // Logic similar to OnCrosshairUpdate but typically called when we just want to re-evaluate
@@ -1013,7 +1013,7 @@ void PairedAnimPromptSink::RefreshPrompt() {
     }
 }
 
-void PairedAnimPromptSink::ShowPrompt(RE::Actor* target) {
+void FeedPromptSink::ShowPrompt(RE::Actor* target) {
     SetTarget(target);
     bool sent = SkyPromptAPI::SendPrompt(this, g_clientID.load(std::memory_order_acquire));
     if (!sent) {
@@ -1026,7 +1026,7 @@ void PairedAnimPromptSink::ShowPrompt(RE::Actor* target) {
     }
 }
 
-void PairedAnimPromptSink::HidePrompt() {
+void FeedPromptSink::HidePrompt() {
     SkyPromptAPI::RemovePrompt(this, g_clientID.load(std::memory_order_acquire));
 
     auto* settings = Settings::GetSingleton();

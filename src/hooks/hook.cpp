@@ -1,5 +1,5 @@
 #include "hooks/hook.h"
-#include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedPromptSink.h"
 #include "feed/WitnessDetection.h"
 #include "feed/CompositePairedAnimation.h"
 #include "Settings.h"
@@ -15,7 +15,7 @@ namespace {
         static void thunk(RE::PlayerCharacter* a_this, float a_delta) {
             func(a_this, a_delta);
 
-            auto* sink = PairedAnimPromptSink::GetSingleton();
+            auto* sink = FeedPromptSink::GetSingleton();
             auto* settings = Settings::GetSingleton();
 
             // 0. Drive non-blocking PlayIdle retry (paired animation KillMoveStart wait)
@@ -79,7 +79,7 @@ namespace {
             // and only OnMenuStateChange(false) re-shows it (OnCrosshairUpdate /
             // OnPeriodicValidation early-return while a feed is active).
             if (a_event && MenuCheck::IsMenuBlocked(a_event->menuName)) {
-                PairedAnimPromptSink::GetSingleton()->OnMenuStateChange(a_event->opening);
+                FeedPromptSink::GetSingleton()->OnMenuStateChange(a_event->opening);
             }
             return RE::BSEventNotifyControl::kContinue;
         }
@@ -130,7 +130,7 @@ namespace Hooks {
             actor = ref->As<RE::Actor>();
         }
 
-        PairedAnimPromptSink::GetSingleton()->OnCrosshairUpdate(actor);
+        FeedPromptSink::GetSingleton()->OnCrosshairUpdate(actor);
 
         return RE::BSEventNotifyControl::kContinue;
     }

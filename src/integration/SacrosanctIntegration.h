@@ -36,8 +36,8 @@ namespace SacrosanctIntegration {
     // Check if player can use Embrace (has Foster Childe perk)
     bool CanEmbrace();
 
-    // Register Embrace prompt callback with PairedAnimPromptSink
-    // Call this after Initialize() and after PairedAnimPromptSink is ready
+    // Register Embrace prompt callback with FeedPromptSink
+    // Call this after Initialize() and after FeedPromptSink is ready
     void RegisterEmbracePrompt();
 
     // Direct game state manipulation (vanilla vampire globals)

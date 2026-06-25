@@ -1,6 +1,6 @@
 #include "utils/AnimUtil.h"
 #include "feed/TargetState.h"
-#include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedPromptSink.h"
 #include "feed/AnimEventSink.h"
 #include "feed/AnimationRegistry.h"
 #include "feed/FeedIconOverlay.h"
@@ -881,7 +881,7 @@ namespace AnimUtil {
         });
     }
 
-    // Player feed validation (moved from PairedAnimPromptSink)
+    // Player feed validation (moved from FeedPromptSink)
 
     // Check if player race supports feeding (Vampire/Werewolf/VampireLord)
     // This is a lightweight check that only verifies race - no hunger/combat checks
@@ -957,7 +957,7 @@ namespace AnimUtil {
         return true;
     }
 
-    // Animation selection and state checking (moved from PairedAnimPromptSink)
+    // Animation selection and state checking (moved from FeedPromptSink)
     bool IsInPairedAnimation(RE::Actor* actor) {
         if (!actor) return false;
 
@@ -1197,7 +1197,7 @@ namespace AnimUtil {
         attacker->SetPosition(RE::NiPoint3(attackerPos.x, attackerPos.y, anchorZ), true);
     }
 
-    // Animation graph variable management (moved from PairedAnimPromptSink)
+    // Animation graph variable management (moved from FeedPromptSink)
     void SetFeedGraphVars(RE::Actor* actor, int feedType) {
         if (!actor) return;
 

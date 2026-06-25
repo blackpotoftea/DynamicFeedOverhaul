@@ -1,7 +1,7 @@
 #include "PCH.h"
 #include "feed/AnimEventSink.h"
 #include "feed/FeedAnimState.h"
-#include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedPromptSink.h"
 #include "feed/CompositePairedAnimation.h"
 #include "Settings.h"
 #include "utils/AnimUtil.h"
@@ -115,7 +115,7 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
                              triggerIdx, lethal, percent, targetFloor);
 
             if (settings->HealthDrain.DrainOnNPC) {
-                auto target = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget();
+                auto target = FeedPromptSink::GetSingleton()->GetActiveFeedTarget();
                 if (target) {
                     AnimUtil::DrainHealthChunk(target.get(), percent, targetFloor);
                 } else {

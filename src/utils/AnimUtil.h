@@ -131,7 +131,7 @@ namespace AnimUtil {
     // Lock actor at position using TranslateTo (OStim-style positioning)
     void LockAtPosition(RE::Actor* actor, float x, float y, float z, float rotationRad, bool applyRotation = true);
 
-    // Animation selection and state checking (moved from PairedAnimPromptSink)
+    // Animation selection and state checking (moved from FeedPromptSink)
     bool IsInPairedAnimation(RE::Actor* actor);
     int DetermineTargetState(RE::Actor* target, bool& outIsInCombat);
     void ApplyHeightAdjustment(RE::Actor* attacker, RE::Actor* target, float minHeightDiff, float maxHeightDiff);
@@ -148,11 +148,11 @@ namespace AnimUtil {
 
     GroundHit GetGroundHeight(RE::Actor* actor);
 
-    // Player feed validation (moved from PairedAnimPromptSink)
+    // Player feed validation (moved from FeedPromptSink)
     bool IsPlayerFeedingRace();  // Check if player race supports feeding (Vampire/Werewolf/VL)
     bool CanPlayerFeed(bool targetInCombat);
 
-    // Animation graph variable management (moved from PairedAnimPromptSink)
+    // Animation graph variable management (moved from FeedPromptSink)
     void SetFeedGraphVars(RE::Actor* actor, int feedType);
     void ClearFeedGraphVars(RE::Actor* actor);
 

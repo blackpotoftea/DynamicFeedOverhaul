@@ -2,7 +2,7 @@
 #include "SacrosanctIntegration.h"
 #include "VampireIntegrationUtils.h"
 #include "utils/SoundUtil.h"
-#include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedPromptSink.h"
 #include "feed/TargetState.h"
 
 /*
@@ -1127,11 +1127,11 @@ namespace SacrosanctIntegration {
         return player && player->HasPerk(g_fosterChildePerk);
     }
 
-    // Register Embrace prompt callback with PairedAnimPromptSink
+    // Register Embrace prompt callback with FeedPromptSink
     void RegisterEmbracePrompt() {
-        auto* promptSink = PairedAnimPromptSink::GetSingleton();
+        auto* promptSink = FeedPromptSink::GetSingleton();
         if (!promptSink) {
-            SKSE::log::warn("SacrosanctIntegration: PairedAnimPromptSink not available");
+            SKSE::log::warn("SacrosanctIntegration: FeedPromptSink not available");
             return;
         }
 
@@ -1190,7 +1190,7 @@ namespace SacrosanctIntegration {
                 .priority = 500,       // Lower than Feed (1000)
                 .onAccept = [](RE::Actor*, bool) {
                     SKSE::log::info("Embrace prompt accepted");
-                    PairedAnimPromptSink::GetSingleton()->isEmbraceFeedInProgress_ = true;
+                    FeedPromptSink::GetSingleton()->isEmbraceFeedInProgress_ = true;
                 }
             });
 

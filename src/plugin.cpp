@@ -1,7 +1,7 @@
 #include "utils/log.h"
 #include "hooks/hook.h"
 #include "Settings.h"
-#include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedPromptSink.h"
 #include "feed/AnimEventSink.h"
 #include "SkyPrompt/API.hpp"
 #include "SKSEMCP/SKSEMenuFramework.hpp"

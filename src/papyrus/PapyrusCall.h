@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../feed/TargetState.h"
-#include "../feed/PairedAnimPromptSink.h"
+#include "../feed/FeedPromptSink.h"
 #include "../integration/SacrosanctIntegration.h"
 #include "../integration/SacrilegeIntegration.h"
 
@@ -295,7 +295,7 @@ namespace PapyrusCall {
                     SKSE::log::info("Sacrosanct: Using deep C++ integration (combat={})", isCombatFeed);
 
                     // Check Sacrosanct-specific embrace state from prompt sink
-                    auto* promptSink = PairedAnimPromptSink::GetSingleton();
+                    auto* promptSink = FeedPromptSink::GetSingleton();
                     bool isEmbrace = promptSink && promptSink->isEmbraceFeedInProgress_;
                     if (promptSink) promptSink->isEmbraceFeedInProgress_ = false;  // Reset after reading
 

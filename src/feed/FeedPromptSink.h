@@ -22,12 +22,12 @@ struct PromptDef {
     std::function<void(RE::Actor* target, bool holdComplete)> onAccept;
 };
 
-class PairedAnimPromptSink : public SkyPromptAPI::PromptSink {
+class FeedPromptSink : public SkyPromptAPI::PromptSink {
 public:
     /// Callback type for prompt providers
     using PromptCallback = std::function<std::vector<PromptDef>(RE::Actor* target)>;
 
-    static PairedAnimPromptSink* GetSingleton();
+    static FeedPromptSink* GetSingleton();
 
     std::span<const SkyPromptAPI::Prompt> GetPrompts() const override;
     void ProcessEvent(SkyPromptAPI::PromptEvent event) const override;
@@ -80,7 +80,7 @@ public:
     mutable bool isEmbraceFeedInProgress_{false};
 
 private:
-    PairedAnimPromptSink();
+    FeedPromptSink();
 
     void RegisterCorePromptCallback();
 

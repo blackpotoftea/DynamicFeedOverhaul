@@ -1,6 +1,6 @@
 #include "PCH.h"
 #include "feed/FeedAnimState.h"
-#include "feed/PairedAnimPromptSink.h"
+#include "feed/FeedPromptSink.h"
 #include "feed/PairedAnimation.h"
 #include "feed/CompositePairedAnimation.h"
 #include "feed/FeedHealthBarOverlay.h"
@@ -62,7 +62,7 @@ namespace FeedAnimState {
         // the active target is cleared below. isLethal/hasOAR are the per-feed
         // context stashed at start (composite flips lethal true on the Kill stage).
         if (ConsumeFeedEngaged()) {
-            if (auto t = PairedAnimPromptSink::GetSingleton()->GetActiveFeedTarget()) {
+            if (auto t = FeedPromptSink::GetSingleton()->GetActiveFeedTarget()) {
                 PairedAnimation::RunFeedIntegration(t.get(), IsCurrentFeedLethal(), GetFeedHasOAR());
             } else {
                 SKSE::log::warn("MarkFeedEnded: feed engaged but no active target for integration");
@@ -75,11 +75,11 @@ namespace FeedAnimState {
         // Clear the active feed target (thread-safe). Per-actor cleanup
         // (kill-move, graph vars, pacify) is owned by PairedAnimation::ExitFeedState,
         // called from OnComplete below.
-        PairedAnimPromptSink::GetSingleton()->SetActiveFeedTarget(nullptr);
+        FeedPromptSink::GetSingleton()->SetActiveFeedTarget(nullptr);
 
         PairedAnimation::OnComplete();
         CompositePairedAnimation::OnComplete();
-        PairedAnimPromptSink::GetSingleton()->RefreshPrompt();
+        FeedPromptSink::GetSingleton()->RefreshPrompt();
     }
 
     bool CheckAndClearFeedEnded() {
