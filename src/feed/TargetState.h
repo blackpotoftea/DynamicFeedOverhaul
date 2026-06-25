@@ -118,6 +118,16 @@ namespace TargetState {
         return actor->GetRace();
     }
 
+    // Get the actor's AI Confidence level (kCowardly=0 ... kFoolhardy=4), read from
+    // the base AI data. Defaults to kAverage when the base/AI data is unavailable.
+    // Drives the witnessed-feed reaction: brave victims fight back, timid ones flee.
+    inline RE::ACTOR_CONFIDENCE GetConfidence(RE::Actor* actor) {
+        if (!actor) return RE::ACTOR_CONFIDENCE::kAverage;
+        auto* base = actor->GetActorBase();
+        if (!base) return RE::ACTOR_CONFIDENCE::kAverage;
+        return base->GetConfidenceLevel();
+    }
+
     // Check if actor is a vampire
     bool IsVampire(RE::Actor* actor);
 

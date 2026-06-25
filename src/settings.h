@@ -88,6 +88,8 @@ public:
         float WitnessCheckInterval{ 0.5f };      // How often to check for witnesses during feed (seconds)
         bool WitnessDebugLogging{ false };       // Enable verbose witness detection logging
         float PromptDelayCombatSeconds{ 0.0f };  // Delay before showing prompt in combat (default 0 for immediate)
+        bool EnableWitnessCombatReaction{ true }; // Awake victim of a witnessed feed fights back (else bounty only)
+        int AssaultConfidenceThreshold{ 3 };     // Min victim Confidence to fight back (0=Cowardly..4=Foolhardy)
     } Combat;
 
     // Target filtering settings

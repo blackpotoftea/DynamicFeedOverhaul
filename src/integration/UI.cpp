@@ -245,6 +245,13 @@ void __stdcall UI::Settings::Render() {
             changed |= ImGuiMCP::SliderFloat("Witness Check Interval", &settings->Combat.WitnessCheckInterval, 0.1f, 2.0f, "%.1f sec");
             changed |= ImGuiMCP::Checkbox("Witness Debug Logging", &settings->Combat.WitnessDebugLogging);
         }
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Witness Combat Reaction", &settings->Combat.EnableWitnessCombatReaction);
+        ImGuiMCP::SetItemTooltip("An awake victim who survives a feed fights back if brave enough (otherwise only the bounty applies)");
+        if (settings->Combat.EnableWitnessCombatReaction) {
+            changed |= ImGuiMCP::SliderInt("Assault Confidence Threshold", &settings->Combat.AssaultConfidenceThreshold, 0, 4);
+            ImGuiMCP::SetItemTooltip("Minimum victim Confidence to fight back: 0=Cowardly, 1=Cautious, 2=Average, 3=Brave, 4=Foolhardy");
+        }
         changed |= ImGuiMCP::SliderFloat("Prompt Delay (Combat)", &settings->Combat.PromptDelayCombatSeconds, 0.0f, 2.0f, "%.2f sec");
     }
 

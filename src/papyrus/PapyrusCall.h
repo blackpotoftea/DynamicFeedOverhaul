@@ -423,6 +423,44 @@ namespace PapyrusCall {
         return true;
     }
 
+    // Force an actor into combat against a target via the Papyrus native
+    // Actor.StartCombat(akTarget). Used to make a witnessed feed victim fight back
+    // when their Confidence is high enough (assault model). `aggressor` is the
+    // victim NPC; `target` is normally the player.
+    inline bool StartCombat(RE::Actor* aggressor, RE::Actor* target) {
+        if (!aggressor || !target) {
+            SKSE::log::error("StartCombat: null aggressor or target");
+            return false;
+        }
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            SKSE::log::error("StartCombat: VM is null");
+            return false;
+        }
+
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(
+            RE::Actor::FORMTYPE, aggressor);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
+            SKSE::log::error("StartCombat: failed to get handle for {}", aggressor->GetName());
+            return false;
+        }
+
+        // Actor.StartCombat(Actor akTarget) — single Actor argument.
+        auto* args = RE::MakeFunctionArguments(std::move(target));
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
+
+        bool result = vm->DispatchMethodCall(handle, "Actor", "StartCombat", args, callback);
+
+        // DispatchMethodCall takes ownership only on success; delete on failure
+        if (!result) {
+            delete args;
+        }
+
+        SKSE::log::info("StartCombat: {} -> combat dispatched={}", aggressor->GetName(), result);
+        return result;
+    }
+
     // Send DAO_VampireFeed custom mod event to the target actor
     // Event signature: DAO_VampireFeed(Actor akAttacker, Actor akTarget)
     inline bool SendDAO_VampireFeedEvent(RE::Actor* attacker, RE::Actor* target) {

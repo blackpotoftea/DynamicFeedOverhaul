@@ -144,6 +144,8 @@ void Settings::LoadINI() {
     Combat.WitnessCheckInterval = static_cast<float>(ini.GetDoubleValue("Combat", "WitnessCheckInterval", Combat.WitnessCheckInterval));
     Combat.WitnessDebugLogging = ini.GetBoolValue("Combat", "WitnessDebugLogging", Combat.WitnessDebugLogging);
     Combat.PromptDelayCombatSeconds = static_cast<float>(ini.GetDoubleValue("Combat", "PromptDelayCombatSeconds", Combat.PromptDelayCombatSeconds));
+    Combat.EnableWitnessCombatReaction = ini.GetBoolValue("Combat", "EnableWitnessCombatReaction", Combat.EnableWitnessCombatReaction);
+    Combat.AssaultConfidenceThreshold = static_cast<int>(ini.GetLongValue("Combat", "AssaultConfidenceThreshold", Combat.AssaultConfidenceThreshold));
 
     // Filtering
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
@@ -225,10 +227,11 @@ void Settings::LoadINI() {
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
         NonCombat.UseCompositePairedAnimation, NonCombat.UseCompositeFurnitureAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
         NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}",
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, WitnessCombatReaction={}, AssaultConfThreshold={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
-        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds);
+        Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds,
+        Combat.EnableWitnessCombatReaction, Combat.AssaultConfidenceThreshold);
     SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
@@ -366,6 +369,10 @@ void Settings::SaveINI() {
         "; Enable verbose witness detection debug logging (can be very spammy)");
     ini.SetDoubleValue("Combat", "PromptDelayCombatSeconds", Combat.PromptDelayCombatSeconds,
         "; Delay in seconds before showing prompt in combat (default 0 for immediate response)");
+    ini.SetBoolValue("Combat", "EnableWitnessCombatReaction", Combat.EnableWitnessCombatReaction,
+        "; An awake victim who survives a feed fights back if brave enough; otherwise only the bounty applies");
+    ini.SetLongValue("Combat", "AssaultConfidenceThreshold", Combat.AssaultConfidenceThreshold,
+        "; Minimum victim Confidence to fight back when awake (0=Cowardly, 1=Cautious, 2=Average, 3=Brave, 4=Foolhardy)");
 
     // Filtering
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,
