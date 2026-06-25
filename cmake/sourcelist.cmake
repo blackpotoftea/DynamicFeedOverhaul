@@ -5,7 +5,7 @@ set(sources ${sources}
     src/feed/CompositePairedAnimation.cpp
     src/feed/FeedIconOverlay.cpp
     src/feed/FeedHealthBarOverlay.cpp
-    src/feed/PairedAnimPromptSink.cpp
+    src/feed/FeedPromptSink.cpp
     src/feed/PairedAnimation.cpp
     src/feed/FeedAnimState.cpp
     src/feed/AnimEventSink.cpp
