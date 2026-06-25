@@ -1,0 +1,43 @@
+' Dynamic Feed Overhaul - FNIS for Modders animation list
+' Animations adapted from acenetizen (Skyrim Ace Animations), CC-BY-SA-4.0. See CREDITS.md.
+' Same flags/format as OAR-E's FNIS_openani_main_List.txt (proven to compile with GenerateFNIS_for_Modders).
+' Compile with GenerateFNIS_for_Modders.exe -> meshes\actors\character\behaviors\FNIS_DynamicFeedOverhaul_Behavior.hkx
+'
+' Custom VFD_ events fire via FNIS -T<trigger>/<time>. Tn (transition-next) is KEPT on every line so the
+' actor holds pose instead of snapping to default. To keep Tn working, each line carries only ONE -T
+' trigger (Tn + single trigger = the proven GoBack pattern; Tn + 2+ triggers did NOT dispatch).
+' This is possible because the C++ only actually uses TWO events: VFD_VampireFeedTrigger (HP drain, on the
+' enter) and VFD_DrainedEnd (ends Drained early). VFD_GoToEnd is UNUSED by code (Intro/Exit are timer-
+' driven) so it was dropped. VFD_GoBackEnd kept as an optional early-end. Times negative = from clip end.
+
+b -a,Tn,TVFD_VampireFeedTrigger/-0.1 DFO_GoToDevourVampireBiteMaleStanding_0 DevourVampireBiteMaleStanding\DFO_GoToDevourVampireBiteMaleStanding_0.hkx
+b -a,Tn DFO_GoToDevourVampireBiteMaleStanding_1 DevourVampireBiteMaleStanding\DFO_GoToDevourVampireBiteMaleStanding_1.hkx
+b -Tn DFO_DevourVampireBiteMaleStanding_0 DevourVampireBiteMaleStanding\DFO_DevourVampireBiteMaleStanding_0.hkx
+b -Tn DFO_DevourVampireBiteMaleStanding_1 DevourVampireBiteMaleStanding\DFO_DevourVampireBiteMaleStanding_1.hkx
+b -a,Tn,TVFD_GoBackEnd/-0.05 DFO_GoBackDevourVampireBiteMaleStanding_0 DevourVampireBiteMaleStanding\DFO_GoBackDevourVampireBiteMaleStanding_0.hkx
+b -a,Tn DFO_GoBackDevourVampireBiteMaleStanding_1 DevourVampireBiteMaleStanding\DFO_GoBackDevourVampireBiteMaleStanding_1.hkx
+b -a,Tn,TVFD_DrainedEnd/-0.05 DFO_DevourDrainedFemaleStanding_0 DevourVampireBiteMaleStanding\DFO_DevourDrainedFemaleStanding_0.hkx
+b -Tn DFO_DevourDrainedFemaleStanding_1 DevourVampireBiteMaleStanding\DFO_DevourDrainedFemaleStanding_1.hkx
+
+b -a,Tn DFO_GoToDevourVampireBiteFemaleStanding_0 DevourVampireBiteFemaleStanding\DFO_GoToDevourVampireBiteFemaleStanding_0.hkx
+b -a,Tn,TVFD_VampireFeedTrigger/-0.1 DFO_GoToDevourVampireBiteFemaleStanding_1 DevourVampireBiteFemaleStanding\DFO_GoToDevourVampireBiteFemaleStanding_1.hkx
+b -Tn DFO_DevourVampireBiteFemaleStanding_0 DevourVampireBiteFemaleStanding\DFO_DevourVampireBiteFemaleStanding_0.hkx
+b -Tn DFO_DevourVampireBiteFemaleStanding_1 DevourVampireBiteFemaleStanding\DFO_DevourVampireBiteFemaleStanding_1.hkx
+b -a,Tn DFO_GoBackDevourVampireBiteFemaleStanding_0 DevourVampireBiteFemaleStanding\DFO_GoBackDevourVampireBiteFemaleStanding_0.hkx
+b -a,Tn,TVFD_GoBackEnd/-0.05 DFO_GoBackDevourVampireBiteFemaleStanding_1 DevourVampireBiteFemaleStanding\DFO_GoBackDevourVampireBiteFemaleStanding_1.hkx
+b -Tn DFO_DevourDrainedMaleStanding_0 DevourVampireBiteFemaleStanding\DFO_DevourDrainedMaleStanding_0.hkx
+b -a,Tn,TVFD_DrainedEnd/-0.05 DFO_DevourDrainedMaleStanding_1 DevourVampireBiteFemaleStanding\DFO_DevourDrainedMaleStanding_1.hkx
+
+' Furniture feeds (player-only, generic). enter/exit acyclic, loop cyclic. 3 stages (no drained).
+b -a,Tn,TVFD_VampireFeedTrigger/-0.1 DFO_VampireFeedBedLeftEnter VampireFurnitureFeed\DFO_VampireFeedBedLeftEnter.hkx
+b -Tn DFO_VampireFeedBedLeftLoop VampireFurnitureFeed\DFO_VampireFeedBedLeftLoop.hkx
+b -a,Tn,TVFD_GoBackEnd/-0.05 DFO_VampireFeedBedLeftExit VampireFurnitureFeed\DFO_VampireFeedBedLeftExit.hkx
+b -a,Tn,TVFD_VampireFeedTrigger/-0.1 DFO_VampireFeedBedRightEnter VampireFurnitureFeed\DFO_VampireFeedBedRightEnter.hkx
+b -Tn DFO_VampireFeedBedRightLoop VampireFurnitureFeed\DFO_VampireFeedBedRightLoop.hkx
+b -a,Tn,TVFD_GoBackEnd/-0.05 DFO_VampireFeedBedRightExit VampireFurnitureFeed\DFO_VampireFeedBedRightExit.hkx
+b -a,Tn,TVFD_VampireFeedTrigger/-0.1 DFO_VampireFeedBedrollLeftKneelingEnter VampireFurnitureFeed\DFO_VampireFeedBedrollLeftKneelingEnter.hkx
+b -Tn DFO_VampireFeedBedrollLeftKneelingLoop VampireFurnitureFeed\DFO_VampireFeedBedrollLeftKneelingLoop.hkx
+b -a,Tn,TVFD_GoBackEnd/-0.05 DFO_VampireFeedBedrollLeftKneelingExit VampireFurnitureFeed\DFO_VampireFeedBedrollLeftKneelingExit.hkx
+b -a,Tn,TVFD_VampireFeedTrigger/-0.1 DFO_VampireFeedBedrollRightKneelingEnter VampireFurnitureFeed\DFO_VampireFeedBedrollRightKneelingEnter.hkx
+b -Tn DFO_VampireFeedBedrollRightKneelingLoop VampireFurnitureFeed\DFO_VampireFeedBedrollRightKneelingLoop.hkx
+b -a,Tn,TVFD_GoBackEnd/-0.05 DFO_VampireFeedBedrollRightKneelingExit VampireFurnitureFeed\DFO_VampireFeedBedrollRightKneelingExit.hkx

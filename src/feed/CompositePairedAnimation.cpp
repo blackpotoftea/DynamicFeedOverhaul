@@ -258,6 +258,60 @@ namespace CompositePairedAnimation {
             DoTeardown();
             FeedAnimState::MarkFeedEnded();
         }
+
+        // Intro -> Loop. Shared by the VFD_GoToEnd event (OnIntroEnd) and the
+        // CompositeIntroDuration fallback in Tick(). The stage guard makes it
+        // idempotent: whichever of the two fires first transitions out of Intro,
+        // and the other becomes a no-op.
+        void AdvanceToLoop() {
+            if (stage_ != Stage::Intro) return;
+            auto ref = feedTargetHandle_.get();
+            auto* target = ref ? ref->As<RE::Actor>() : nullptr;
+            if (!target) return;
+            auto* settings = Settings::GetSingleton();
+
+            FireStageClips(pack_.loop, "Loop");
+            stage_ = Stage::Loop;
+            stageTimer_ = 0.0f;
+            // Drinking begins now — play the vampire feed sound once at the victim.
+            SoundUtil::PlayFeedSound(target);
+            // Seed the first gulp a randomized moment after the bite latches.
+            gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,
+                                   settings->HealthDrain.GulpIntervalMax);
+            // Feeding has truly begun — gate the centralized overhaul trigger
+            // (fired in MarkFeedEnded). Stopping during Intro = no integration.
+            FeedAnimState::MarkFeedEngaged();
+        }
+
+        // Exit -> Drained (or straight to Done when there is no aftermath clip).
+        // Shared by the VFD_GoBackEnd event (OnExitEnd) and the
+        // CompositeExitDuration fallback in Tick(). Stage-guarded like AdvanceToLoop.
+        void AdvanceToDrained() {
+            if (stage_ != Stage::Exit) return;
+            auto* settings = Settings::GetSingleton();
+            if (pack_.drained.target.empty()) {
+                // No victim aftermath clip (furniture / legacy fallback): finish now.
+                // Teardown snaps the player back to the locked scene pose for a
+                // deterministic return rather than freeing it wherever the GoBack
+                // clip's root motion happened to leave it.
+                SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - no Drained clip, finishing");
+                Finish();
+            } else {
+                // GoBack is done and the player has physically stepped back, so free
+                // the player NOW - they can walk away immediately instead of waiting
+                // out the victim's aftermath. Only the victim continues into Drained;
+                // the (target-side) teardown happens at its end.
+                ReleasePlayer();
+                // Roll a random aftermath length in [Min, Max] for this feed.
+                drainedDuration_ = RandRange(settings->NonCombat.CompositeDrainedDurationMin,
+                                             settings->NonCombat.CompositeDrainedDurationMax);
+                SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - player freed -> Drained (victim only, {:.2f}s)",
+                    drainedDuration_);
+                FireDrainedTargetOnly();
+                stage_ = Stage::Drained;
+                stageTimer_ = 0.0f;
+            }
+        }
     }
 
     bool Play(RE::Actor* target, const Feed::CompositePack& pack) {
@@ -369,6 +423,32 @@ namespace CompositePairedAnimation {
         }
     }
 
+    // Event-driven end of the Intro (GoTo) clip (AnimEventSink -> VFD_GoToEnd,
+    // or VFD_VampireFeedTrigger on the current assets). Advances Intro -> Loop the
+    // instant the approach/bite clip ends, so the Devour loop starts seamlessly
+    // instead of after a fixed timer that may overrun the clip and drop the actor
+    // to default idle. No-op outside Intro; CompositeIntroDuration is the fallback.
+    void OnIntroEnd() {
+        if (stage_ != Stage::Intro) {
+            SKSE::log::debug("[CompositePairedAnimation] Intro-end event ignored (stage != Intro)");
+            return;
+        }
+        SKSE::log::info("[CompositePairedAnimation] Intro-end event -> Loop (event-driven)");
+        AdvanceToLoop();
+    }
+
+    // Event-driven end of the Exit (GoBack) clip (AnimEventSink -> VFD_GoBackEnd).
+    // Advances Exit -> Drained the instant the step-back clip ends. No-op outside
+    // Exit; CompositeExitDuration is the fallback.
+    void OnExitEnd() {
+        if (stage_ != Stage::Exit) {
+            SKSE::log::debug("[CompositePairedAnimation] Exit-end event ignored (stage != Exit)");
+            return;
+        }
+        SKSE::log::info("[CompositePairedAnimation] Exit-end event -> Drained (event-driven)");
+        AdvanceToDrained();
+    }
+
     // Event-driven end of the Drained stage (AnimEventSink -> VFD_DrainedEnd).
     // Only acts while in Drained so a stray event can't tear down a live feed;
     // the rolled drainedDuration_ in Tick() is the fallback if it never fires.
@@ -431,26 +511,12 @@ namespace CompositePairedAnimation {
 
         switch (stage_) {
         case Stage::Intro: {
+            // Fallback only: the Intro normally advances on VFD_GoToEnd (OnIntroEnd).
+            // This fires if that event never arrives so the feed can't stall in Intro.
             if (stageTimer_ >= settings->NonCombat.CompositeIntroDuration) {
-                FireStageClips(pack_.loop, "Loop");
-                stage_ = Stage::Loop;
-                stageTimer_ = 0.0f;
-                // Drinking begins now — play the vampire feed sound once at the victim.
-                SoundUtil::PlayFeedSound(target);
-                // Fire the player's feed-trigger graph event ONCE, from code. The
-                // looping bite clip no longer carries the VFD_VampireFeedTrigger
-                // annotation (which re-fired it every cycle); driving it here at
-                // Loop entry means the player's feed reaction triggers exactly once.
-                // Deferred to the main thread (NotifyAnimationGraph requirement).
-                if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-                    NotifyClipLogged(player, "VFD_VampireFeedTrigger", "Loop", "feed-trigger");
-                }
-                // Seed the first gulp a randomized moment after the bite latches.
-                gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,
-                                       settings->HealthDrain.GulpIntervalMax);
-                // Feeding has truly begun — gate the centralized overhaul trigger
-                // (fired in MarkFeedEnded). Stopping during Intro = no integration.
-                FeedAnimState::MarkFeedEngaged();
+                SKSE::log::info("[CompositePairedAnimation] Intro timer fallback ({:.2f}s) -> Loop (no end event)",
+                    settings->NonCombat.CompositeIntroDuration);
+                AdvanceToLoop();
             }
             break;
         }
@@ -503,29 +569,12 @@ namespace CompositePairedAnimation {
         }
 
         case Stage::Exit: {
+            // Fallback only: the Exit normally advances on VFD_GoBackEnd (OnExitEnd).
+            // This fires if that event never arrives so the feed can't stall in Exit.
             if (stageTimer_ >= settings->NonCombat.CompositeExitDuration) {
-                if (pack_.drained.target.empty()) {
-                    // No victim aftermath clip (furniture / legacy fallback): finish
-                    // now. Teardown snaps the player back to the locked scene pose
-                    // for a deterministic return, rather than freeing it wherever the
-                    // GoBack clip's root motion happened to leave it.
-                    SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - no Drained clip, finishing");
-                    Finish();
-                } else {
-                    // GoBack is done and the player has physically stepped back, so
-                    // free the player NOW - they can walk away immediately instead of
-                    // waiting out the victim's aftermath. Only the victim continues
-                    // into Drained; the (target-side) teardown happens at its end.
-                    ReleasePlayer();
-                    // Roll a random aftermath length in [Min, Max] for this feed.
-                    drainedDuration_ = RandRange(settings->NonCombat.CompositeDrainedDurationMin,
-                                                 settings->NonCombat.CompositeDrainedDurationMax);
-                    SKSE::log::info("[CompositePairedAnimation] Exit (GoBack) complete - player freed -> Drained (victim only, {:.2f}s)",
-                        drainedDuration_);
-                    FireDrainedTargetOnly();
-                    stage_ = Stage::Drained;
-                    stageTimer_ = 0.0f;
-                }
+                SKSE::log::info("[CompositePairedAnimation] Exit timer fallback ({:.2f}s) -> Drained (no end event)",
+                    settings->NonCombat.CompositeExitDuration);
+                AdvanceToDrained();
             }
             break;
         }

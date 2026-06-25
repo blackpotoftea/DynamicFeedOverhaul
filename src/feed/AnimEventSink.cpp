@@ -51,13 +51,38 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
         // Ground truth that the paired animation actually started in the engine.
         // AnimUtil's retry tick consumes this flag to confirm success and stop retrying.
         FeedAnimState::MarkKillMoveStartSeen();
-    } else if (tag == "VFD_VampireFeedTrigger") {
-        // Composite feed drains via its own randomized gulp timer in
-        // CompositePairedAnimation::Tick(), so ignore the clip's drain trigger
-        // while it's active (mirrors the PairEnd/IdleStop guard above) - this is
-        // the single drain path for composite, avoiding a double drain.
+    } else if (tag == "VFD_GoToEnd") {
+        // Dedicated GoTo (intro) clip end annotation. Composite-only: advance
+        // Intro -> Loop the instant the approach/bite clip ends so the Devour loop
+        // starts seamlessly (no idle-default gap from an overrunning timer).
+        // Deferred to the main thread; OnIntroEnd is stage-guarded.
         if (CompositePairedAnimation::IsActive()) {
-            SKSE::log::debug("VFD_VampireFeedTrigger ignored - composite feed drains via its own gulp timer");
+            SKSE::log::info("VFD_GoToEnd detected - advancing composite Intro -> Loop");
+            SKSE::GetTaskInterface()->AddTask([] {
+                CompositePairedAnimation::OnIntroEnd();
+            });
+        }
+    } else if (tag == "VFD_GoBackEnd") {
+        // GoBack (exit) clip end annotation. Composite-only: advance Exit -> Drained
+        // when the step-back clip ends. Deferred to the main thread; OnExitEnd is
+        // stage-guarded so a stray event can't tear down a live feed.
+        if (CompositePairedAnimation::IsActive()) {
+            SKSE::log::info("VFD_GoBackEnd detected - advancing composite Exit -> Drained");
+            SKSE::GetTaskInterface()->AddTask([] {
+                CompositePairedAnimation::OnExitEnd();
+            });
+        }
+    } else if (tag == "VFD_VampireFeedTrigger") {
+        // Composite path: the current GoTo assets still carry VFD_VampireFeedTrigger
+        // (not yet renamed to VFD_GoToEnd), so treat it as the intro-end signal and
+        // advance Intro -> Loop. The HP drain is owned by the gulp timer in
+        // CompositePairedAnimation::Tick(), so it is NOT applied here. OnIntroEnd is
+        // stage-guarded, so once we're in Loop this is a harmless no-op.
+        if (CompositePairedAnimation::IsActive()) {
+            SKSE::log::debug("VFD_VampireFeedTrigger -> composite Intro -> Loop (drain via gulp timer)");
+            SKSE::GetTaskInterface()->AddTask([] {
+                CompositePairedAnimation::OnIntroEnd();
+            });
             return RE::BSEventNotifyControl::kContinue;
         }
 

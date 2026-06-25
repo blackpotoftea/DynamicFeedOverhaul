@@ -29,10 +29,17 @@ namespace CompositePairedAnimation {
     // has begun (guards a double Stop press).
     void RequestStop();
 
-    // Event-driven end of the Drained stage: called by AnimEventSink when the
-    // victim's clip emits VFD_DrainedEnd. No-op unless currently in Drained (so a
-    // stray event can't tear down a live feed). The rolled CompositeDrainedDuration
-    // remains a fallback cap in Tick() if the event never fires.
+    // Event-driven stage advances: AnimEventSink calls these when a clip emits
+    // its end annotation, so the next clip fires the instant the current one
+    // finishes instead of waiting out a guessed timer (which leaves the actor in
+    // default idle if it overruns the clip). Each is stage-guarded so a stray or
+    // duplicate event is a no-op, and the matching Composite*Duration timer in
+    // Tick() remains a fallback if the event never fires.
+    //   VFD_GoToEnd / VFD_VampireFeedTrigger -> Intro -> Loop
+    //   VFD_GoBackEnd                        -> Exit  -> Drained
+    //   VFD_DrainedEnd                       -> Drained -> Done
+    void OnIntroEnd();
+    void OnExitEnd();
     void OnDrainedEnd();
 
     // Idempotent teardown. Called by FeedAnimState::MarkFeedEnded(); must NOT

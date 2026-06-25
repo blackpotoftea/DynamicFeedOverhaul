@@ -4,6 +4,7 @@
 .vscode
 build
 cmake-build*
+dist/
 .claude/
 vcpkg_installed
 interanl_docs/**
