@@ -10,5 +10,25 @@
         "type": "kInt",
         "name": "SkyPromptFeedType",
         "value": 0
+    },
+    {
+        "projectPath": "Actors",
+        "type": "kEvent",
+        "name": "VFD_GoToEnd"
+    },
+    {
+        "projectPath": "Actors",
+        "type": "kEvent",
+        "name": "VFD_GoBackEnd"
+    },
+    {
+        "projectPath": "Actors",
+        "type": "kEvent",
+        "name": "VFD_DrainedEnd"
+    },
+    {
+        "projectPath": "Actors",
+        "type": "kEvent",
+        "name": "VFD_VampireFeedTrigger"
     }
 ]
