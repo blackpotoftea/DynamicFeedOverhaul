@@ -57,12 +57,12 @@ public:
         bool UseCompositeFurnitureAnimation{ true };  // Use player-only composite packs for bed/bedroll feeds (victim stays in furniture)
         // Staged composite timing. Intro/Exit are timer-driven (no clip annotation ends them);
         // only the Drained aftermath is ended early by the victim's VFD_DrainedEnd event.
-        float CompositeIntroDuration{ 2.0f };    // Seconds Intro plays before -> Loop (fallback if no VFD_IntroEnd)
-        float CompositeExitDuration{ 2.0f };     // Seconds Exit (GoBack) plays before -> Drained (fallback if no VFD_GoBackEnd)
+        float CompositeIntroDuration{ 5.0f };    // Seconds Intro plays before -> Loop (fallback if no VFD_IntroEnd)
+        float CompositeExitDuration{ 5.0f };     // Seconds Exit (GoBack) plays before -> Drained (fallback if no VFD_GoBackEnd)
         // Drained idle aftermath: a random length in [Min, Max] is rolled each feed.
         // Max can go up to the full Drained clip length (~9.3s) to play it in full; 0 skips it.
         float CompositeDrainedDurationMin{ 0.0f };
-        float CompositeDrainedDurationMax{ 2.5f };
+        float CompositeDrainedDurationMax{ 5.5f };
         float TargetOffsetX{ 0.0f };   // Target X offset from player (local coords)
         float TargetOffsetY{ 25.0f };  // Target Y offset (positive = in front). ~20-30 matches Anub2P / OStim "standing apart" choreography.
         float TargetOffsetZ{ 0.0f };   // Target Z offset (height)
