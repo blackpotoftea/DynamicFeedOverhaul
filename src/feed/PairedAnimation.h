@@ -30,14 +30,6 @@ namespace PairedAnimation {
     void ExecuteFeed(const char* idleEditorID, RE::Actor* target, bool isPairedAnim,
                      bool isLethal = false, bool hasOARAnimation = false);
 
-    // Fire the vampire-overhaul integration for a completed feed: vanilla
-    // OnVampireFeed event, the mod's custom DAO_VampireFeed event, and the
-    // Sacrosanct/Sacrilege/BetterVampires/Vanilla ProcessFeed (hunger, blood,
-    // XP, kill handling). Shared by the legacy and composite paths; called once
-    // from FeedAnimState::MarkFeedEnded() after the feed is done. Main thread.
-    // hasOARAnimation=true suppresses the vanilla manual-kill fallback.
-    void RunFeedIntegration(RE::Actor* target, bool isLethal, bool hasOARAnimation);
-
     // Per-actor feed policy bundle. Centralizes mutations that were previously
     // scattered across HandleFeedAccepted, MarkFeedEnded, and OnComplete.
     struct FeedStateContext {

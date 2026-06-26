@@ -25,16 +25,16 @@ namespace FeedAnimState {
     // drain chunk escalates with successive bites. Reset by MarkFeedStarted.
     uint32_t IncrementVFDTriggerCount();   // returns new count starting at 1
 
-    // "Feed actually engaged" gate for the centralized overhaul trigger in
-    // MarkFeedEnded. Set when feeding truly begins (legacy: animation started;
-    // composite: Loop stage). ConsumeFeedEngaged() reads-and-clears so the
-    // integration fires exactly once even if MarkFeedEnded runs twice. Reset by
-    // MarkFeedStarted.
+    // "Feed actually engaged" gate for the legacy path's FeedIntegration::Run call
+    // in MarkFeedEnded. Set when the legacy feed animation starts; ConsumeFeedEngaged()
+    // reads-and-clears so the integration fires exactly once even if MarkFeedEnded
+    // runs twice. The composite path does NOT set this — it calls FeedIntegration::Run
+    // directly at Loop start, leaving the gate closed. Reset by MarkFeedStarted.
     void MarkFeedEngaged();
     bool ConsumeFeedEngaged();             // exchange(false): true if a feed had engaged
 
     // Whether the current feed used an OAR animation that bakes in the kill.
-    // Consulted by the vanilla manual-kill fallback in RunFeedIntegration.
+    // Consulted by the vanilla manual-kill fallback in FeedIntegration::Run.
     // Set at feed start; reset by MarkFeedStarted. Composite sets true (it owns
     // the kill itself, so the fallback must not double-kill).
     void SetFeedHasOAR(bool hasOAR);

@@ -3,6 +3,7 @@
 #include "feed/FeedPromptSink.h"
 #include "feed/PairedAnimation.h"
 #include "feed/CompositePairedAnimation.h"
+#include "integration/FeedIntegration.h"
 #include "feed/FeedHealthBarOverlay.h"
 #include "feed/WitnessDetection.h"
 #include "Settings.h"
@@ -72,7 +73,7 @@ namespace FeedAnimState {
         // context stashed at start (composite flips lethal true on the Kill stage).
         if (ConsumeFeedEngaged()) {
             if (victim) {
-                PairedAnimation::RunFeedIntegration(victim.get(), IsCurrentFeedLethal(), GetFeedHasOAR());
+                FeedIntegration::Run(victim.get(), IsCurrentFeedLethal(), GetFeedHasOAR());
             } else {
                 SKSE::log::warn("MarkFeedEnded: feed engaged but no active target for integration");
             }

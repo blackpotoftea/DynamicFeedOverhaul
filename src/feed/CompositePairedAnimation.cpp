@@ -4,6 +4,7 @@
 #include "Settings.h"
 #include "PCH.h"
 #include "feed/PairedAnimation.h"
+#include "integration/FeedIntegration.h"
 #include "papyrus/PapyrusCall.h"
 #include "utils/AnimUtil.h"
 #include "utils/SoundUtil.h"
@@ -280,13 +281,26 @@ namespace CompositePairedAnimation {
             stage_ = Stage::Loop;
             stageTimer_ = 0.0f;
             // Drinking begins now — play the vampire feed sound once at the victim.
-            SoundUtil::PlayFeedSound(target);
+            // Disabled to use integration sounds
+            //SoundUtil::PlayFeedSound(target);
+
             // Seed the first gulp a randomized moment after the bite latches.
             gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,
                                    settings->HealthDrain.GulpIntervalMax);
-            // Feeding has truly begun — gate the centralized overhaul trigger
-            // (fired in MarkFeedEnded). Stopping during Intro = no integration.
-            FeedAnimState::MarkFeedEngaged();
+            // Feeding has truly begun — fire the vampire feed integration NOW, at the
+            // moment drinking starts, instead of waiting for MarkFeedEnded. The resolved
+            // integration (overhaul or vanilla, mutually exclusive) and the OnVampireFeed
+            // event apply immediately, so an interrupted feed still registers.
+            // isLethal is false here (composite lethality is emergent — it only flips on
+            // the drain-dry kill below); hasOAR is true for composite, which suppresses
+            // the vanilla manual-kill in FeedIntegration::Run (the Loop owns the kill).
+            // We deliberately do NOT call MarkFeedEngaged(): leaving feedEngaged false
+            // makes MarkFeedEnded()'s ConsumeFeedEngaged() a no-op for the composite
+            // path, so the integration fires exactly once. Stopping during Intro (before
+            // reaching Loop) still means no integration, as before.
+            FeedIntegration::Run(target,
+                                 FeedAnimState::IsCurrentFeedLethal(),
+                                 FeedAnimState::GetFeedHasOAR());
         }
 
         // Exit -> Drained (or straight to Done when there is no aftermath clip).
