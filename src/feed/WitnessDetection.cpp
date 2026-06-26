@@ -204,6 +204,51 @@ namespace WitnessDetection {
         return nullptr;  // No witnesses found
     }
 
+    // Start combat on an actor, deferred one frame via the task graph. Deferral keeps the
+    // StartCombat (an AI mutation) off the actor-update path we're called from, and lets a
+    // just-released victim's AI refresh settle (else StartCombat can fizzle on a still-
+    // restrained actor). Re-resolves the actor from a handle inside the task - never holds a
+    // raw pointer across the frame boundary.
+    static void StartCombatDeferred(RE::Actor* a_actor) {
+        if (!a_actor) return;
+        auto handle = a_actor->CreateRefHandle();
+        SKSE::GetTaskInterface()->AddTask([handle] {
+            auto ref = handle.get();
+            auto* witness = ref ? ref->As<RE::Actor>() : nullptr;
+            if (!witness || witness->IsDead()) return;
+            auto* pl = RE::PlayerCharacter::GetSingleton();
+            if (!pl) return;
+            SKSE::log::info("[WitnessDetection] {} turns hostile after witnessing the feed", witness->GetName());
+            PapyrusCall::StartCombat(witness, pl);
+        });
+    }
+
+    // Bystanders (everyone but the victim) who can see the feed and are hostile enough turn
+    // hostile the instant they notice - they are free actors, so unlike the restrained victim
+    // they react live during the feed. Called every tick; the IsInCombat() guard makes each
+    // bystander engage exactly once. Gated by EnableWitnessCombatReaction.
+    static void TriggerBystanderCombat(RE::Actor* player, RE::Actor* victim) {
+        auto* settings = Settings::GetSingleton();
+        if (!settings->Combat.EnableWitnessCombatReaction || !player) return;
+
+        auto* processLists = RE::ProcessLists::GetSingleton();
+        if (!processLists) return;
+        const auto playerPos = player->GetPosition();
+        const float radius = settings->Combat.WitnessDetectionRadius;
+        for (auto& actorHandle : processLists->highActorHandles) {
+            auto actorPtr = actorHandle.get();
+            if (!actorPtr) continue;
+            auto* actor = actorPtr.get();
+            if (!actor || actor == victim) continue;
+            if (actor->IsInCombat()) continue;  // already engaged - don't restart every tick
+            if (actor->GetPosition().GetDistance(playerPos) > radius) continue;
+            if (!CanActorWitnessFeed(actor, player, victim)) continue;
+            if (ClassifyWitness(actor, player) == WitnessReaction::kAttack) {
+                StartCombatDeferred(actor);
+            }
+        }
+    }
+
     void PerformWitnessCheck(RE::Actor* player, RE::Actor* target) {
         if (Settings::GetSingleton()->Combat.WitnessDebugLogging) {
             SKSE::log::debug("[WitnessDetection] PerformWitnessCheck called");
@@ -243,7 +288,13 @@ namespace WitnessDetection {
             return;
         }
 
-        // Already reported this feed (one feed = one charge): skip the per-tick rescan.
+        // Bystander combat reactions: evaluated live every tick so each hostile witness engages
+        // the moment it notices the feed. Independent of the one-shot bounty below (and of the
+        // victim, which is restrained until release - handled at feed end in ApplyWitnessReactions).
+        TriggerBystanderCombat(player, target);
+
+        // Bounty/alarm is settled once per feed; skip re-charging once done. (Bystander combat
+        // above is intentionally NOT gated by this - it keeps reacting to newcomers.)
         if (g_feedReported) {
             return;
         }
@@ -345,45 +396,14 @@ namespace WitnessDetection {
         auto* settings = Settings::GetSingleton();
         if (!settings->Combat.EnableWitnessCombatReaction || !player) return;
 
-        // Start combat on a witness, deferred one frame so the feed teardown's
-        // restraint release / AI refresh has settled (else StartCombat can fizzle
-        // against a still-restrained actor).
-        auto startCombatDeferred = [](RE::Actor* w) {
-            auto handle = w->CreateRefHandle();
-            SKSE::GetTaskInterface()->AddTask([handle] {
-                auto ref = handle.get();
-                auto* witness = ref ? ref->As<RE::Actor>() : nullptr;
-                if (!witness || witness->IsDead()) return;
-                auto* pl = RE::PlayerCharacter::GetSingleton();
-                if (!pl) return;
-                SKSE::log::info("[WitnessDetection] {} turns hostile after witnessing the feed", witness->GetName());
-                PapyrusCall::StartCombat(witness, pl);
-            });
-        };
-
-        // 1. The victim itself - an awake, surviving, non-follower victim witnessed
-        //    its own assault. Attack only if the 3-tier model says so.
+        // Victim-only. Bystanders already turned hostile live during the feed (see
+        // TriggerBystanderCombat in PerformWitnessCheck). The victim can only react here, at
+        // feed end, because it was restrained in the paired animation until teardown released
+        // it. Attack only if the awake, surviving, non-follower victim's 3-tier model says so.
         if (victim && !victim->IsDead() && !victim->IsDisabled() &&
             !victim->IsPlayerTeammate() && TargetState::IsConsciousAndAware(victim) &&
             ClassifyWitness(victim, player) == WitnessReaction::kAttack) {
-            startCombatDeferred(victim);
-        }
-
-        // 2. Bystanders who detected the feed (LOS + detection), excluding the victim.
-        auto* processLists = RE::ProcessLists::GetSingleton();
-        if (!processLists) return;
-        const auto playerPos = player->GetPosition();
-        const float radius = settings->Combat.WitnessDetectionRadius;
-        for (auto& actorHandle : processLists->highActorHandles) {
-            auto actorPtr = actorHandle.get();
-            if (!actorPtr) continue;
-            auto* actor = actorPtr.get();
-            if (!actor || actor == victim) continue;
-            if (actor->GetPosition().GetDistance(playerPos) > radius) continue;
-            if (!CanActorWitnessFeed(actor, player, victim)) continue;
-            if (ClassifyWitness(actor, player) == WitnessReaction::kAttack) {
-                startCombatDeferred(actor);
-            }
+            StartCombatDeferred(victim);
         }
     }
 }

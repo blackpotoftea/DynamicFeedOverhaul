@@ -37,10 +37,13 @@ namespace {
             // is edge-triggered, so the delay must be ticked here to fire on time).
             sink->TickPendingPrompt();
 
-            // 2. Witness Check (only if enabled in settings). Stop once this feed's outcome
-            //    is settled - nothing changes after the verdict, so don't keep scanning.
+            // 2. Witness Check (only if enabled in settings). The bounty settles once, but
+            //    bystander combat reactions are evaluated live for the whole feed, so keep
+            //    scanning while combat reactions are on; otherwise stop once the verdict is in.
             if (settings->Combat.EnableWitnessDetection) {
-                if (FeedAnimState::IsFeedActive() && !WitnessDetection::IsFeedReported()) {
+                const bool keepScanning = !WitnessDetection::IsFeedReported() ||
+                                          settings->Combat.EnableWitnessCombatReaction;
+                if (FeedAnimState::IsFeedActive() && keepScanning) {
                     sink->witnessCheckTimer_ += a_delta;
                     if (sink->witnessCheckTimer_ > settings->Combat.WitnessCheckInterval) {
                         sink->witnessCheckTimer_ = 0.0f;

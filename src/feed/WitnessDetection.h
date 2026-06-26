@@ -33,9 +33,10 @@ namespace WitnessDetection {
     // for the rest of the feed - nothing changes after the verdict.
     bool IsFeedReported();
 
-    // Called once at feed end: evaluates the victim and any bystanders who saw the
-    // feed against the relationship/confidence model and starts combat (deferred) on
-    // those who turn hostile. The bounty/report side is handled live during the feed
-    // by PerformWitnessCheck. Gated by Combat.EnableWitnessCombatReaction.
+    // Called once at feed end: starts combat (deferred) on the VICTIM if it survived awake
+    // and the relationship/confidence model says it fights back. The victim reacts here
+    // rather than live because it is restrained in the paired animation until teardown
+    // releases it. Bystanders instead react live the moment they notice (TriggerBystanderCombat
+    // in PerformWitnessCheck), as does the bounty/report side. Gated by EnableWitnessCombatReaction.
     void ApplyWitnessReactions(RE::Actor* player, RE::Actor* victim);
 }
