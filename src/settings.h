@@ -93,6 +93,7 @@ public:
         bool EnableWitnessCombatReaction{ true }; // Awake victim of a witnessed feed fights back (else bounty only)
         int AssaultConfidenceThreshold{ 3 };     // Min victim Confidence to fight back (0=Cowardly..4=Foolhardy)
         bool WitnessRelationshipAware{ true };   // Use relationship/faction (friendly ignore, hostile attack) vs confidence-only
+        int WitnessAssaultBounty{ 0 };           // Bounty for a witnessed public feed; 0 = use the hold's vanilla assault crime gold
     } Combat;
 
     // Target filtering settings
@@ -177,6 +178,7 @@ public:
         bool EnableSacrosanctInCombat{ true };      // Use C++ integration for Sacrosanct during combat
         bool EnableSacrilegeInCombat{ true };       // Use C++ integration for Sacrilege during combat
         bool EnableVampireFeedProxy{ true };        // Skip vanilla feed events when VampireFeedProxy.dll is detected
+        bool EnableSkyrimNet{ true };               // Enable SkyrimNet (LLM NPC mod) integration: detect + register hooks on startup
     } Integration;
 
     void LoadINI();

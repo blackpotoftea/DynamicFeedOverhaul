@@ -3,6 +3,8 @@
 #include "TargetState.h"
 #include "papyrus/PapyrusCall.h"
 
+#include <atomic>
+
 namespace {
     // Custom relocation for SendAssaultAlarm function not exposed in CommonLibSSE
     // 1405DE810       1406042C0
@@ -40,6 +42,13 @@ namespace {
         default:                                 return brave ? WitnessReaction::kAttack : WitnessReaction::kReport;
         }
     }
+
+    // Latched true once a feed has been reported to guards, so a single feed produces a
+    // single assault charge no matter how many witness-check ticks see it. Reset at the
+    // start of each feed via WitnessDetection::ResetFeedReport(). Atomic because the reset
+    // runs on the feed-start (prompt-accept) path while reads/sets run on the update hook -
+    // the same cross-path access FeedAnimState guards with atomics.
+    std::atomic<bool> g_feedReported{ false };
 }
 
 namespace WitnessDetection {
@@ -80,11 +89,16 @@ namespace WitnessDetection {
             return false;
         }
 
-        // Check if actor can see the player or target (HasLineOfSight requires reference parameter)
+        // Check if actor can see the player or target (HasLineOfSight requires reference parameter).
+        // LOS is the expensive part of the per-tick scan (a raycast per actor); we only need ONE
+        // of player/target visible, so skip the target raycast when the player is already visible.
         bool losResult1 = false;
         bool losResult2 = false;
         bool canSeePlayer = potentialWitness->HasLineOfSight(player, losResult1);
-        bool canSeeTarget = potentialWitness->HasLineOfSight(target, losResult2);
+        bool canSeeTarget = false;
+        if (!canSeePlayer) {
+            canSeeTarget = potentialWitness->HasLineOfSight(target, losResult2);
+        }
 
         if (Settings::GetSingleton()->Combat.WitnessDebugLogging) {
             SKSE::log::debug("[WitnessDetection] {} LOS check: canSeePlayer={} ({}), canSeeTarget={} ({})",
@@ -229,6 +243,11 @@ namespace WitnessDetection {
             return;
         }
 
+        // Already reported this feed (one feed = one charge): skip the per-tick rescan.
+        if (g_feedReported) {
+            return;
+        }
+
         if (settings->Combat.WitnessDebugLogging) {
             SKSE::log::debug("[WitnessDetection] checking for witnesses (player: {}, target: {})",
                 player->GetName(), target->GetName());
@@ -266,50 +285,60 @@ namespace WitnessDetection {
     void OnDetectedByWitness(RE::Actor* player, RE::Actor* target, RE::Actor* witness) {
         if (!player || !target || !witness) return;
 
-        // Cooldown check: prevent bounty spam if detected multiple times rapidly
-        auto* processLists = RE::ProcessLists::GetSingleton();
-        if (!processLists) return;
+        // One outcome per feed. The witness check runs every WitnessCheckInterval for the
+        // whole feed; without this latch each tick re-ran this - re-adding the bounty, or
+        // (for faction-less victims) re-logging and re-notifying the player every tick.
+        if (g_feedReported) {
+            SKSE::log::debug("[WitnessDetection] Feed already resolved - skipping");
+            return;
+        }
+        // This call settles the feed's witness outcome (the bounty is assessed against the
+        // victim's crime faction, which is fixed for the whole feed). Latch now so the
+        // per-tick check stops, whether or not a crime ends up applying. Reset at feed start.
+        g_feedReported = true;
 
-        static float lastWitnessDetectionTime = 0.0f;
-        float currentTime = processLists->GetSystemTimeClock();
-        constexpr float cooldownDuration = 5.0f;  // 5 seconds between bounty additions
-
-        if (currentTime - lastWitnessDetectionTime < cooldownDuration) {
-            SKSE::log::debug("[WitnessDetection] Witness detection on cooldown, skipping");
+        // Faction-less victims (a generic Courier, summons, some mercenaries) have no
+        // jurisdiction to report to - feeding on them is not a reportable crime. Settle
+        // silently: no bounty, no alarm, no "you've been seen" notification.
+        auto* crimeFaction = target->GetCrimeFaction();
+        if (!crimeFaction || crimeFaction->crimeData.crimevalues.assaultCrimeGold == 0) {
+            SKSE::log::info("[WitnessDetection] {} has no crime faction - feed not a reportable crime",
+                target->GetName());
             return;
         }
 
-        lastWitnessDetectionTime = currentTime;
         SKSE::log::trace("[WitnessDetection] Feed witnessed by: {} - triggering assault crime", witness->GetName());
 
-        // Get the target's crime faction to determine assault bounty
-        auto* crimeFaction = target->GetCrimeFaction();
-        if (crimeFaction && crimeFaction->crimeData.crimevalues.assaultCrimeGold > 0) {
-            std::uint16_t assaultBounty = crimeFaction->crimeData.crimevalues.assaultCrimeGold;
+        // Bounty size: use the configured override when set, otherwise the hold's own
+        // vanilla assault crime gold.
+        const int configured = Settings::GetSingleton()->Combat.WitnessAssaultBounty;
+        const std::int32_t assaultBounty = configured > 0
+            ? configured
+            : static_cast<std::int32_t>(crimeFaction->crimeData.crimevalues.assaultCrimeGold);
 
-            SKSE::log::info("[WitnessDetection] Adding assault crime: faction={}, bounty={}",
-                crimeFaction->GetName(), assaultBounty);
+        SKSE::log::info("[WitnessDetection] Adding assault crime: faction={}, bounty={}",
+            crimeFaction->GetName(), assaultBounty);
 
-            // Add assault bounty to player (thread-safe: called from main update hook)
-            player->ModCrimeGoldValue(crimeFaction, true, assaultBounty);
+        // Add assault bounty to player (thread-safe: called from main update hook)
+        player->ModCrimeGoldValue(crimeFaction, true, assaultBounty);
 
-            // Send alarm to alert guards in the area - only when there's a valid crime faction
-            // This prevents guards from attacking when feeding on followers/mercenaries who have no faction
-            SendAssaultAlarm(target, player, true);
+        // Send alarm to alert guards in the area.
+        SendAssaultAlarm(target, player, true);
 
-            // Log the new bounty
-            std::uint32_t totalBounty = player->GetCrimeGoldValue(crimeFaction);
-            SKSE::log::info("[WitnessDetection] Player bounty in {} is now {}", crimeFaction->GetName(), totalBounty);
-        } else {
-            SKSE::log::warn("[WitnessDetection] Target has no crime faction or assault bounty is 0 - no alarm sent, no bounty added");
-        }
+        const std::uint32_t totalBounty = player->GetCrimeGoldValue(crimeFaction);
+        SKSE::log::info("[WitnessDetection] Player bounty in {} is now {}", crimeFaction->GetName(), totalBounty);
 
-        // Don't force the victim into combat - they may be friendly, sleeping, etc.
-        // The witness detection alone will alert guards naturally
-
-        // Notify player
+        // Notify the player only when the feed actually became a crime.
         auto message = fmt::format("You've been seen by {}!", witness->GetName());
         RE::DebugNotification(message.c_str());
+    }
+
+    void ResetFeedReport() {
+        g_feedReported = false;
+    }
+
+    bool IsFeedReported() {
+        return g_feedReported;
     }
 
     void ApplyWitnessReactions(RE::Actor* player, RE::Actor* victim) {

@@ -13,6 +13,7 @@ set(headers ${headers}
     src/papyrus/PapyrusCall.h
     src/integration/OStimIntegration.h
     src/integration/PoiseIntegration.h
+    src/integration/SkyrimNetIntegration.h
     src/utils/MenuCheck.h
     src/feed/AnimationRegistry.h
     src/integration/UI.h

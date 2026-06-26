@@ -149,6 +149,7 @@ void Settings::LoadINI() {
     Combat.EnableWitnessCombatReaction = ini.GetBoolValue("Combat", "EnableWitnessCombatReaction", Combat.EnableWitnessCombatReaction);
     Combat.AssaultConfidenceThreshold = static_cast<int>(ini.GetLongValue("Combat", "AssaultConfidenceThreshold", Combat.AssaultConfidenceThreshold));
     Combat.WitnessRelationshipAware = ini.GetBoolValue("Combat", "WitnessRelationshipAware", Combat.WitnessRelationshipAware);
+    Combat.WitnessAssaultBounty = static_cast<int>(ini.GetLongValue("Combat", "WitnessAssaultBounty", Combat.WitnessAssaultBounty));
 
     // Filtering
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
@@ -216,6 +217,7 @@ void Settings::LoadINI() {
     Integration.EnableSacrosanctInCombat = ini.GetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat);
     Integration.EnableSacrilegeInCombat = ini.GetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat);
     Integration.EnableVampireFeedProxy = ini.GetBoolValue("Integration", "EnableVampireFeedProxy", Integration.EnableVampireFeedProxy);
+    Integration.EnableSkyrimNet = ini.GetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, LogLevel={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
@@ -230,12 +232,12 @@ void Settings::LoadINI() {
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
         NonCombat.UseCompositePairedAnimation, NonCombat.UseCompositeFurnitureAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
         NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, VLLowLevelFeed={}, VLLowLevelFeedDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, WitnessCombatReaction={}, AssaultConfThreshold={}, RelationshipAware={}",
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, VLLowLevelFeed={}, VLLowLevelFeedDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, WitnessCombatReaction={}, AssaultConfThreshold={}, RelationshipAware={}, AssaultBounty={}",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
         Combat.VampireLordLowLevelFeed, Combat.VampireLordLowLevelFeedDifference,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds,
-        Combat.EnableWitnessCombatReaction, Combat.AssaultConfidenceThreshold, Combat.WitnessRelationshipAware);
+        Combat.EnableWitnessCombatReaction, Combat.AssaultConfidenceThreshold, Combat.WitnessRelationshipAware, Combat.WitnessAssaultBounty);
     SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
@@ -247,9 +249,10 @@ void Settings::LoadINI() {
         HealthDrain.Enable, HealthDrain.FloorTargetAtOneHP, HealthDrain.DrainOnNPC,
         HealthDrain.LethalChunkMinPercent, HealthDrain.LethalChunkMaxPercent,
         HealthDrain.EscalationPerTrigger, HealthDrain.NonLethalChunkPercent, HealthDrain.MaxChunkCapPercent);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}",
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}, EnableVampireFeedProxy={}, EnableSkyrimNet={}",
         Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck,
-        Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat);
+        Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat,
+        Integration.EnableVampireFeedProxy, Integration.EnableSkyrimNet);
 }
 
 void Settings::SaveINI() {
@@ -383,6 +386,8 @@ void Settings::SaveINI() {
         "; Minimum victim Confidence to fight back when awake (0=Cowardly, 1=Cautious, 2=Average, 3=Brave, 4=Foolhardy)");
     ini.SetBoolValue("Combat", "WitnessRelationshipAware", Combat.WitnessRelationshipAware,
         "; Factor in relationship/faction: friends never attack or report, foes/enemies always attack, others decide by Confidence (off = Confidence only)");
+    ini.SetLongValue("Combat", "WitnessAssaultBounty", Combat.WitnessAssaultBounty,
+        "; Bounty added when a feed is witnessed in public, applied once per feed. 0 = use the hold's vanilla assault crime gold");
 
     // Filtering
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,
@@ -505,6 +510,8 @@ void Settings::SaveINI() {
         "; Use C++ integration for Sacrilege during combat (bypasses AI-driven state issues)");
     ini.SetBoolValue("Integration", "EnableVampireFeedProxy", Integration.EnableVampireFeedProxy,
         "; When VampireFeedProxy.dll is detected, skip vanilla feed events (proxy handles them)");
+    ini.SetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet,
+        "; Enable SkyrimNet (LLM-driven NPC mod) integration: detect the mod and register hooks on startup (auto-detects mod)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

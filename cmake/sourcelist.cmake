@@ -19,6 +19,7 @@ set(sources ${sources}
     src/integration/SacrilegeIntegration.cpp
     src/integration/VampireIntegrationUtils.cpp
     src/integration/VampireFeedProxyIntegration.cpp
+    src/integration/SkyrimNetIntegration.cpp
     src/utils/MenuCheck.cpp
     src/feed/TargetState.cpp
     src/feed/AnimationRegistry.cpp

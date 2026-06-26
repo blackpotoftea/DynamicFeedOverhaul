@@ -45,6 +45,8 @@ namespace {
         if (settings->Combat.EnableWitnessDetection) {
             changed |= ImGuiMCP::SliderFloat("Witness Detection Radius", &settings->Combat.WitnessDetectionRadius, 500.0f, 5000.0f, "%.0f units");
             changed |= ImGuiMCP::SliderFloat("Witness Check Interval", &settings->Combat.WitnessCheckInterval, 0.1f, 2.0f, "%.1f sec");
+            changed |= ImGuiMCP::SliderInt("Witness Assault Bounty", &settings->Combat.WitnessAssaultBounty, 0, 2000);
+            ImGuiMCP::SetItemTooltip("Bounty for a feed witnessed in public, applied once per feed. 0 = use the hold's vanilla assault crime gold.");
             changed |= ImGuiMCP::Checkbox("Witness Debug Logging", &settings->Combat.WitnessDebugLogging);
         }
         ImGuiMCP::Separator();
@@ -544,6 +546,8 @@ void __stdcall UI::Settings::Render() {
         changed |= ImGuiMCP::Checkbox("Enable Sacrilege In Combat", &settings->Integration.EnableSacrilegeInCombat);
         changed |= ImGuiMCP::Checkbox("Enable Vampire Feed Proxy", &settings->Integration.EnableVampireFeedProxy);
         ImGuiMCP::SetItemTooltip("Skip vanilla feed events when VampireFeedProxy.dll is detected");
+        changed |= ImGuiMCP::Checkbox("Enable SkyrimNet", &settings->Integration.EnableSkyrimNet);
+        ImGuiMCP::SetItemTooltip("Detect SkyrimNet (LLM NPC mod) and register integration hooks on startup (takes effect on next launch)");
     }
 
     // Save if any setting changed

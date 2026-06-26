@@ -37,9 +37,10 @@ namespace {
             // is edge-triggered, so the delay must be ticked here to fire on time).
             sink->TickPendingPrompt();
 
-            // 2. Witness Check (only if enabled in settings)
+            // 2. Witness Check (only if enabled in settings). Stop once this feed's outcome
+            //    is settled - nothing changes after the verdict, so don't keep scanning.
             if (settings->Combat.EnableWitnessDetection) {
-                if (FeedAnimState::IsFeedActive()) {
+                if (FeedAnimState::IsFeedActive() && !WitnessDetection::IsFeedReported()) {
                     sink->witnessCheckTimer_ += a_delta;
                     if (sink->witnessCheckTimer_ > settings->Combat.WitnessCheckInterval) {
                         sink->witnessCheckTimer_ = 0.0f;

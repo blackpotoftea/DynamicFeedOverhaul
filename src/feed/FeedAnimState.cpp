@@ -23,6 +23,10 @@ namespace FeedAnimState {
     std::atomic<bool> feedHasOAR{false};
 
     void MarkFeedStarted() {
+        // Clear the witness "already reported" latch BEFORE publishing Active, so a witness
+        // check that observes the new feed (acquire-load of feedState) also observes the
+        // cleared latch (it is sequenced before the release-store below).
+        WitnessDetection::ResetFeedReport();  // new feed -> allow exactly one assault charge
         feedState.store(State::Active, std::memory_order_release);
         currentFeedLethal.store(false, std::memory_order_release);
         vfdTriggerCount.store(0, std::memory_order_release);

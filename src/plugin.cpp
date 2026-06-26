@@ -12,6 +12,7 @@
 #include "integration/SacrosanctIntegration.h"
 #include "integration/SacrilegeIntegration.h"
 #include "integration/VampireFeedProxyIntegration.h"
+#include "integration/SkyrimNetIntegration.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
 #include "utils/AnimUtil.h"
@@ -71,6 +72,20 @@ void OnDataLoaded()
         }
     } else {
         SKSE::log::info("VampireFeedProxy not detected - vanilla feed events will be sent");
+    }
+
+    // SkyrimNet (LLM-driven NPC mod) integration. Gated on the EnableSkyrimNet
+    // setting: Initialize() loads the API, Setup() registers our hooks (decorators/
+    // event callbacks) once at startup. Feed-time behavior is wired in a later pass.
+    if (settings->Integration.EnableSkyrimNet) {
+        if (SkyrimNetIntegration::Initialize()) {
+            SKSE::log::info("SkyrimNet detected - API loaded");
+            SkyrimNetIntegration::Setup();
+        } else {
+            SKSE::log::info("SkyrimNet not detected - integration disabled");
+        }
+    } else {
+        SKSE::log::info("SkyrimNet integration disabled in settings");
     }
 
     if (SKSEMenuFramework::IsInstalled()) {
