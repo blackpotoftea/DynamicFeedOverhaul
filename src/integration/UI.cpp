@@ -544,8 +544,6 @@ void __stdcall UI::Settings::Render() {
         changed |= ImGuiMCP::Checkbox("Deep Sacrilege Integration", &settings->Integration.DeepSacrilegeIntegration);
         changed |= ImGuiMCP::Checkbox("Enable Sacrosanct In Combat", &settings->Integration.EnableSacrosanctInCombat);
         changed |= ImGuiMCP::Checkbox("Enable Sacrilege In Combat", &settings->Integration.EnableSacrilegeInCombat);
-        changed |= ImGuiMCP::Checkbox("Enable Vampire Feed Proxy", &settings->Integration.EnableVampireFeedProxy);
-        ImGuiMCP::SetItemTooltip("Skip vanilla feed events when VampireFeedProxy.dll is detected");
         changed |= ImGuiMCP::Checkbox("Enable SkyrimNet", &settings->Integration.EnableSkyrimNet);
         ImGuiMCP::SetItemTooltip("Detect SkyrimNet (LLM NPC mod) and register integration hooks on startup (takes effect on next launch)");
     }

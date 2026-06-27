@@ -25,7 +25,7 @@ namespace SkyrimNetIntegration {
 
         // SkyrimNet is an SKSE plugin already loaded by the runtime; use
         // GetModuleHandle rather than LoadLibrary so we don't take an extra
-        // refcount or trigger a fresh load (matches VampireFeedProxyIntegration).
+        // refcount or trigger a fresh load.
         HMODULE hDLL = GetModuleHandleA("SkyrimNet.dll");
         if (!hDLL) {
             SKSE::log::info("SkyrimNet DLL not found - integration disabled");

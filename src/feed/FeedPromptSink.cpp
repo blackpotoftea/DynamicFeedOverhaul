@@ -10,7 +10,6 @@
 #include "feed/FeedIconOverlay.h"
 #include "integration/OStimIntegration.h"
 #include "integration/VampireIntegrationUtils.h"
-#include "integration/VampireFeedProxyIntegration.h"
 #include "utils/MenuCheck.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/AnimUtil.h"

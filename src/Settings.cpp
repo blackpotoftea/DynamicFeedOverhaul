@@ -216,7 +216,6 @@ void Settings::LoadINI() {
     Integration.DeepSacrilegeIntegration = ini.GetBoolValue("Integration", "DeepSacrilegeIntegration", Integration.DeepSacrilegeIntegration);
     Integration.EnableSacrosanctInCombat = ini.GetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat);
     Integration.EnableSacrilegeInCombat = ini.GetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat);
-    Integration.EnableVampireFeedProxy = ini.GetBoolValue("Integration", "EnableVampireFeedProxy", Integration.EnableVampireFeedProxy);
     Integration.EnableSkyrimNet = ini.GetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet);
 
     SKSE::log::info("Settings loaded:");
@@ -249,10 +248,10 @@ void Settings::LoadINI() {
         HealthDrain.Enable, HealthDrain.FloorTargetAtOneHP, HealthDrain.DrainOnNPC,
         HealthDrain.LethalChunkMinPercent, HealthDrain.LethalChunkMaxPercent,
         HealthDrain.EscalationPerTrigger, HealthDrain.NonLethalChunkPercent, HealthDrain.MaxChunkCapPercent);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}, EnableVampireFeedProxy={}, EnableSkyrimNet={}",
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}, EnableSkyrimNet={}",
         Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck,
         Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat,
-        Integration.EnableVampireFeedProxy, Integration.EnableSkyrimNet);
+        Integration.EnableSkyrimNet);
 }
 
 void Settings::SaveINI() {
@@ -508,8 +507,6 @@ void Settings::SaveINI() {
         "; Use C++ integration for Sacrosanct during combat (bypasses AI-driven state issues)");
     ini.SetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat,
         "; Use C++ integration for Sacrilege during combat (bypasses AI-driven state issues)");
-    ini.SetBoolValue("Integration", "EnableVampireFeedProxy", Integration.EnableVampireFeedProxy,
-        "; When VampireFeedProxy.dll is detected, skip vanilla feed events (proxy handles them)");
     ini.SetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet,
         "; Enable SkyrimNet (LLM-driven NPC mod) integration: detect the mod and register hooks on startup (auto-detects mod)");
 

@@ -11,7 +11,6 @@
 #include "integration/PoiseIntegration.h"
 #include "integration/SacrosanctIntegration.h"
 #include "integration/SacrilegeIntegration.h"
-#include "integration/VampireFeedProxyIntegration.h"
 #include "integration/SkyrimNetIntegration.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
@@ -62,17 +61,7 @@ void OnDataLoaded()
         SKSE::log::warn("Multiple vampire overhauls detected - this may cause conflicts!");
     }
 
-    // VampireFeedProxy.dll detection - if present and enabled, skip vanilla feed events (proxy handles them)
     auto* settings = Settings::GetSingleton();
-    if (VampireFeedProxyIntegration::Initialize()) {
-        if (settings->Integration.EnableVampireFeedProxy) {
-            SKSE::log::info("VampireFeedProxy detected - vanilla feed events will be skipped");
-        } else {
-            SKSE::log::info("VampireFeedProxy detected but integration disabled - vanilla feed events will be sent");
-        }
-    } else {
-        SKSE::log::info("VampireFeedProxy not detected - vanilla feed events will be sent");
-    }
 
     // SkyrimNet (LLM-driven NPC mod) integration. Gated on the EnableSkyrimNet
     // setting: Initialize() loads the API, Setup() registers our hooks (decorators/

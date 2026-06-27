@@ -2,7 +2,6 @@
 #include "Settings.h"
 #include "papyrus/PapyrusCall.h"
 #include "integration/VampireIntegrationUtils.h"
-#include "integration/VampireFeedProxyIntegration.h"
 #include "feed/TargetState.h"
 #include "utils/AnimUtil.h"
 
@@ -18,28 +17,18 @@ namespace FeedIntegration {
 
         auto* player = RE::PlayerCharacter::GetSingleton();
 
-        // Check if VampireFeedProxy handles vampire feed - if so, skip vanilla feed calls
-        auto* settings = Settings::GetSingleton();
-        bool proxyHandlesFeed = settings->Integration.EnableVampireFeedProxy &&
-                                VampireFeedProxyIntegration::IsAvailable();
-
-        if (proxyHandlesFeed) {
-            SKSE::log::info("VampireFeedProxy detected - skipping vanilla vampire feed event");
-        } else {
-            PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
-        }
-
         // Send custom DAO_VampireFeed event with attacker and target (always send our custom event)
         if (player) {
             PapyrusCall::SendDAO_VampireFeedEvent(player, callbackTarget);
         }
 
-        // Only call vampire script if NOT a werewolf AND proxy is not handling it
-        if (player && !TargetState::IsWerewolf(player) && !proxyHandlesFeed) {
+        // Only call vampire script if NOT a werewolf
+        if (player && !TargetState::IsWerewolf(player)) {
             auto* vampireQuest = PapyrusCall::GetPlayerVampireQuest();
             if (vampireQuest) {
                 // If lethal, the kill move animation handles the kill - don't double-kill in integration
                 bool animationHandlesKill = isLethal;
+                // DISABLE TMP to test
                 PapyrusCall::CallVampireFeed(vampireQuest, callbackTarget, isLethal, animationHandlesKill);
             } else {
                 SKSE::log::warn("PlayerVampireQuest not found - vampire status won't update");
@@ -84,9 +73,16 @@ namespace FeedIntegration {
                 break;
 
             case PapyrusCall::VampireIntegration::Vanilla:
-            default:
                 SKSE::log::debug("Post-feed: Vanilla vampire system active");
-                // Only kill if:
+                // Send the vanilla OnVampireFeed event - only relevant for the vanilla
+                // vampire system; modded overhauls drive feeding through their own
+                // ProcessFeed/VampireFeed dispatch in PapyrusCall::CallVampireFeed.
+                PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
+                [[fallthrough]];
+
+            default:
+                // Manual-kill fallback for Vanilla and any integration without its own
+                // kill handling (e.g. Sacrilege, which falls through here). Only kill if:
                 // 1. User wants lethal feed
                 // 2. NO OAR combat animation found (if OAR anim exists, kill is baked in)
                 if (isLethal && callbackTarget && !hasOARAnimation) {
