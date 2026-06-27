@@ -18,7 +18,6 @@ set(sources ${sources}
     src/integration/SacrosanctIntegration.cpp
     src/integration/SacrilegeIntegration.cpp
     src/integration/VampireIntegrationUtils.cpp
-    src/integration/VampireFeedProxyIntegration.cpp
     src/integration/FeedIntegration.cpp
     src/integration/SkyrimNetIntegration.cpp
     src/utils/MenuCheck.cpp

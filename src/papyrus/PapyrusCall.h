@@ -132,6 +132,23 @@ namespace PapyrusCall {
         return result;
     }
 
+    // Call PlayerVampireQuestScript.VampireFeed with whatever argument count the loaded
+    // script actually declares. Vanilla declares VampireFeed() (0 args); overrides such as
+    // Better Vampires or VampireFeedProxy declare VampireFeed(Actor) (1 arg). Detecting the
+    // signature here - rather than assuming it from the integration type - means we always
+    // pass the right number of arguments regardless of which mod replaced the script.
+    inline bool CallVampireFeedAuto(RE::TESQuest* quest, RE::Actor* target) {
+        int signature = GetVampireFeedSignature(quest);
+        if (signature == 2) {
+            return CallVampireFeedWithActor(quest, target);
+        }
+        if (signature == 1) {
+            return CallVampireFeedNoArgs(quest);
+        }
+        SKSE::log::warn("CallVampireFeedAuto: VampireFeed not found on PlayerVampireQuestScript - skipping");
+        return false;
+    }
+
     // Get the Sacrosanct FeedManager quest by editor ID
     inline RE::TESQuest* GetSacrosanctFeedManagerQuest() {
         return RE::TESForm::LookupByEditorID<RE::TESQuest>("SCS_FeedManager_Quest");
@@ -256,15 +273,17 @@ namespace PapyrusCall {
             }
         }
 
-        // Check for modded vampire quest (Better Vampires, etc.)
+        // Check for Better Vampires. Classify purely by the actual Better Vampires.esp
+        // being present - the 1-arg VampireFeed(Actor) signature alone is ambiguous
+        // (VampireFeedProxy and others also override the vanilla 0-arg VampireFeed with a
+        // 1-arg version, and must NOT be misdetected as Better Vampires). The VampireFeed
+        // argument count is detected separately, generally, at call time
+        // (CallVampireFeedAuto), so it no longer gates this classification.
         if (settings->Integration.EnableBetterVampires) {
-            auto* vampireQuest = GetPlayerVampireQuest();
-            if (vampireQuest) {
-                int signature = GetVampireFeedSignature(vampireQuest);
-                if (signature == 2) {
-                    // Has Actor parameter - likely Better Vampires or similar mod
-                    return VampireIntegration::BetterVampires;
-                }
+            auto* dataHandler = RE::TESDataHandler::GetSingleton();
+            bool hasBetterVampires = dataHandler && dataHandler->LookupModByName("Better Vampires.esp") != nullptr;
+            if (hasBetterVampires && GetPlayerVampireQuest()) {
+                return VampireIntegration::BetterVampires;
             }
         }
 
@@ -358,13 +377,13 @@ namespace PapyrusCall {
 
             case VampireIntegration::BetterVampires: {
                 SKSE::log::info("Using Better Vampires integration");
-                return CallVampireFeedWithActor(quest, target);
+                return CallVampireFeedAuto(quest, target);
             }
 
             case VampireIntegration::Vanilla:
             default: {
                 SKSE::log::info("Using Vanilla integration");
-                return CallVampireFeedNoArgs(quest);
+                return CallVampireFeedAuto(quest, target);
             }
         }
     }

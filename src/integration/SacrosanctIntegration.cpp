@@ -841,7 +841,8 @@ namespace SacrosanctIntegration {
         CallPreFeedPapyrus(context.target);
 
         // === STEP 3: Feed sound ===
-        SoundUtil::PlayFeedSound(context.target);
+        // Disable as it's duplicate 
+        // SoundUtil::PlayFeedSound(context.target);
 
         // === STEP 4: Cast feed spell on target ===
         if (!context.target->IsDead() && g_scsFeedTargetSpell) {

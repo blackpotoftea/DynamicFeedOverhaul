@@ -35,5 +35,6 @@ namespace VampireIntegrationUtils {
     // Script properties
     bool GetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int& outValue);
     bool SetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int value);
+    bool SetScriptPropertyFloat(RE::TESQuest* quest, const char* scriptName, const char* propertyName, float value);
 
 }

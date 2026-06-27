@@ -257,6 +257,38 @@ namespace VampireIntegrationUtils {
         return true;
     }
 
+    bool SetScriptPropertyFloat(RE::TESQuest* quest, const char* scriptName, const char* propertyName, float value) {
+        if (!quest) return false;
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            SKSE::log::warn("VampireIntegrationUtils::SetScriptPropertyFloat: VM not available");
+            return false;
+        }
+
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
+            SKSE::log::warn("VampireIntegrationUtils::SetScriptPropertyFloat: Failed to get handle for quest");
+            return false;
+        }
+
+        RE::BSTSmartPointer<RE::BSScript::Object> object;
+        if (!vm->FindBoundObject(handle, scriptName, object) || !object) {
+            SKSE::log::warn("VampireIntegrationUtils::SetScriptPropertyFloat: Script '{}' not found on quest", scriptName);
+            return false;
+        }
+
+        auto* property = object->GetProperty(propertyName);
+        if (!property) {
+            SKSE::log::warn("VampireIntegrationUtils::SetScriptPropertyFloat: Property '{}' not found", propertyName);
+            return false;
+        }
+
+        property->SetFloat(value);
+        SKSE::log::debug("VampireIntegrationUtils::SetScriptPropertyFloat: {}.{} = {}", scriptName, propertyName, value);
+        return true;
+    }
+
     bool FormListRemoveForm(RE::BGSListForm* formList, RE::TESForm* form) {
         if (!formList || !form) return false;
 
