@@ -61,6 +61,9 @@ namespace CompositePairedAnimation {
                                             // victim is left untouched in its bed/bedroll
         bool protectedFromKill_ = false;    // essential/protected victim (ExcludeEssentialFromLethal):
                                             // the drain floors above the kill band and never kills
+        bool wasWeaponDrawn_ = false;       // player's weapon/magic drawn state snapshotted at Play();
+                                            // sheathed for the feed and redrawn when the player is freed
+                                            // (mirrors PairedAnimation's solo sheathe/redraw).
     }
 
     bool IsActive() { return stage_ != Stage::Idle && stage_ != Stage::Done; }
@@ -84,6 +87,18 @@ namespace CompositePairedAnimation {
         void ReleaseLock(RE::Actor* a) {
             if (!a) return;
             AnimUtil::StopTranslation(nullptr, 0, a);
+        }
+
+        // Restore the player's weapon/magic drawn state that Play() sheathed for
+        // the feed. Called once when the player is freed — early at Drained start
+        // (ReleasePlayer) or, if there was no early release, at teardown. Guarded
+        // by wasWeaponDrawn_ so it's a no-op when the weapon was already sheathed
+        // and self-clears so it can't redraw twice. Mirrors PairedAnimation::OnComplete.
+        void RedrawPlayerWeapon(RE::Actor* player) {
+            if (!player || !wasWeaponDrawn_) return;
+            wasWeaponDrawn_ = false;
+            SKSE::log::info("[CompositePairedAnimation] Redrawing player weapon (was drawn at feed start)");
+            AnimUtil::redrawWeapon(player);
         }
 
         // Debug tracer: log the target NPC's current world position with a label,
@@ -178,6 +193,7 @@ namespace CompositePairedAnimation {
             RestoreCollision(player);
             AnimUtil::SetInKillMove(player, false);
             AnimUtil::UnlockActorForPairedAnim(player);
+            RedrawPlayerWeapon(player);
             playerReleased_ = true;
             SKSE::log::info("[CompositePairedAnimation] Player released early - free to move during Drained");
         }
@@ -217,6 +233,7 @@ namespace CompositePairedAnimation {
                 player->SetPosition(lockedPlayerPos_, true);
                 RestoreCollision(player);
                 AnimUtil::UnlockActorForPairedAnim(player);
+                RedrawPlayerWeapon(player);
             }
             if (auto target = feedTargetHandle_.get()) {
                 if (auto* ta = target->As<RE::Actor>()) {
@@ -436,6 +453,19 @@ namespace CompositePairedAnimation {
         }
 
         LogTargetPos("Play:trigger");
+
+        // Sheathe the player's weapon/magic for the feed. The composite path fires
+        // raw graph clips over the player like a solo idle, so — as PairedAnimation
+        // does for its solo animations — it must sheathe explicitly (paired idles
+        // handle weapon state natively; raw NotifyAnimationGraph does not). The
+        // drawn state is snapshotted here and redrawn when the player is freed
+        // (ReleasePlayer at Drained start, or DoTeardown otherwise).
+        auto* playerState = player->AsActorState();
+        wasWeaponDrawn_ = playerState && playerState->IsWeaponDrawn();
+        SKSE::log::info("[CompositePairedAnimation] Player weapon drawn state at feed start: {}", wasWeaponDrawn_);
+        if (wasWeaponDrawn_) {
+            player->DrawWeaponMagicHands(false);
+        }
 
         // Show the victim's health bar for the whole feed (drains live as HP
         // drops). Hidden centrally in FeedAnimState::MarkFeedEnded().
