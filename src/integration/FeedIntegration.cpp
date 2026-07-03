@@ -2,6 +2,7 @@
 #include "Settings.h"
 #include "papyrus/PapyrusCall.h"
 #include "integration/VampireIntegrationUtils.h"
+#include "integration/SkyrimNetIntegration.h"
 #include "feed/TargetState.h"
 #include "utils/AnimUtil.h"
 
@@ -106,6 +107,17 @@ namespace FeedIntegration {
         // Send custom DAO_VampireFeed event with attacker and target (always send our custom event)
         if (player) {
             PapyrusCall::SendDAO_VampireFeedEvent(player, callbackTarget);
+        }
+
+        // Notify SkyrimNet of the feed (fires once per feed for both the legacy paired and
+        // composite paths, since both funnel through Run). Gated on the integration + the
+        // send-events toggle; RegisterVampireFeedEvent no-ops if SkyrimNet isn't installed.
+        auto* settings = Settings::GetSingleton();
+        if (player && settings->Integration.EnableSkyrimNet && settings->Integration.SkyrimNetSendEvents) {
+            // killed=isLethal: correct for the legacy path (Run fires at feed completion with
+            // lethality known). The composite path calls Run at Loop start with isLethal=false;
+            // its drain-dry kill emits its own killed=true event from CompositePairedAnimation.
+            SkyrimNetIntegration::RegisterVampireFeedEvent(player, callbackTarget, isLethal);
         }
 
         PapyrusCall::VampireIntegration integration = PapyrusCall::DetectVampireIntegration();

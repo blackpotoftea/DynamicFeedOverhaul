@@ -217,6 +217,7 @@ void Settings::LoadINI() {
     Integration.EnableSacrosanctInCombat = ini.GetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat);
     Integration.EnableSacrilegeInCombat = ini.GetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat);
     Integration.EnableSkyrimNet = ini.GetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet);
+    Integration.SkyrimNetSendEvents = ini.GetBoolValue("Integration", "SkyrimNetSendEvents", Integration.SkyrimNetSendEvents);
 
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, LogLevel={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
@@ -248,10 +249,10 @@ void Settings::LoadINI() {
         HealthDrain.Enable, HealthDrain.FloorTargetAtOneHP, HealthDrain.DrainOnNPC,
         HealthDrain.LethalChunkMinPercent, HealthDrain.LethalChunkMaxPercent,
         HealthDrain.EscalationPerTrigger, HealthDrain.NonLethalChunkPercent, HealthDrain.MaxChunkCapPercent);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}, EnableSkyrimNet={}",
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}, EnableSkyrimNet={}, SkyrimNetSendEvents={}",
         Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck,
         Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat,
-        Integration.EnableSkyrimNet);
+        Integration.EnableSkyrimNet, Integration.SkyrimNetSendEvents);
 }
 
 void Settings::SaveINI() {
@@ -509,6 +510,8 @@ void Settings::SaveINI() {
         "; Use C++ integration for Sacrilege during combat (bypasses AI-driven state issues)");
     ini.SetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet,
         "; Enable SkyrimNet (LLM-driven NPC mod) integration: detect the mod and register hooks on startup (auto-detects mod)");
+    ini.SetBoolValue("Integration", "SkyrimNetSendEvents", Integration.SkyrimNetSendEvents,
+        "; When SkyrimNet is enabled, send vampire_feed / vampire_feed_failed events to it at feed time (disable to stop sending events)");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

@@ -5,6 +5,7 @@
 #include "PCH.h"
 #include "feed/PairedAnimation.h"
 #include "integration/FeedIntegration.h"
+#include "integration/SkyrimNetIntegration.h"
 #include "papyrus/PapyrusCall.h"
 #include "utils/AnimUtil.h"
 #include "utils/SoundUtil.h"
@@ -695,6 +696,15 @@ namespace CompositePairedAnimation {
                 // the victim simply dies mid-bite.
                 SKSE::log::info("[CompositePairedAnimation] Loop: victim drained dry - killing in place");
                 FeedAnimState::SetCurrentFeedLethal(true);
+
+                // Notify SkyrimNet of the drain-kill (killed=true). This is separate from the
+                // Loop-start vampire_feed event (which fired with killed=false, since composite
+                // lethality is emergent). Emitted before the kill so the actor state is coherent.
+                auto* player = RE::PlayerCharacter::GetSingleton();
+                if (player && settings->Integration.EnableSkyrimNet && settings->Integration.SkyrimNetSendEvents) {
+                    SkyrimNetIntegration::RegisterVampireFeedEvent(player, target, /*killed*/ true);
+                }
+
                 AnimUtil::KillTarget(target);  // kill while still posed/locked
                 Finish();
             }

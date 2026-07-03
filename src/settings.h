@@ -178,6 +178,7 @@ public:
         bool EnableSacrosanctInCombat{ true };      // Use C++ integration for Sacrosanct during combat
         bool EnableSacrilegeInCombat{ true };       // Use C++ integration for Sacrilege during combat
         bool EnableSkyrimNet{ true };               // Enable SkyrimNet (LLM NPC mod) integration: detect + register hooks on startup
+        bool SkyrimNetSendEvents{ true };           // When SkyrimNet is enabled, send vampire_feed / vampire_feed_failed events to it
     } Integration;
 
     void LoadINI();

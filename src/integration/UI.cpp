@@ -593,6 +593,8 @@ void __stdcall UI::Settings::Render() {
         changed |= ImGuiMCP::Checkbox("Enable Sacrilege In Combat", &settings->Integration.EnableSacrilegeInCombat);
         changed |= ImGuiMCP::Checkbox("Enable SkyrimNet", &settings->Integration.EnableSkyrimNet);
         ImGuiMCP::SetItemTooltip("Detect SkyrimNet (LLM NPC mod) and register integration hooks on startup (takes effect on next launch)");
+        changed |= ImGuiMCP::Checkbox("SkyrimNet Send Events", &settings->Integration.SkyrimNetSendEvents);
+        ImGuiMCP::SetItemTooltip("Send vampire_feed / vampire_feed_failed events to SkyrimNet when feeds happen (requires Enable SkyrimNet)");
     }
 
     // Save if any setting changed
