@@ -36,6 +36,29 @@ namespace {
         return result;
     }
 
+    // Render "Label: " followed by a color-coded True/False for a boolean state
+    // (green True, gray False) so debug rows read at a glance instead of as raw numbers.
+    void RenderBoolStatus(const char* label, bool value) {
+        ImGuiMCP::Text("%s:", label);
+        ImGuiMCP::SameLine();
+        if (value) {
+            ImGuiMCP::TextColored(ImGuiMCP::ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "True");
+        } else {
+            ImGuiMCP::TextColored(ImGuiMCP::ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "False");
+        }
+    }
+
+    // Display name for the detected vampire overhaul integration.
+    const char* VampireIntegrationName(PapyrusCall::VampireIntegration integration) {
+        switch (integration) {
+            case PapyrusCall::VampireIntegration::Sacrosanct: return "Sacrosanct";
+            case PapyrusCall::VampireIntegration::Sacrilege: return "Sacrilege";
+            case PapyrusCall::VampireIntegration::BetterVampires: return "Better Vampires";
+            case PapyrusCall::VampireIntegration::Vanilla: return "Vanilla";
+            default: return "Unknown";
+        }
+    }
+
     // All witness-related settings in one collapsible section: the crime/bounty
     // detection knobs plus the relationship/confidence combat reaction.
     void RenderWitnessSettings(::Settings* settings, bool& changed) {
@@ -87,17 +110,12 @@ void __stdcall UI::Debug::Render() {
         ImGuiMCP::Text("Race: %s", race->GetFullName());
     }
 
-    // Show PlayerIsVampire global
-    auto* playerIsVampireGlobal = RE::TESForm::LookupByEditorID<RE::TESGlobal>("PlayerIsVampire");
-    if (playerIsVampireGlobal) {
-        ImGuiMCP::Text("PlayerIsVampire: %.0f", playerIsVampireGlobal->value);
-    }
-
     bool isVampire = TargetState::IsVampire(player);
     bool isWerewolf = TargetState::IsWerewolf(player);
     bool isVampireLord = TargetState::IsVampireLord(player);
 
-    ImGuiMCP::Text("Status: ");
+    // Active form at a glance (colored by type)
+    ImGuiMCP::Text("Form: ");
     ImGuiMCP::SameLine();
     if (isVampireLord) {
         ImGuiMCP::TextColored(ImGuiMCP::ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Vampire Lord");
@@ -106,7 +124,18 @@ void __stdcall UI::Debug::Render() {
     } else if (isWerewolf) {
         ImGuiMCP::TextColored(ImGuiMCP::ImVec4(0.6f, 0.4f, 0.2f, 1.0f), "Werewolf");
     } else {
-        ImGuiMCP::Text("Normal");
+        ImGuiMCP::TextColored(ImGuiMCP::ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Normal");
+    }
+
+    // Individual states as clear True/False rows
+    RenderBoolStatus("Is Vampire", isVampire);
+    RenderBoolStatus("Is Vampire Lord", isVampireLord);
+    RenderBoolStatus("Is Werewolf", isWerewolf);
+
+    // PlayerIsVampire global as True/False instead of a raw 0/1 float
+    auto* playerIsVampireGlobal = RE::TESForm::LookupByEditorID<RE::TESGlobal>("PlayerIsVampire");
+    if (playerIsVampireGlobal) {
+        RenderBoolStatus("PlayerIsVampire (global)", playerIsVampireGlobal->value != 0.0f);
     }
 
     // Show hunger stage for vampires
@@ -117,6 +146,24 @@ void __stdcall UI::Debug::Render() {
             ImGuiMCP::Text("Hunger: %s (Stage %d)", hungerNames[hungerStage - 1], hungerStage);
         }
     }
+
+    // Vampire Overhaul Integration Section
+    ImGuiMCP::Separator();
+    ImGuiMCP::Text("Vampire Overhaul Integration");
+    ImGuiMCP::Separator();
+
+    // Resolved active integration (factors in the Enable* settings + quest/plugin presence)
+    ImGuiMCP::Text("Active: ");
+    ImGuiMCP::SameLine();
+    ImGuiMCP::TextColored(ImGuiMCP::ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s",
+        VampireIntegrationName(PapyrusCall::DetectVampireIntegration()));
+
+    // Detection breakdown: which overhauls are present in the current load order
+    auto* dataHandler = RE::TESDataHandler::GetSingleton();
+    bool hasBetterVampires = dataHandler && dataHandler->LookupModByName("Better Vampires.esp") != nullptr;
+    RenderBoolStatus("Sacrosanct detected", PapyrusCall::GetSacrosanctFeedManagerQuest() != nullptr);
+    RenderBoolStatus("Sacrilege detected", PapyrusCall::GetSacrilegeFeedManagerQuest() != nullptr);
+    RenderBoolStatus("Better Vampires detected", hasBetterVampires);
 
     // Debug Transformations Section
     ImGuiMCP::Separator();
