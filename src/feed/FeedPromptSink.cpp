@@ -1036,4 +1036,14 @@ void FeedPromptSink::HidePrompt() {
     SetTarget(nullptr);
 }
 
+void FeedPromptSink::ResetForLoad() {
+    HidePrompt();
+    SetActiveFeedTarget(nullptr);
+    lastCrosshairActor_ = {};
+    pendingTarget_ = {};
+    isLethalFeedInProgress_ = false;
+    isEmbraceFeedInProgress_ = false;
+    ResetTimers();
+}
+
 

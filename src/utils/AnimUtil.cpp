@@ -1509,6 +1509,23 @@ namespace AnimUtil {
         return exceeded;
     }
 
+    void ResetForLoad() {
+        {
+            std::lock_guard<std::mutex> lock(g_PacifyMutex);
+            g_PacifiedActors.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_DeadFeedCountsMutex);
+            g_DeadFeedCounts.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_ContinuousTasksMutex);
+            g_ActiveContinuousTasks.clear();
+            g_TaskFrameCounters.clear();
+        }
+        g_Retry = {};
+    }
+
     // Check if attacker's attack should kill victim (uses game's ShouldAttackKill condition)
     // "Borrowed" from Pentalimbed
     bool ShouldAttackKill(const RE::Actor* attacker, const RE::Actor* victim) {

@@ -16,6 +16,10 @@
 #include "utils/FormUtils.h"
 #include "utils/AnimUtil.h"
 #include "integration/UI.h"
+#include "feed/FeedAnimState.h"
+#include "feed/PairedAnimation.h"
+#include "feed/CompositePairedAnimation.h"
+#include "feed/WitnessDetection.h"
 
 std::atomic<SkyPromptAPI::ClientID> g_clientID{0};
 
@@ -93,6 +97,21 @@ void OnDataLoaded()
     SKSE::log::info("Mod initialization complete");
 }
 
+// Drop every trace of an in-progress feed before the session is replaced.
+// State-only: nothing here may touch actors or queue deferred tasks - both
+// would leak into the newly loaded session.
+void ResetFeedSessionState()
+{
+	AnimEventSink::Unregister();
+	CompositePairedAnimation::ResetForLoad();
+	PairedAnimation::ResetForLoad();
+	FeedAnimState::ResetForLoad();
+	WitnessDetection::ResetFeedReport();
+	FeedPromptSink::GetSingleton()->ResetForLoad();
+	FeedHealthBarOverlay::GetSingleton()->Hide();
+	AnimUtil::ResetForLoad();
+}
+
 void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 {
 	switch (a_msg->type) {
@@ -102,12 +121,12 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 	case SKSE::MessagingInterface::kPostLoad:
 		break;
 	case SKSE::MessagingInterface::kPreLoadGame:
-		// Unregister animation sink before loading (safety - prevents crash if mod removed)
-		AnimEventSink::Unregister();
+		ResetFeedSessionState();
 		break;
 	case SKSE::MessagingInterface::kPostLoadGame:
         break;
 	case SKSE::MessagingInterface::kNewGame:
+		ResetFeedSessionState();
 		break;
 	}
 }

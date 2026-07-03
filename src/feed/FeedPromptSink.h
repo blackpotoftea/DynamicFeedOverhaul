@@ -70,6 +70,9 @@ public:
         witnessCheckTimer_ = 0.0f;
     }
 
+    // Game-load abort: hide the prompt and drop all target handles/flags.
+    void ResetForLoad();
+
     // Called when feed prompt is accepted (used by callbacks)
     void HandleFeedAccepted();
 

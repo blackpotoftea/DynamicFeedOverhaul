@@ -69,6 +69,10 @@ namespace CompositePairedAnimation {
     // target loss/death and as an external abort.
     void ForceStop();
 
+    // Game-load abort: state-only reset. Unlike ForceStop it must not touch
+    // actors or queue deferred tasks (the session is being discarded).
+    void ResetForLoad();
+
     // Active = a staged sequence is in progress.
     bool IsActive();
 

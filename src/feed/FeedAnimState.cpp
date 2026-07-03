@@ -127,6 +127,20 @@ namespace FeedAnimState {
         killMoveStartSeen.store(false, std::memory_order_release);
     }
 
+    void ResetForLoad() {
+        feedState.store(State::Idle, std::memory_order_release);
+        currentFeedLethal.store(false, std::memory_order_release);
+        vfdTriggerCount.store(0, std::memory_order_release);
+        feedEngaged.store(false, std::memory_order_release);
+        feedHasOAR.store(false, std::memory_order_release);
+        killMoveStartSeen.store(false, std::memory_order_release);
+
+        // Undo a lingering combat-feed slowdown; idempotent if none was applied.
+        if (auto* timer = RE::BSTimer::GetSingleton()) {
+            timer->SetGlobalTimeMultiplier(1.0f, true);
+        }
+    }
+
     void SetCurrentFeedLethal(bool lethal) {
         currentFeedLethal.store(lethal, std::memory_order_release);
     }

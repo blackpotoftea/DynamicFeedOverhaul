@@ -189,6 +189,12 @@ namespace PairedAnimation {
         SKSE::log::info("[PairedAnimation] ForceStop called");
     }
 
+    void ResetForLoad() {
+        feedTargetHandle_ = {};
+        wasWeaponDrawn_ = false;
+        wasTargetDeadAtStart_ = false;
+    }
+
     // Called when feed ends normally - restores player control
     void OnComplete() {
         SKSE::log::debug("[PairedAnimation] OnComplete");

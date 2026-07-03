@@ -598,6 +598,29 @@ namespace CompositePairedAnimation {
         Finish();
     }
 
+    void ResetForLoad() {
+        if (stage_ != Stage::Idle) {
+            SKSE::log::info("[CompositePairedAnimation] ResetForLoad (was stage={})",
+                static_cast<int>(stage_));
+        }
+        stage_ = Stage::Idle;
+        stageTimer_ = 0.0f;
+        gulpTimer_ = 0.0f;
+        settleFramesRemaining_ = 0;
+        posLogTimer_ = 0.0f;
+        feedTargetHandle_ = {};
+        pack_ = {};
+        lockedPlayerPos_ = {};
+        lockedPlayerYaw_ = 0.0f;
+        pendingTargetPos_ = {};
+        releaseTargetPos_ = {};
+        playerReleased_ = false;
+        drainedDuration_ = 0.0f;
+        playerOnly_ = false;
+        protectedFromKill_ = false;
+        wasWeaponDrawn_ = false;
+    }
+
     void Tick(float delta) {
         if (!IsActive()) return;
 

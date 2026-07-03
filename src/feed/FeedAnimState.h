@@ -7,6 +7,10 @@ namespace FeedAnimState {
     bool CheckAndClearFeedEnded();
     bool IsFeedActive();
 
+    // Game-load abort: back to Idle without MarkFeedEnded's side effects;
+    // also restores the global time multiplier.
+    void ResetForLoad();
+
     // KillMoveStart animation-graph event tracking.
     // ResetKillMoveStart() clears the flag before a PlayIdle attempt; the event
     // sink calls MarkKillMoveStartSeen() when the engine fires "KillMoveStart";

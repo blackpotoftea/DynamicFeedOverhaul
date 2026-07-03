@@ -24,6 +24,9 @@ namespace PairedAnimation {
     void ForceStop();
     void OnComplete();
 
+    // Game-load abort: state-only reset; must not touch actors.
+    void ResetForLoad();
+
     // Plays the chosen idle via PlayPairedFeed and, on success, dispatches the
     // post-feed integration glue (Sacrosanct / Better Vampires / werewolf branches
     // + manual-kill fallback when no OAR animation handles it).

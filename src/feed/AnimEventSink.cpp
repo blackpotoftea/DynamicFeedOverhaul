@@ -161,6 +161,9 @@ void AnimEventSink::Unregister() {
         player->RemoveAnimationGraphEventSink(GetSingleton());
         SKSE::log::debug("Animation event sink unregistered");
     }
+    // Stop the timeout countdown so CheckTimeout can't fire after the sink is gone.
+    std::lock_guard<std::mutex> lock(mutex_);
+    registeredTime_ = std::chrono::steady_clock::time_point{};
 }
 
 void AnimEventSink::AddToActor(RE::Actor* actor) {

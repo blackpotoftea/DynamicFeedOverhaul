@@ -187,6 +187,9 @@ namespace AnimUtil {
     void IncrementDeadFeedCount(RE::Actor* actor);
     bool HasExceededDeadFeedLimit(RE::Actor* actor, int maxFeeds);
 
+    // Game-load abort: clears the FormID-keyed session state and any PlayIdle retry.
+    void ResetForLoad();
+
     // Check if attacker's attack should kill victim (uses game's ShouldAttackKill condition)
     bool ShouldAttackKill(const RE::Actor* attacker, const RE::Actor* victim);
 
