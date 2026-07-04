@@ -98,6 +98,27 @@ if (Test-Path -LiteralPath $behaviorSource) {
     Write-Host "FNIS behavior not found (run GenerateFNIS_for_Modders first): $behaviorSource"
 }
 
+$bdiRelative = 'BehaviorDataInjector'
+$bdiSource = Join-Path $PSScriptRoot $bdiRelative
+$bdiDest = Join-Path $destination $bdiRelative
+
+if (Test-Path -LiteralPath $bdiSource) {
+    # Mirror so removed/renamed BDI configs don't linger in the deployed mod.
+    if (Test-Path -LiteralPath $bdiDest) {
+        Remove-Item -LiteralPath $bdiDest -Recurse -Force
+    }
+    if (-not (Test-Path -LiteralPath $destination)) {
+        New-Item -ItemType Directory -Path $destination -Force | Out-Null
+    }
+
+    Copy-Item -LiteralPath $bdiSource -Destination $bdiDest -Recurse -Force
+
+    $jsonCount = (Get-ChildItem -LiteralPath $bdiSource -Filter '*.json' -File -Recurse).Count
+    Write-Host "Copied $jsonCount BehaviorDataInjector config(s) to $bdiDest"
+} else {
+    Write-Host "BehaviorDataInjector source directory not found: $bdiSource"
+}
+
 $nemesisSource = Join-Path $PSScriptRoot 'Nemesis_Engine'
 $nemesisDest = Join-Path $modRoot 'Nemesis_Engine'
 
