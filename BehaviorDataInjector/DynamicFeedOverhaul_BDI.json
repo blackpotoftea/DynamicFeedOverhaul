@@ -30,5 +30,10 @@
         "projectPath": "Actors",
         "type": "kEvent",
         "name": "VFD_VampireFeedTrigger"
+    },
+    {
+        "projectPath": "Actors",
+        "type": "kEvent",
+        "name": "SoundPlay.NPCVFDVampireLordFeed"
     }
 ]
