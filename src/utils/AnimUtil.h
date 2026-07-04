@@ -193,6 +193,7 @@ namespace AnimUtil {
     // Dead feed count tracking (in-memory, resets on game reload)
     int GetDeadFeedCount(RE::Actor* actor);
     void IncrementDeadFeedCount(RE::Actor* actor);
+    void SetDeadFeedCount(RE::Actor* actor, int count);
     bool HasExceededDeadFeedLimit(RE::Actor* actor, int maxFeeds);
 
     // Game-load abort: clears the FormID-keyed session state and any PlayIdle retry.

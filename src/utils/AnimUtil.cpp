@@ -1518,6 +1518,13 @@ namespace AnimUtil {
             actor->GetName(), g_DeadFeedCounts[actor->GetFormID()]);
     }
 
+    void SetDeadFeedCount(RE::Actor* actor, int count) {
+        if (!actor) return;
+        std::lock_guard<std::mutex> lock(g_DeadFeedCountsMutex);
+        g_DeadFeedCounts[actor->GetFormID()] = count;
+        SKSE::log::debug("SetDeadFeedCount: {} set to {} feeds", actor->GetName(), count);
+    }
+
     bool HasExceededDeadFeedLimit(RE::Actor* actor, int maxFeeds) {
         if (maxFeeds <= 0) return false;  // 0 = unlimited
         int count = GetDeadFeedCount(actor);

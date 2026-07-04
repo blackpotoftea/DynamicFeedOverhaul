@@ -742,6 +742,9 @@ namespace CompositePairedAnimation {
                     SkyrimNetIntegration::RegisterVampireFeedEvent(player, target, /*killed*/ true);
                 }
 
+                // Drained dry = no blood left: max out the dead-feed count so the
+                // corpse offers no "Drain Corpse" (no-op when MaxDeadFeeds=0/unlimited).
+                AnimUtil::SetDeadFeedCount(target, settings->Filtering.MaxDeadFeeds);
                 AnimUtil::KillTarget(target);  // kill while still posed/locked
                 Finish();
             }
