@@ -1,6 +1,7 @@
 #include "WitnessDetection.h"
 #include "Settings.h"
 #include "TargetState.h"
+#include "CompositePairedAnimation.h"
 #include "papyrus/PapyrusCall.h"
 
 #include <atomic>
@@ -92,9 +93,12 @@ namespace WitnessDetection {
         // Check if actor can see the player or target (HasLineOfSight requires reference parameter).
         // LOS is the expensive part of the per-tick scan (a raycast per actor); we only need ONE
         // of player/target visible, so skip the target raycast when the player is already visible.
+        // Once the player is freed (Drained tail) he looks innocent - only the still-drained
+        // victim betrays the feed, so the player raycast no longer counts.
+        const bool playerReleased = CompositePairedAnimation::IsPlayerReleased();
         bool losResult1 = false;
         bool losResult2 = false;
-        bool canSeePlayer = potentialWitness->HasLineOfSight(player, losResult1);
+        bool canSeePlayer = !playerReleased && potentialWitness->HasLineOfSight(player, losResult1);
         bool canSeeTarget = false;
         if (!canSeePlayer) {
             canSeeTarget = potentialWitness->HasLineOfSight(target, losResult2);
@@ -160,7 +164,9 @@ namespace WitnessDetection {
             return nullptr;
         }
 
-        auto playerPos = player->GetPosition();
+        // After release the scene is the drained victim, not the freed player.
+        auto scenePos = CompositePairedAnimation::IsPlayerReleased()
+            ? target->GetPosition() : player->GetPosition();
         float detectionRadius = settings->Combat.WitnessDetectionRadius;
 
         if (settings->Combat.WitnessDebugLogging) {
@@ -182,7 +188,7 @@ namespace WitnessDetection {
             checkedCount++;
 
             // Check if actor is within detection radius
-            float distance = actor->GetPosition().GetDistance(playerPos);
+            float distance = actor->GetPosition().GetDistance(scenePos);
             if (distance > detectionRadius) continue;
 
             withinRadiusCount++;
@@ -233,7 +239,9 @@ namespace WitnessDetection {
 
         auto* processLists = RE::ProcessLists::GetSingleton();
         if (!processLists) return;
-        const auto playerPos = player->GetPosition();
+        // After release the scene is the drained victim, not the freed player.
+        const auto scenePos = (victim && CompositePairedAnimation::IsPlayerReleased())
+            ? victim->GetPosition() : player->GetPosition();
         const float radius = settings->Combat.WitnessDetectionRadius;
         for (auto& actorHandle : processLists->highActorHandles) {
             auto actorPtr = actorHandle.get();
@@ -241,7 +249,7 @@ namespace WitnessDetection {
             auto* actor = actorPtr.get();
             if (!actor || actor == victim) continue;
             if (actor->IsInCombat()) continue;  // already engaged - don't restart every tick
-            if (actor->GetPosition().GetDistance(playerPos) > radius) continue;
+            if (actor->GetPosition().GetDistance(scenePos) > radius) continue;
             if (!CanActorWitnessFeed(actor, player, victim)) continue;
             if (ClassifyWitness(actor, player) == WitnessReaction::kAttack) {
                 StartCombatDeferred(actor);
@@ -275,6 +283,15 @@ namespace WitnessDetection {
             if (settings->Combat.WitnessDebugLogging) {
                 SKSE::log::debug("[WitnessDetection] target is dead or disabled, skipping");
             }
+            return;
+        }
+
+        // Abandon witnessing once the scene falls apart: victim unloaded, or player
+        // and victim in different cells (coc/teleport mid-feed). Cells may differ
+        // legitimately across an exterior border, so also require out-of-radius.
+        if (!target->Is3DLoaded() ||
+            (player->GetParentCell() != target->GetParentCell() &&
+             target->GetPosition().GetDistance(player->GetPosition()) > settings->Combat.WitnessDetectionRadius)) {
             return;
         }
 

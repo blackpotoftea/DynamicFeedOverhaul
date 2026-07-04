@@ -124,7 +124,10 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 		ResetFeedSessionState();
 		break;
 	case SKSE::MessagingInterface::kPostLoadGame:
-        break;
+		// The disable-saving flag may be serialized (console `save` bypasses
+		// the block): reset again AFTER deserialization.
+		FeedAnimState::ResetForLoad();
+		break;
 	case SKSE::MessagingInterface::kNewGame:
 		ResetFeedSessionState();
 		break;

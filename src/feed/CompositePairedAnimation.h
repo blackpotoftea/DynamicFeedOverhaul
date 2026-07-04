@@ -76,6 +76,9 @@ namespace CompositePairedAnimation {
     // Active = a staged sequence is in progress.
     bool IsActive();
 
+    // True once the player was freed at Drained start (victim-only tail).
+    bool IsPlayerReleased();
+
     // Current feed target (null if inactive).
     RE::NiPointer<RE::Actor> GetFeedTarget();
 

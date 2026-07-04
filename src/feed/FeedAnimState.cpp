@@ -23,6 +23,22 @@ namespace FeedAnimState {
     std::atomic<bool> feedEngaged{false};
     std::atomic<bool> feedHasOAR{false};
 
+    namespace {
+        // Saving is blocked for the whole feed window: the victim's restrained
+        // flag (Actor.SetRestrained) is serialized, so a mid-feed save would
+        // brick the NPC in that timeline.
+        void SetSaveBlock(bool block) {
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (!player) return;
+            auto& flags = player->GetPlayerRuntimeData().byCharGenFlag;
+            if (block) {
+                flags.set(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
+            } else {
+                flags.reset(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
+            }
+        }
+    }
+
     void MarkFeedStarted() {
         // Clear the witness "already reported" latch BEFORE publishing Active, so a witness
         // check that observes the new feed (acquire-load of feedState) also observes the
@@ -33,6 +49,7 @@ namespace FeedAnimState {
         vfdTriggerCount.store(0, std::memory_order_release);
         feedEngaged.store(false, std::memory_order_release);
         feedHasOAR.store(false, std::memory_order_release);
+        SetSaveBlock(true);  // before any restrain can land
         SKSE::log::info("========== FEED STARTED ==========");
 
         // Apply time slowdown if enabled and player is in combat
@@ -53,6 +70,7 @@ namespace FeedAnimState {
         // currentFeedLethal / vfdTriggerCount are reset in MarkFeedStarted for the next feed;
         // leaving them set here is harmless (gated by feedState) and matches killMoveStartSeen's pattern.
         feedState.store(State::Ended, std::memory_order_release);
+        SetSaveBlock(false);
         SKSE::log::info("========== FEED ENDED ==========");
 
         // Always reset time multiplier to normal (safe even if not slowed)
@@ -134,6 +152,9 @@ namespace FeedAnimState {
         feedEngaged.store(false, std::memory_order_release);
         feedHasOAR.store(false, std::memory_order_release);
         killMoveStartSeen.store(false, std::memory_order_release);
+
+        // A new session must never inherit a save block from the previous one.
+        SetSaveBlock(false);
 
         // Undo a lingering combat-feed slowdown; idempotent if none was applied.
         if (auto* timer = RE::BSTimer::GetSingleton()) {

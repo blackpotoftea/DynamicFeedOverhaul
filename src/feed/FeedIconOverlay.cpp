@@ -1,6 +1,7 @@
 #include "feed/FeedIconOverlay.h"
 #include <filesystem>
 #include "Settings.h"
+#include "utils/MenuCheck.h"
 
 namespace {
     constexpr float CLAMP_MAX_OVERSHOOT = 100.0f;
@@ -353,6 +354,7 @@ void FeedIconOverlay::RenderOverlay() {
     if (!_state.active.load()) {
         return;
     }
+    if (MenuCheck::IsAnyBlockedMenuOpen()) return;  // don't draw over menus/load screens
 
     // Handle expiry (unless feeding or failure animation is active)
     if (!_state.feeding.load() && !_state.failure.load() && _state.IsExpired()) {

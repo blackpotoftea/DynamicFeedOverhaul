@@ -86,8 +86,12 @@ namespace AnimUtil {
     // Redraw weapon/magic after animation (restores drawn state)
     void redrawWeapon(RE::Actor* actor);
 
-    // Set actor restrained state (calls Papyrus native function)
+    // Set actor restrained state (calls Papyrus native function). Restrained
+    // state is serialized into saves; FeedAnimState blocks saving for the feed
+    // window so it can't be captured. The FormID overload is for cleanup paths
+    // whose ref-handle died mid-feed.
     void setRestrained(RE::Actor* actor, bool restrained = true);
+    void setRestrained(RE::FormID formID, bool restrained);
 
     // Pacify actor - stops combat and prevents re-aggro during feed animation
     // Uses native ProcessLists functions for immediate effect (no VM delay)
@@ -95,6 +99,10 @@ namespace AnimUtil {
 
     // Undo pacify - releases actor from pacified state
     void UndoPacifyActor(RE::Actor* actor);
+
+    // FormID fallback for cleanup paths whose ref-handle died mid-feed: drops
+    // the pacify entry (if any) and releases the restraint unconditionally.
+    void UndoPacifyActor(RE::FormID formID);
 
     // Check if actor is currently pacified
     bool IsActorPacified(RE::Actor* actor);

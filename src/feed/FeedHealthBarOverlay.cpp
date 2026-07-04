@@ -1,5 +1,6 @@
 #include "feed/FeedHealthBarOverlay.h"
 #include "Settings.h"
+#include "utils/MenuCheck.h"
 #include <algorithm>
 
 namespace {
@@ -69,6 +70,7 @@ bool FeedHealthBarOverlay::WorldToScreen(const RE::NiPoint3& world, ImGuiMCP::Im
 
 void FeedHealthBarOverlay::RenderOverlay() {
     if (!_active.load()) return;
+    if (MenuCheck::IsAnyBlockedMenuOpen()) return;  // don't draw over menus/load screens
 
     std::lock_guard<std::mutex> lock(_mutex);
 

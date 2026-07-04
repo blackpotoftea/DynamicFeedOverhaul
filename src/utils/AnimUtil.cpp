@@ -605,31 +605,35 @@ namespace AnimUtil {
     }
 
     // Set actor restrained state (calls Papyrus native function via VM)
-    void setRestrained(RE::Actor* actor, bool restrained) {
-        if (!actor) return;
+    void setRestrained(RE::FormID formID, bool restrained) {
+        if (!formID) return;
 
-        auto actorHandle = actor->CreateRefHandle();
-        SKSE::GetTaskInterface()->AddTask([actorHandle, restrained] {
-            auto actorRef = actorHandle.get();
-            if (auto* a = actorRef.get()) {
-                auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-                if (!vm) return;
+        SKSE::GetTaskInterface()->AddTask([formID, restrained] {
+            // FormID, not ref-handle: LookupByID still resolves when the
+            // actor's 3D is unloaded, where a handle would silently drop the
+            // release and leave the restrained flag in the save.
+            auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID);
+            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+            if (actor && vm) {
+                auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::Actor::FORMTYPE, actor);
+                if (handle != vm->GetObjectHandlePolicy()->EmptyHandle()) {
+                    bool restrainedArg = restrained;
+                    auto* args = RE::MakeFunctionArguments(std::move(restrainedArg));
+                    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
 
-                auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::Actor::FORMTYPE, a);
-                if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return;
-
-                bool restrainedArg = restrained;
-                auto* args = RE::MakeFunctionArguments(std::move(restrainedArg));
-                RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-
-                bool result = vm->DispatchMethodCall(handle, "Actor", "SetRestrained", args, callback);
-
-                // DispatchMethodCall takes ownership only on success; delete on failure
-                if (!result) {
-                    delete args;
+                    // DispatchMethodCall takes ownership only on success; delete on failure
+                    if (!vm->DispatchMethodCall(handle, "Actor", "SetRestrained", args, callback)) {
+                        delete args;
+                        SKSE::log::error("[AnimUtil::setRestrained] dispatch failed for {:X} (restrained={})", formID, restrained);
+                    }
                 }
             }
         });
+    }
+
+    void setRestrained(RE::Actor* actor, bool restrained) {
+        if (!actor) return;
+        setRestrained(actor->GetFormID(), restrained);
     }
 
     // Pacify actor - stops combat and prevents re-aggro during feed animation
@@ -682,6 +686,22 @@ namespace AnimUtil {
 
         SKSE::log::info("[AnimUtil::UndoPacifyActor] {:X} ({}) has been released",
             actor->GetFormID(), actor->GetName());
+    }
+
+    // FormID fallback for cleanup paths whose ref-handle died mid-feed.
+    // Never early-returns: the pacify entry may already be gone while the
+    // serialized restrained flag is not.
+    void UndoPacifyActor(RE::FormID formID) {
+        if (!formID) return;
+
+        {
+            std::lock_guard<std::mutex> lock(g_PacifyMutex);
+            g_PacifiedActors.erase(formID);
+        }
+
+        setRestrained(formID, false);
+
+        SKSE::log::info("[AnimUtil::UndoPacifyActor] {:X} released via FormID fallback", formID);
     }
 
     // Check if actor is currently pacified

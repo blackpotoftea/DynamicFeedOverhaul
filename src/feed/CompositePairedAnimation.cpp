@@ -27,6 +27,9 @@ namespace CompositePairedAnimation {
         enum class Stage { Idle, Settle, Intro, Loop, Exit, Drained, Done };
 
         RE::ActorHandle feedTargetHandle_;
+        // Victim FormID snapshotted at Play(); lets teardown release the
+        // serialized restrained flag even after the handle dies mid-feed.
+        RE::FormID feedTargetFormID_ = 0;
         Stage stage_ = Stage::Idle;
         float stageTimer_ = 0.0f;   // seconds elapsed in the current stage
         float gulpTimer_ = 0.0f;    // counts down to the next drain "gulp" during Loop
@@ -68,6 +71,8 @@ namespace CompositePairedAnimation {
     }
 
     bool IsActive() { return stage_ != Stage::Idle && stage_ != Stage::Done; }
+
+    bool IsPlayerReleased() { return IsActive() && playerReleased_; }
 
     RE::NiPointer<RE::Actor> GetFeedTarget() {
         auto ref = feedTargetHandle_.get();
@@ -272,8 +277,15 @@ namespace CompositePairedAnimation {
                         }
                     });
                 }
+            } else if (!playerOnly_ && feedTargetFormID_) {
+                // Handle died mid-feed: still release the serialized restrained
+                // flag by FormID or it persists into every later save.
+                SKSE::log::warn("[CompositePairedAnimation] Teardown with dead target handle - releasing restraint via FormID {:X}",
+                    feedTargetFormID_);
+                AnimUtil::setRestrained(feedTargetFormID_, false);
             }
             feedTargetHandle_ = {};
+            feedTargetFormID_ = 0;
         }
 
         // Full completion: teardown + notify the shared feed state. MarkFeedEnded
@@ -434,6 +446,7 @@ namespace CompositePairedAnimation {
         auto* settings = Settings::GetSingleton();
 
         feedTargetHandle_ = target->GetHandle();
+        feedTargetFormID_ = target->GetFormID();
         pack_ = pack;
         stage_ = Stage::Settle;
         stageTimer_ = 0.0f;
@@ -609,6 +622,7 @@ namespace CompositePairedAnimation {
         settleFramesRemaining_ = 0;
         posLogTimer_ = 0.0f;
         feedTargetHandle_ = {};
+        feedTargetFormID_ = 0;
         pack_ = {};
         lockedPlayerPos_ = {};
         lockedPlayerYaw_ = 0.0f;

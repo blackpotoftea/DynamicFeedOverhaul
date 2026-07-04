@@ -9,6 +9,10 @@ namespace PairedAnimation {
     // THREADING: Must only be accessed from main game thread (ensured via SKSE::GetTaskInterface()->AddTask)
     static RE::ObjectRefHandle feedTargetHandle_{};
 
+    // Fallback key for ExitFeedState: pacify/restraint are FormID-keyed
+    // serialized state that must be released even after the handle dies.
+    static RE::FormID feedTargetFormID_ = 0;
+
     // Track weapon/magic drawn state before feeding so we can restore it afterwards
     static bool wasWeaponDrawn_ = false;
 
@@ -19,12 +23,16 @@ namespace PairedAnimation {
     void SetFeedTarget(RE::Actor* target) {
         if (target) {
             feedTargetHandle_ = target->GetHandle();
+            feedTargetFormID_ = target->GetFormID();
         } else {
             feedTargetHandle_ = {};
+            feedTargetFormID_ = 0;
         }
     }
 
-    // Clear feed target
+    // Keeps feedTargetFormID_: failure paths clear the target before the late
+    // ExitFeedState that still needs it to release restraint. Stale is safe -
+    // release is a no-op on an unrestrained actor.
     void ClearFeedTarget() {
         feedTargetHandle_ = {};
     }
@@ -191,6 +199,7 @@ namespace PairedAnimation {
 
     void ResetForLoad() {
         feedTargetHandle_ = {};
+        feedTargetFormID_ = 0;
         wasWeaponDrawn_ = false;
         wasTargetDeadAtStart_ = false;
     }
@@ -292,8 +301,16 @@ namespace PairedAnimation {
         if (target) AnimUtil::ClearFeedGraphVars(target);
         if (player) AnimUtil::ClearFeedGraphVars(player);
 
-        // 2. Release pacify (no-op if target was never pacified).
-        if (target) AnimUtil::UndoPacifyActor(target);
+        // 2. Release pacify (no-op if target was never pacified). If the
+        //    handle died mid-feed, release by FormID - the restrained flag is
+        //    serialized and would otherwise persist into every later save.
+        if (target) {
+            AnimUtil::UndoPacifyActor(target);
+        } else if (feedTargetFormID_) {
+            SKSE::log::warn("[PairedAnimation::ExitFeedState] Dead target handle - releasing pacify/restraint via FormID {:X}",
+                feedTargetFormID_);
+            AnimUtil::UndoPacifyActor(feedTargetFormID_);
+        }
 
         // 3. Kill-move flag last - QuickLoot etc. re-enable after all other state settled.
         if (player) AnimUtil::SetInKillMove(player, false);
@@ -327,6 +344,10 @@ namespace PairedAnimation {
         auto onAnimationResult = [](bool success, RE::Actor* /*callbackTarget*/) {
             if (!success) {
                 SKSE::log::warn("PairedAnimation failed - animation did not start");
+                // End the feed centrally (guarded against double-fire): runs
+                // ExitFeedState so a pacified/restrained target is released
+                // and the save block lifts.
+                FeedAnimState::MarkFeedEnded();
                 return;
             }
             // Animation is actually playing: mark the feed engaged. The vampire-
