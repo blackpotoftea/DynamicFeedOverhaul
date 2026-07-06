@@ -66,14 +66,18 @@ namespace Feed {
 
         for (const auto& entry : fs::directory_iterator(directoryPath)) {
             if (entry.is_regular_file()) {
-                std::string filename = entry.path().filename().string();
+                // path::string() throws on filenames not representable in the ANSI
+                // code page, so match the suffix on the native wide name instead.
+                const std::wstring wname = entry.path().filename().native();
                 // Load every *_DFO.json file in the folder so other mods can drop in
                 // their own packs to extend the system. Each entry is a regular
                 // animation definition or a staged composite pack (decided by the
                 // "stages" key below); the mod ships main_DFO.json + main_c_DFO.json.
-                if (filename.length() >= 9 &&
-                    filename.substr(filename.length() - 9) == "_DFO.json") {
-                    
+                if (wname.length() >= 9 &&
+                    wname.compare(wname.length() - 9, 9, L"_DFO.json") == 0) {
+
+                    const auto u8name = entry.path().filename().u8string();
+                    const std::string filename(reinterpret_cast<const char*>(u8name.data()), u8name.size());
                     try {
                         std::ifstream i(entry.path());
                         json j;
