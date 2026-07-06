@@ -771,7 +771,7 @@ bool FeedPromptSink::IsValidFeedTarget(RE::Actor* target) {
     auto playerPos = player->GetPosition();
     auto targetPos = target->GetPosition();
     float dist = playerPos.GetDistance(targetPos);
-    SKSE::log::debug("IsValidFeedTarget: player pos ({:.1f}, {:.1f}, {:.1f}), target pos ({:.1f}, {:.1f}, {:.1f}), dist={:.1f}",
+    SKSE::log::trace("IsValidFeedTarget: player pos ({:.1f}, {:.1f}, {:.1f}), target pos ({:.1f}, {:.1f}, {:.1f}), dist={:.1f}",
         playerPos.x, playerPos.y, playerPos.z, targetPos.x, targetPos.y, targetPos.z, dist);
     if (dist > settings->PromptDisplay.MaxTargetDistance) {
         SKSE::log::debug("IsValidFeedTarget: false - target too far: {:.1f} (max: {:.1f})", dist, settings->PromptDisplay.MaxTargetDistance);
