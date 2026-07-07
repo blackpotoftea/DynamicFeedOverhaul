@@ -214,8 +214,10 @@ void Settings::LoadINI() {
     Integration.PoiseIgnoresLevelCheck = ini.GetBoolValue("Integration", "PoiseIgnoresLevelCheck", Integration.PoiseIgnoresLevelCheck);
     Integration.DeepSacrosanctIntegration = ini.GetBoolValue("Integration", "DeepSacrosanctIntegration", Integration.DeepSacrosanctIntegration);
     Integration.DeepSacrilegeIntegration = ini.GetBoolValue("Integration", "DeepSacrilegeIntegration", Integration.DeepSacrilegeIntegration);
+    Integration.DeepBetterVampiresIntegration = ini.GetBoolValue("Integration", "DeepBetterVampiresIntegration", Integration.DeepBetterVampiresIntegration);
     Integration.EnableSacrosanctInCombat = ini.GetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat);
     Integration.EnableSacrilegeInCombat = ini.GetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat);
+    Integration.EnableBetterVampiresInCombat = ini.GetBoolValue("Integration", "EnableBetterVampiresInCombat", Integration.EnableBetterVampiresInCombat);
     Integration.EnableSkyrimNet = ini.GetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet);
     Integration.SkyrimNetSendEvents = ini.GetBoolValue("Integration", "SkyrimNetSendEvents", Integration.SkyrimNetSendEvents);
 
@@ -249,9 +251,10 @@ void Settings::LoadINI() {
         HealthDrain.Enable, HealthDrain.FloorTargetAtOneHP, HealthDrain.DrainOnNPC,
         HealthDrain.LethalChunkMinPercent, HealthDrain.LethalChunkMaxPercent,
         HealthDrain.EscalationPerTrigger, HealthDrain.NonLethalChunkPercent, HealthDrain.MaxChunkCapPercent);
-    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, SacrosanctInCombat={}, SacrilegeInCombat={}, EnableSkyrimNet={}, SkyrimNetSendEvents={}",
+    SKSE::log::info("  [Integration] EnableSacrosanct={}, EnableSacrilege={}, EnableBetterVampires={}, PoiseIgnoresLevelCheck={}, DeepSacrosanct={}, DeepSacrilege={}, DeepBetterVampires={}, SacrosanctInCombat={}, SacrilegeInCombat={}, BetterVampiresInCombat={}, EnableSkyrimNet={}, SkyrimNetSendEvents={}",
         Integration.EnableSacrosanct, Integration.EnableSacrilege, Integration.EnableBetterVampires, Integration.PoiseIgnoresLevelCheck,
-        Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat,
+        Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.DeepBetterVampiresIntegration,
+        Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat, Integration.EnableBetterVampiresInCombat,
         Integration.EnableSkyrimNet, Integration.SkyrimNetSendEvents);
 }
 
@@ -504,10 +507,14 @@ void Settings::SaveINI() {
         "; Use C++ to mimic Sacrosanct ProcessFeed for lethal feeds (bypasses Papyrus)");
     ini.SetBoolValue("Integration", "DeepSacrilegeIntegration", Integration.DeepSacrilegeIntegration,
         "; Use C++ to mimic Sacrilege ProcessFeed for lethal feeds (bypasses Papyrus)");
+    ini.SetBoolValue("Integration", "DeepBetterVampiresIntegration", Integration.DeepBetterVampiresIntegration,
+        "; Use C++ to mimic Better Vampires VampireFeed (bypasses Papyrus)");
     ini.SetBoolValue("Integration", "EnableSacrosanctInCombat", Integration.EnableSacrosanctInCombat,
         "; Use C++ integration for Sacrosanct during combat (bypasses AI-driven state issues)");
     ini.SetBoolValue("Integration", "EnableSacrilegeInCombat", Integration.EnableSacrilegeInCombat,
         "; Use C++ integration for Sacrilege during combat (bypasses AI-driven state issues)");
+    ini.SetBoolValue("Integration", "EnableBetterVampiresInCombat", Integration.EnableBetterVampiresInCombat,
+        "; Use C++ integration for Better Vampires during combat (bypasses AI-driven state issues)");
     ini.SetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet,
         "; Enable SkyrimNet (LLM-driven NPC mod) integration: detect the mod and register hooks on startup (auto-detects mod)");
     ini.SetBoolValue("Integration", "SkyrimNetSendEvents", Integration.SkyrimNetSendEvents,

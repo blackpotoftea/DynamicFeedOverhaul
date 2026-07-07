@@ -11,6 +11,7 @@
 #include "integration/PoiseIntegration.h"
 #include "integration/SacrosanctIntegration.h"
 #include "integration/SacrilegeIntegration.h"
+#include "integration/BetterVampiresIntegration.h"
 #include "integration/SkyrimNetIntegration.h"
 #include "feed/AnimationRegistry.h"
 #include "utils/FormUtils.h"
@@ -52,16 +53,18 @@ void OnDataLoaded()
     // Vampire overhaul integrations
     bool hasSacrosanct = SacrosanctIntegration::Initialize();
     bool hasSacrilege = SacrilegeIntegration::Initialize();
+    bool hasBetterVampires = BetterVampiresIntegration::Initialize();
 
     if (hasSacrosanct) {
         SKSE::log::info("Sacrosanct detected");
         SacrosanctIntegration::RegisterEmbracePrompt();
     }
     if (hasSacrilege) SKSE::log::info("Sacrilege detected");
+    if (hasBetterVampires) SKSE::log::info("Better Vampires detected");
 
-    if (!hasSacrosanct && !hasSacrilege) {
+    if (!hasSacrosanct && !hasSacrilege && !hasBetterVampires) {
         SKSE::log::info("No vampire overhaul detected - using vanilla vampire feed system");
-    } else if (hasSacrosanct && hasSacrilege) {
+    } else if ((hasSacrosanct ? 1 : 0) + (hasSacrilege ? 1 : 0) + (hasBetterVampires ? 1 : 0) > 1) {
         SKSE::log::warn("Multiple vampire overhauls detected - this may cause conflicts!");
     }
 

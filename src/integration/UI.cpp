@@ -589,8 +589,11 @@ void __stdcall UI::Settings::Render() {
         changed |= ImGuiMCP::Checkbox("Deep Sacrosanct Integration", &settings->Integration.DeepSacrosanctIntegration);
         ImGuiMCP::SetItemTooltip("Use C++ to mimic Sacrosanct ProcessFeed (bypasses Papyrus)");
         changed |= ImGuiMCP::Checkbox("Deep Sacrilege Integration", &settings->Integration.DeepSacrilegeIntegration);
+        changed |= ImGuiMCP::Checkbox("Deep Better Vampires Integration", &settings->Integration.DeepBetterVampiresIntegration);
+        ImGuiMCP::SetItemTooltip("Use C++ to mimic Better Vampires VampireFeed (bypasses Papyrus)");
         changed |= ImGuiMCP::Checkbox("Enable Sacrosanct In Combat", &settings->Integration.EnableSacrosanctInCombat);
         changed |= ImGuiMCP::Checkbox("Enable Sacrilege In Combat", &settings->Integration.EnableSacrilegeInCombat);
+        changed |= ImGuiMCP::Checkbox("Enable Better Vampires In Combat", &settings->Integration.EnableBetterVampiresInCombat);
         changed |= ImGuiMCP::Checkbox("Enable SkyrimNet", &settings->Integration.EnableSkyrimNet);
         ImGuiMCP::SetItemTooltip("Detect SkyrimNet (LLM NPC mod) and register integration hooks on startup (takes effect on next launch)");
         changed |= ImGuiMCP::Checkbox("SkyrimNet Send Events", &settings->Integration.SkyrimNetSendEvents);

@@ -175,8 +175,10 @@ public:
         bool PoiseIgnoresLevelCheck{ true };        // When poise mod detected, ignore level requirements
         bool DeepSacrosanctIntegration{ true };     // Use C++ to mimic Sacrosanct ProcessFeed (bypasses Papyrus)
         bool DeepSacrilegeIntegration{ true };      // Use C++ to mimic Sacrilege ProcessFeed (bypasses Papyrus)
+        bool DeepBetterVampiresIntegration{ true }; // Use C++ to mimic Better Vampires VampireFeed (bypasses Papyrus)
         bool EnableSacrosanctInCombat{ true };      // Use C++ integration for Sacrosanct during combat
         bool EnableSacrilegeInCombat{ true };       // Use C++ integration for Sacrilege during combat
+        bool EnableBetterVampiresInCombat{ true };  // Use C++ integration for Better Vampires during combat
         bool EnableSkyrimNet{ true };               // Enable SkyrimNet (LLM NPC mod) integration: detect + register hooks on startup
         bool SkyrimNetSendEvents{ true };           // When SkyrimNet is enabled, send vampire_feed / vampire_feed_failed events to it
     } Integration;
