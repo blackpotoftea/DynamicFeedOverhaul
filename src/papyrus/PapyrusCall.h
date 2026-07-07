@@ -205,13 +205,13 @@ namespace PapyrusCall {
         return result;
     }
 
-    // Call Sacrilege ProcessFeed function with full parameters
-    // Function signature: ProcessFeed(Actor akTarget, Bool akIsLethal, Bool akIsSleeping,
-    //                                 Bool akIsSneakFeed, Bool akIsParalyzed, Bool akIsCombatFeed, Bool akIsEmbrace)
+    // Call Sacrilege SQL_FeedManager_Script.ProcessFeed. Signature (decompiled .psc):
+    //   ProcessFeed(Actor akTarget, Bool akIsLethal, Bool akIsSleeping, Bool akVanillaFeedAnimation, Bool akDisable)
+    // akVanillaFeedAnimation/akDisable are unused in the script body; we play our own animation so both stay false.
+    // The arg count must be exactly 5 or DispatchMethodCall fails.
     inline bool CallSacrilegeProcessFeed(RE::TESQuest* quest, RE::Actor* target,
                                          bool isLethal = false, bool isSleeping = false,
-                                         bool isSneakFeed = false, bool isParalyzed = false,
-                                         bool isCombatFeed = false, bool isEmbrace = false) {
+                                         bool vanillaFeedAnimation = false, bool disable = false) {
         if (!quest || !target) return false;
 
         auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
@@ -225,16 +225,16 @@ namespace PapyrusCall {
             std::move(target),
             std::move(isLethal),
             std::move(isSleeping),
-            std::move(isSneakFeed),
-            std::move(isParalyzed),
-            std::move(isCombatFeed),
-            std::move(isEmbrace)
+            std::move(vanillaFeedAnimation),
+            std::move(disable)
         );
         RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new EmptyCallback());
 
+        // Class name is the SCRIPT class attached to the quest (SQL_FeedManager_Script),
+        // NOT the quest form's editor ID (SQL_FeedManager_Quest) - FindBoundObject keys on the script.
         bool result = vm->DispatchMethodCall(
             handle,
-            "SQL_FeedManager_Quest",
+            "SQL_FeedManager_Script",
             "ProcessFeed",
             args,
             callback
@@ -347,11 +347,11 @@ namespace PapyrusCall {
                 bool isSleeping = TargetState::IsSleeping(target);
 
                 // Deep integration: C++ mimics Sacrilege ProcessFeed (bypasses Papyrus)
-                // Use deep integration if: lethal AND enabled AND (not combat OR combat integration enabled)
-                bool useDeepIntegration = isLethal && settings->Integration.DeepSacrilegeIntegration &&
+                // Use deep integration if: enabled AND (not combat OR combat integration enabled)
+                bool useDeepIntegration = settings->Integration.DeepSacrilegeIntegration &&
                     (!isCombatFeed || settings->Integration.EnableSacrilegeInCombat);
                 if (useDeepIntegration && SacrilegeIntegration::IsAvailable()) {
-                    SKSE::log::info("Sacrilege: Using deep C++ integration for lethal feed (combat={})", isCombatFeed);
+                    SKSE::log::info("Sacrilege: Using deep C++ integration (lethal={}, combat={})", isLethal, isCombatFeed);
 
                     SacrilegeIntegration::FeedContext ctx;
                     ctx.target = target;
@@ -372,7 +372,7 @@ namespace PapyrusCall {
 
                 SKSE::log::info("Sacrilege: Using Papyrus integration (sleeping={}, lethal={}, combat={})",
                     isSleeping, isLethal, isCombatFeed);
-                return CallSacrilegeProcessFeed(sacrilegeQuest, target, isLethal, isSleeping, false, false, isCombatFeed, false);
+                return CallSacrilegeProcessFeed(sacrilegeQuest, target, isLethal, isSleeping);
             }
 
             case VampireIntegration::BetterVampires: {
