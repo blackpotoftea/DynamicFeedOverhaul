@@ -21,6 +21,9 @@ namespace BetterVampiresIntegration {
     // Check if Better Vampires is installed and available
     bool IsAvailable();
 
+    // Detected BV version classification for logs/debug UI ("9.1+", "8.9 or older", ...)
+    const char* GetVersionInfo();
+
     // Process a vampire feed using direct C++ implementation
     bool ProcessFeed(const FeedContext& context);
 }

@@ -2,6 +2,9 @@
 #include "BetterVampiresIntegration.h"
 #include "VampireIntegrationUtils.h"
 
+#include <chrono>
+#include <thread>
+
 /*
  * =============================================================================
  * BETTER VAMPIRES VAMPIREFEED - C++ IMPLEMENTATION
@@ -36,7 +39,7 @@
  *      |   NeckMarksRight shader / screen blood     |
  * 12   | AmaranthGainSkills (vampire victims)       | ✅ DONE - Papyrus dispatch
  * 13   | TurnNPCIntoVampire (CreateVampire > 0)     | ✅ DONE - Papyrus dispatch; ELSE-gates 14-23
- * 14   | Red screen ISM crossfade                   | SKIP - blocking + purely cosmetic
+ * 14   | Red screen ISM crossfade                   | ✅ DONE - crossfade + timed removal
  * 15   | Extract-blood perk sync                    | ✅ DONE
  * 16   | Victim 25% health drain + VictimDamage2    | ✅ DONE
  * 17   | Player restore + Engorge (rank >= 60000)   | ✅ DONE
@@ -63,11 +66,10 @@ namespace BetterVampiresIntegration {
 
         std::atomic<bool> g_initialized{false};
         std::atomic<bool> g_available{false};
-        std::atomic<bool> g_propsResolved{false};
+        std::atomic<bool> g_shapeVerified{false};
+        std::atomic<const char*> g_versionInfo{"not detected"};
 
-        RE::TESQuest* g_playerVampireQuest = nullptr;
-
-        // Globals (resolved from PlayerVampireQuestScript properties)
+        // Globals
         RE::TESGlobal* g_usingBVScripts = nullptr;
         RE::TESGlobal* g_menuSpellToggle = nullptr;
         RE::TESGlobal* g_bottledBlood = nullptr;
@@ -93,171 +95,53 @@ namespace BetterVampiresIntegration {
         RE::TESGlobal* g_giveAllSkillPoints = nullptr;
         RE::TESGlobal* g_neckMarksToggle = nullptr;
         RE::TESGlobal* g_targetAlreadyDeadGlobal = nullptr;
+        RE::TESGlobal* g_noRedScreen = nullptr;
 
-        // Forms (resolved from PlayerVampireQuestScript properties)
+        // Quests
+        RE::TESQuest* g_playerVampireQuest = nullptr;
+
+        // Factions
         RE::TESFaction* g_vampirePCFamily = nullptr;
+
+        // Keywords
         RE::BGSKeyword* g_vampireKeyword = nullptr;
+
+        // Spells
         RE::SpellItem* g_menuOptionsSpell = nullptr;
         RE::SpellItem* g_victimDamageSpell = nullptr;
         RE::SpellItem* g_bleedingSpell = nullptr;
+
+        // Perks
         RE::BGSPerk* g_extractBloodPerk = nullptr;
+
+        // Sounds (SOUN record; PlaySound needs its descriptor)
+        RE::TESSound* g_feedSoundRecord = nullptr;
         RE::BGSSoundDescriptorForm* g_feedSound = nullptr;
+
+        // Effect shaders
         RE::TESEffectShader* g_neckMarksShader = nullptr;
+
+        // Image space modifiers
+        RE::TESImageSpaceModifier* g_redScreenISM = nullptr;
+
+        // FormLists
         RE::BGSListForm* g_powerfulVictims = nullptr;
 
         // Necks-bitten discovery weights: +2 in a city, +1 in a town, +0.5 elsewhere
-        constexpr const char* kCityLocationProps[] = {
-            "DawnStarLocation", "MarkarthLocation", "MorthalLocation", "RiftenLocation", "SolitudeLocation",
+        constexpr const char* kCityLocationIDs[] = {
+            "DawnstarLocation", "MarkarthLocation", "MorthalLocation", "RiftenLocation", "SolitudeLocation",
             "WhiterunLocation", "WindhelmLocation", "WinterholdLocation", "FalkreathLocation"
         };
-        constexpr const char* kTownLocationProps[] = {
+        constexpr const char* kTownLocationIDs[] = {
             "DragonBridgeLocation", "HelgenLocation", "IvarsteadLocation", "KarthwastenLocation", "RiverwoodLocation",
-            "RoriksteadLocation", "ShorsStoneLocation", "RavenRockLocation", "SkaalVillageLocation"
+            "RoriksteadLocation", "ShorsStoneLocation", "DLC2RavenRockLocation", "DLC2SkaalVillageLocation"
         };
-        RE::BGSLocation* g_cityLocations[std::size(kCityLocationProps)]{};
-        RE::BGSLocation* g_townLocations[std::size(kTownLocationProps)]{};
+        RE::BGSLocation* g_cityLocations[std::size(kCityLocationIDs)]{};
+        RE::BGSLocation* g_townLocations[std::size(kTownLocationIDs)]{};
 
         using VampireIntegrationUtils::PlaySound;
         using VampireIntegrationUtils::CastSpell;
         using VampireIntegrationUtils::CallPapyrusMethod;
-
-        int g_unresolvedProps = 0;
-
-        // Read a form-typed property off the bound quest script; property names are
-        // exact from the .psc, so no EditorID guessing is needed.
-        template <class T>
-        void ResolveProperty(const RE::BSTSmartPointer<RE::BSScript::Object>& obj, const char* prop, T*& out) {
-            auto* var = obj->GetProperty(prop);
-            out = (var && var->IsObject()) ? var->Unpack<T*>() : nullptr;
-            if (out) {
-                // FormID + name of the actual filled value, for manual comparison against the CK
-                SKSE::log::debug("  BV property {}: 0x{:08X} '{}'", prop, out->GetFormID(), out->GetName());
-            } else {
-                ++g_unresolvedProps;
-                // "empty (None)" = stale save instance (script bound before BV was installed);
-                // "not on script" = another mod's PlayerVampireQuestScript.pex won the conflict
-                SKSE::log::debug("  BV property {}: {}", prop, var ? "empty (None)" : "not on script");
-            }
-        }
-
-        // Properties resolve lazily on first feed: the quest script is only
-        // guaranteed to be bound once a save is running, not at kDataLoaded.
-        bool ResolveScriptProperties() {
-            if (g_propsResolved) return true;
-            if (!g_playerVampireQuest) return false;
-
-            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            if (!vm) return false;
-
-            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, g_playerVampireQuest);
-            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
-
-            RE::BSTSmartPointer<RE::BSScript::Object> obj;
-            if (!vm->FindBoundObject(handle, kScriptName, obj) || !obj) {
-                SKSE::log::warn("BetterVampiresIntegration: {} not bound - cannot resolve properties", kScriptName);
-                return false;
-            }
-
-            // BV ships no version number anywhere, so classify by script shape:
-            // TurnedNPCRefresh() was added to PlayerVampireQuestScript in 9.1. The deep
-            // integration is written against 9.1 feed logic - disable it for older shapes.
-            bool has91Shape = false;
-            if (auto* typeInfo = obj->GetTypeInfo()) {
-                for (uint32_t i = 0; i < typeInfo->GetNumMemberFuncs(); ++i) {
-                    auto* func = typeInfo->GetMemberFuncIter()[i].func.get();
-                    if (func && func->GetName() == "TurnedNPCRefresh") {
-                        has91Shape = true;
-                        break;
-                    }
-                }
-            }
-            if (!has91Shape) {
-                SKSE::log::warn("BetterVampiresIntegration: script shape matches Better Vampires 8.9 or older "
-                    "(or another mod overrides PlayerVampireQuestScript.pex) - deep integration disabled, using Papyrus path");
-                RE::DebugNotification("Better Vampires 8.9 or older detected - deep feed integration disabled");
-                g_available = false;
-                return false;
-            }
-            SKSE::log::info("BetterVampiresIntegration: script shape matches Better Vampires 9.1+");
-
-            SKSE::log::debug("BetterVampiresIntegration: resolving script properties...");
-            g_unresolvedProps = 0;
-
-            ResolveProperty(obj, "UsingBetterVampiresScripts", g_usingBVScripts);
-            ResolveProperty(obj, "VampireMenuSpell", g_menuSpellToggle);
-            ResolveProperty(obj, "VampireBottledBlood", g_bottledBlood);
-            ResolveProperty(obj, "VampireExtractingBlood", g_extractingBlood);
-            ResolveProperty(obj, "VampireFeedReady", g_feedReady);
-            ResolveProperty(obj, "VampireBloodPoints", g_bloodPoints);
-            ResolveProperty(obj, "EnableVampireBloodPoints", g_enableBloodPoints);
-            ResolveProperty(obj, "VampireDynamicStages", g_dynamicStages);
-            ResolveProperty(obj, "VampireFeedOffDead", g_feedOffDead);
-            ResolveProperty(obj, "CreateVampire", g_createVampire);
-            ResolveProperty(obj, "VampireRank", g_vampireRank);
-            ResolveProperty(obj, "VampireEngorge", g_engorge);
-            ResolveProperty(obj, "VampireEngorgeAmount", g_engorgeAmount);
-            ResolveProperty(obj, "VampireExtractBlood", g_extractBloodToggle);
-            ResolveProperty(obj, "VampireNecksBittenDiscovered", g_necksBittenDiscovered);
-            ResolveProperty(obj, "VampireRankProgression", g_rankProgression);
-            ResolveProperty(obj, "VampireStatusMessages", g_statusMessages);
-            ResolveProperty(obj, "BVSpecialVictimFeeding", g_specialVictimFeeding);
-            ResolveProperty(obj, "VampireLastTimeFed", g_lastTimeFed);
-            ResolveProperty(obj, "GameDaysPassed", g_gameDaysPassed);
-            ResolveProperty(obj, "BVMCMSkillPointsTotal", g_skillPointsTotal);
-            ResolveProperty(obj, "BVMCMSkillPointsAvailable", g_skillPointsAvailable);
-            ResolveProperty(obj, "BVMCMGiveAllSkillPointsGlobal", g_giveAllSkillPoints);
-            ResolveProperty(obj, "VampireNeckMarks", g_neckMarksToggle);
-            ResolveProperty(obj, "TargetAlreadyDeadGlobal", g_targetAlreadyDeadGlobal);
-
-            ResolveProperty(obj, "VampirePCFamily", g_vampirePCFamily);
-            ResolveProperty(obj, "Vampire", g_vampireKeyword);
-            ResolveProperty(obj, "BetterVampiresMenuOptionsSpell", g_menuOptionsSpell);
-            ResolveProperty(obj, "VampireVictimDamage2", g_victimDamageSpell);
-            ResolveProperty(obj, "BleedingSpell", g_bleedingSpell);
-            ResolveProperty(obj, "VampireExtractBloodPotions", g_extractBloodPerk);
-            ResolveProperty(obj, "NeckMarksRight", g_neckMarksShader);
-            ResolveProperty(obj, "BVPowerfulFeedingVictims", g_powerfulVictims);
-
-            // Papyrus "Sound" properties hold a SOUN record; unwrap to its descriptor for PlaySound
-            RE::TESForm* soundForm = nullptr;
-            ResolveProperty(obj, "MAGVampireTransform01", soundForm);
-            if (soundForm) {
-                g_feedSound = soundForm->As<RE::BGSSoundDescriptorForm>();
-                if (!g_feedSound) {
-                    if (auto* soun = soundForm->As<RE::TESSound>()) g_feedSound = soun->descriptor;
-                }
-            }
-            if (g_feedSound) {
-                SKSE::log::debug("  BV feed sound descriptor: 0x{:08X}", g_feedSound->GetFormID());
-            } else {
-                SKSE::log::debug("  BV feed sound descriptor: missing");
-            }
-
-            for (size_t i = 0; i < std::size(kCityLocationProps); ++i) {
-                ResolveProperty(obj, kCityLocationProps[i], g_cityLocations[i]);
-            }
-            for (size_t i = 0; i < std::size(kTownLocationProps); ++i) {
-                ResolveProperty(obj, kTownLocationProps[i], g_townLocations[i]);
-            }
-
-            // Without BV's core flag the deep path can't work: either the save's script
-            // instance predates BV (properties None until the quest is reset) or a foreign
-            // PlayerVampireQuestScript.pex is bound. Retry next feed; Papyrus handles this one.
-            if (!g_usingBVScripts) {
-                SKSE::log::warn("BetterVampiresIntegration: core BV properties unavailable ({} unresolved) - "
-                    "save not initialized with Better Vampires, or another mod overrides PlayerVampireQuestScript.pex. "
-                    "Falling back to Papyrus (enable debug logging for the per-property list)", g_unresolvedProps);
-                return false;
-            }
-
-            g_propsResolved = true;
-            if (g_unresolvedProps == 0) {
-                SKSE::log::info("BetterVampiresIntegration: all script properties resolved");
-            } else {
-                SKSE::log::warn("BetterVampiresIntegration: {} script properties missing - enable debug logging for the per-property list", g_unresolvedProps);
-            }
-            return true;
-        }
 
         // Fire-and-forget dispatch of a PlayerVampireQuestScript method with an Actor arg
         bool CallBVMethod(const char* funcName, RE::Actor* actor) {
@@ -305,7 +189,39 @@ namespace BetterVampiresIntegration {
 
             RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new VampireIntegrationUtils::EmptyCallback());
             std::int32_t c = count;
-            vm->DispatchStaticCall("Game", "TriggerScreenBlood", RE::MakeFunctionArguments(std::move(c)), callback);
+            bool ok = vm->DispatchStaticCall("Game", "TriggerScreenBlood", RE::MakeFunctionArguments(std::move(c)), callback);
+            SKSE::log::debug("BetterVampiresIntegration: TriggerScreenBlood({}) dispatch {}", count, ok ? "ok" : "FAILED");
+        }
+
+        // BV: ApplyCrossFade(2.0), wait 2s, RemoveCrossFade - the wait runs off-thread and
+        // the removal is queued back onto the game thread
+        void ApplyRedScreenCrossFade() {
+            if (!g_redScreenISM) return;
+
+            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+            if (!vm) return;
+
+            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESImageSpaceModifier::FORMTYPE, g_redScreenISM);
+            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return;
+
+            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new VampireIntegrationUtils::EmptyCallback());
+            float fadeDuration = 2.0f;
+            bool ok = vm->DispatchMethodCall(handle, "ImageSpaceModifier", "ApplyCrossFade",
+                RE::MakeFunctionArguments(std::move(fadeDuration)), callback);
+            SKSE::log::debug("BetterVampiresIntegration: red screen ApplyCrossFade dispatch {}", ok ? "ok" : "FAILED");
+            if (!ok) return;
+
+            std::thread([]() {
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                SKSE::GetTaskInterface()->AddTask([]() {
+                    auto* taskVm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+                    if (!taskVm) return;
+                    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb(new VampireIntegrationUtils::EmptyCallback());
+                    float removeDuration = 1.0f;
+                    taskVm->DispatchStaticCall("ImageSpaceModifier", "RemoveCrossFade",
+                        RE::MakeFunctionArguments(std::move(removeDuration)), cb);
+                });
+            }).detach();
         }
 
         // Receives QueryStat("Necks Bitten") and shows the rank-tier feed message
@@ -350,6 +266,77 @@ namespace BetterVampiresIntegration {
             }
             return false;
         }
+
+        // Walks parent types too (RegisterForUpdateGameTime lives on the Form script)
+        bool TypeHasFunction(RE::BSScript::ObjectTypeInfo* typeInfo, const char* name) {
+            for (auto* cls = typeInfo; cls; cls = cls->GetParent()) {
+                auto* funcs = cls->GetMemberFuncIter();
+                for (uint32_t i = 0; funcs && i < cls->GetNumMemberFuncs(); ++i) {
+                    auto* func = funcs[i].func.get();
+                    if (func && func->GetName() == name) return true;
+                }
+            }
+            return false;
+        }
+
+        // One-time check at first feed (the script only binds in a running save):
+        // BV ships no version number anywhere, so classify by script shape -
+        // TurnedNPCRefresh() was added to PlayerVampireQuestScript in 9.1 and the
+        // deep integration is written against 9.1 feed logic.
+        bool VerifyScriptShape() {
+            if (g_shapeVerified) return true;
+
+            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+            if (!vm) return false;
+
+            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, g_playerVampireQuest);
+            if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return false;
+
+            RE::BSTSmartPointer<RE::BSScript::Object> obj;
+            if (!vm->FindBoundObject(handle, kScriptName, obj) || !obj) {
+                SKSE::log::warn("BetterVampiresIntegration: {} not bound - retrying next feed", kScriptName);
+                return false;
+            }
+
+            auto* typeInfo = obj->GetTypeInfo();
+            if (!typeInfo || !TypeHasFunction(typeInfo, "TurnedNPCRefresh")) {
+                g_versionInfo = "8.9 or older (deep integration disabled)";
+                SKSE::log::warn("BetterVampiresIntegration: detected Better Vampires 8.9 or older "
+                    "(or another mod overrides PlayerVampireQuestScript.pex) - deep integration disabled, using Papyrus path");
+                RE::DebugNotification("Better Vampires 8.9 or older detected - deep feed integration disabled");
+                g_available = false;
+                return false;
+            }
+            g_versionInfo = "9.1+";
+            SKSE::log::info("BetterVampiresIntegration: detected Better Vampires 9.1+");
+
+            // Dispatched Papyrus functions - a renamed/absent one fails silently at feed time
+            constexpr const char* kDispatchedFuncs[] = {
+                "AmaranthGainSkills", "TurnNPCIntoVampire",
+                "NormalRankProgression", "EasierRankProgression", "DaysAsVampireProgression",
+                "SpecialFeedingBonus",
+                "TwoStagesSatiation", "DynamicStagesSatiation", "NormalStagesSatiation",
+                "UnregisterForUpdateGameTime", "RegisterForUpdateGameTime",
+            };
+            for (const char* funcName : kDispatchedFuncs) {
+                SKSE::log::debug("  {}: {}", funcName, TypeHasFunction(typeInfo, funcName) ? "found" : "missing");
+            }
+
+            // MAGVampireTransform01 is a SOUN record - editor-ID lookup misses it, so read
+            // the value straight off the script property and unwrap to a descriptor
+            if (!g_feedSound) {
+                if (auto* var = obj->GetProperty("MAGVampireTransform01"); var && var->IsObject()) {
+                    if (auto* soun = var->Unpack<RE::TESSound*>()) {
+                        g_feedSoundRecord = soun;
+                        g_feedSound = soun->descriptor;
+                    }
+                }
+                SKSE::log::debug("  MAGVampireTransform01 (via property): {}", g_feedSound ? "found" : "missing");
+            }
+
+            g_shapeVerified = true;
+            return true;
+        }
     }
 
     bool Initialize() {
@@ -366,6 +353,7 @@ namespace BetterVampiresIntegration {
             return false;
         }
 
+        // Check for Better Vampires ESP
         bool hasBetterVampires = dataHandler->LookupModByName("Better Vampires.esp") != nullptr;
         if (!hasBetterVampires) {
             SKSE::log::info("BetterVampiresIntegration: Better Vampires not installed");
@@ -373,15 +361,158 @@ namespace BetterVampiresIntegration {
             return false;
         }
 
+        SKSE::log::info("BetterVampiresIntegration: Better Vampires ESP detected, looking up forms...");
+
+        // Globals - Better Vampires specific
+        g_usingBVScripts = RE::TESForm::LookupByEditorID<RE::TESGlobal>("UsingBetterVampiresScripts");
+        g_menuSpellToggle = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireMenuSpell");
+        g_bottledBlood = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireBottledBlood");
+        g_extractingBlood = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireExtractingBlood");
+        g_bloodPoints = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireBloodPoints");
+        g_enableBloodPoints = RE::TESForm::LookupByEditorID<RE::TESGlobal>("EnableVampireBloodPoints");
+        g_dynamicStages = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireDynamicStages");
+        g_feedOffDead = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedOffDead");
+        g_createVampire = RE::TESForm::LookupByEditorID<RE::TESGlobal>("CreateVampire");
+        g_vampireRank = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireRank");
+        g_engorge = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireEngorge");
+        g_engorgeAmount = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireEngorgeAmount");
+        g_extractBloodToggle = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireExtractBlood");
+        g_necksBittenDiscovered = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireNecksBittenDiscovered");
+        g_rankProgression = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireRankProgression");
+        g_statusMessages = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireStatusMessages");
+        g_specialVictimFeeding = RE::TESForm::LookupByEditorID<RE::TESGlobal>("BVSpecialVictimFeeding");
+        g_lastTimeFed = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireLastTimeFed");
+        g_skillPointsTotal = RE::TESForm::LookupByEditorID<RE::TESGlobal>("BVMCMSkillPointsTotal");
+        g_skillPointsAvailable = RE::TESForm::LookupByEditorID<RE::TESGlobal>("BVMCMSkillPointsAvailable");
+        g_giveAllSkillPoints = RE::TESForm::LookupByEditorID<RE::TESGlobal>("BVMCMGiveAllSkillPointsGlobal");
+        g_neckMarksToggle = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireNeckMarks");
+        g_targetAlreadyDeadGlobal = RE::TESForm::LookupByEditorID<RE::TESGlobal>("TargetAlreadyDeadGlobal");
+        g_noRedScreen = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireNoRedScreen");
+
+        // Globals - vanilla (shared)
+        g_feedReady = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
+        g_gameDaysPassed = RE::TESForm::LookupByEditorID<RE::TESGlobal>("GameDaysPassed");
+
+        // Quests
         g_playerVampireQuest = RE::TESForm::LookupByEditorID<RE::TESQuest>("PlayerVampireQuest");
 
-        g_available = g_playerVampireQuest != nullptr;
-        if (!g_available) {
-            SKSE::log::warn("BetterVampiresIntegration: PlayerVampireQuest MISSING");
-            return false;
+        // Factions
+        g_vampirePCFamily = RE::TESForm::LookupByEditorID<RE::TESFaction>("VampirePCFamily");
+
+        // Keywords
+        g_vampireKeyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("Vampire");
+
+        // Spells
+        g_menuOptionsSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("BetterVampiresMenuOptionsSpell");
+        g_victimDamageSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("VampireVictimDamage2");
+        g_bleedingSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("BleedingSpell");
+
+        // Perks
+        g_extractBloodPerk = RE::TESForm::LookupByEditorID<RE::BGSPerk>("VampireExtractBloodPotions");
+
+        // Sounds - MAGVampireTransform01 (SOUN 0x000FF9E9) / MAGVampireTransform01SD
+        // (SNDR 0x000FF9E8) are vanilla Skyrim.esm forms whose editor IDs aren't cached,
+        // so resolve by FormID. PlaySound needs the descriptor (SNDR).
+        g_feedSoundRecord = RE::TESForm::LookupByID<RE::TESSound>(0x000FF9E9);
+        g_feedSound = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(0x000FF9E8);
+        if (!g_feedSound && g_feedSoundRecord) g_feedSound = g_feedSoundRecord->descriptor;
+
+        // Effect shaders
+        g_neckMarksShader = RE::TESForm::LookupByEditorID<RE::TESEffectShader>("NeckMarksRight");
+
+        // Image space modifiers
+        g_redScreenISM = RE::TESForm::LookupByEditorID<RE::TESImageSpaceModifier>("VampireTransformDecreaseISMD");
+
+        // FormLists
+        g_powerfulVictims = RE::TESForm::LookupByEditorID<RE::BGSListForm>("BVPowerfulFeedingVictims");
+
+        // Locations
+        for (size_t i = 0; i < std::size(kCityLocationIDs); ++i) {
+            g_cityLocations[i] = RE::TESForm::LookupByEditorID<RE::BGSLocation>(kCityLocationIDs[i]);
+        }
+        for (size_t i = 0; i < std::size(kTownLocationIDs); ++i) {
+            g_townLocations[i] = RE::TESForm::LookupByEditorID<RE::BGSLocation>(kTownLocationIDs[i]);
         }
 
-        SKSE::log::debug("BetterVampiresIntegration: Initialized (script properties resolve on first feed)");
+        // Validate essential forms are present
+        g_available = g_playerVampireQuest && g_usingBVScripts;
+        if (!g_available) {
+            SKSE::log::warn("BetterVampiresIntegration: Missing essential forms - PlayerVampireQuest:{}, UsingBetterVampiresScripts:{}",
+                g_playerVampireQuest ? "ok" : "MISSING",
+                g_usingBVScripts ? "ok" : "MISSING");
+            return false;
+        }
+        g_versionInfo = "unknown (version check runs at first feed)";
+        SKSE::log::debug("BetterVampiresIntegration: Initialized successfully");
+
+        // Globals - Better Vampires specific
+        SKSE::log::debug("  UsingBetterVampiresScripts: {}", g_usingBVScripts ? "found" : "missing");
+        SKSE::log::debug("  VampireMenuSpell: {}", g_menuSpellToggle ? "found" : "missing");
+        SKSE::log::debug("  VampireBottledBlood: {}", g_bottledBlood ? "found" : "missing");
+        SKSE::log::debug("  VampireExtractingBlood: {}", g_extractingBlood ? "found" : "missing");
+        SKSE::log::debug("  VampireBloodPoints: {}", g_bloodPoints ? "found" : "missing");
+        SKSE::log::debug("  EnableVampireBloodPoints: {}", g_enableBloodPoints ? "found" : "missing");
+        SKSE::log::debug("  VampireDynamicStages: {}", g_dynamicStages ? "found" : "missing");
+        SKSE::log::debug("  VampireFeedOffDead: {}", g_feedOffDead ? "found" : "missing");
+        SKSE::log::debug("  CreateVampire: {}", g_createVampire ? "found" : "missing");
+        SKSE::log::debug("  VampireRank: {}", g_vampireRank ? "found" : "missing");
+        SKSE::log::debug("  VampireEngorge: {}", g_engorge ? "found" : "missing");
+        SKSE::log::debug("  VampireEngorgeAmount: {}", g_engorgeAmount ? "found" : "missing");
+        SKSE::log::debug("  VampireExtractBlood: {}", g_extractBloodToggle ? "found" : "missing");
+        SKSE::log::debug("  VampireNecksBittenDiscovered: {}", g_necksBittenDiscovered ? "found" : "missing");
+        SKSE::log::debug("  VampireRankProgression: {}", g_rankProgression ? "found" : "missing");
+        SKSE::log::debug("  VampireStatusMessages: {}", g_statusMessages ? "found" : "missing");
+        SKSE::log::debug("  BVSpecialVictimFeeding: {}", g_specialVictimFeeding ? "found" : "missing");
+        SKSE::log::debug("  VampireLastTimeFed: {}", g_lastTimeFed ? "found" : "missing");
+        SKSE::log::debug("  BVMCMSkillPointsTotal: {}", g_skillPointsTotal ? "found" : "missing");
+        SKSE::log::debug("  BVMCMSkillPointsAvailable: {}", g_skillPointsAvailable ? "found" : "missing");
+        SKSE::log::debug("  BVMCMGiveAllSkillPointsGlobal: {}", g_giveAllSkillPoints ? "found" : "missing");
+        SKSE::log::debug("  VampireNeckMarks: {}", g_neckMarksToggle ? "found" : "missing");
+        SKSE::log::debug("  TargetAlreadyDeadGlobal: {}", g_targetAlreadyDeadGlobal ? "found" : "missing");
+        SKSE::log::debug("  VampireNoRedScreen: {}", g_noRedScreen ? "found" : "missing");
+
+        // Globals - vanilla
+        SKSE::log::debug("  VampireFeedReady: {}", g_feedReady ? "found" : "missing");
+        SKSE::log::debug("  GameDaysPassed: {}", g_gameDaysPassed ? "found" : "missing");
+
+        // Quests
+        SKSE::log::debug("  PlayerVampireQuest: {}", g_playerVampireQuest ? "found" : "missing");
+
+        // Factions
+        SKSE::log::debug("  VampirePCFamily: {}", g_vampirePCFamily ? "found" : "missing");
+
+        // Keywords
+        SKSE::log::debug("  Vampire: {}", g_vampireKeyword ? "found" : "missing");
+
+        // Spells
+        SKSE::log::debug("  BetterVampiresMenuOptionsSpell: {}", g_menuOptionsSpell ? "found" : "missing");
+        SKSE::log::debug("  VampireVictimDamage2: {}", g_victimDamageSpell ? "found" : "missing");
+        SKSE::log::debug("  BleedingSpell: {}", g_bleedingSpell ? "found" : "missing");
+
+        // Perks
+        SKSE::log::debug("  VampireExtractBloodPotions: {}", g_extractBloodPerk ? "found" : "missing");
+
+        // Sounds
+        SKSE::log::debug("  MAGVampireTransform01 (SOUN): {}", g_feedSoundRecord ? "found" : "missing");
+        SKSE::log::debug("  MAGVampireTransform01SD (descriptor): {}", g_feedSound ? "found" : "missing");
+
+        // Effect shaders
+        SKSE::log::debug("  NeckMarksRight: {}", g_neckMarksShader ? "found" : "missing");
+
+        // Image space modifiers
+        SKSE::log::debug("  VampireTransformDecreaseISMD: {}", g_redScreenISM ? "found" : "missing");
+
+        // FormLists
+        SKSE::log::debug("  BVPowerfulFeedingVictims: {}", g_powerfulVictims ? "found" : "missing");
+
+        // Locations
+        for (size_t i = 0; i < std::size(kCityLocationIDs); ++i) {
+            SKSE::log::debug("  {}: {}", kCityLocationIDs[i], g_cityLocations[i] ? "found" : "missing");
+        }
+        for (size_t i = 0; i < std::size(kTownLocationIDs); ++i) {
+            SKSE::log::debug("  {}: {}", kTownLocationIDs[i], g_townLocations[i] ? "found" : "missing");
+        }
+
         return true;
     }
 
@@ -390,6 +521,10 @@ namespace BetterVampiresIntegration {
             Initialize();
         }
         return g_available;
+    }
+
+    const char* GetVersionInfo() {
+        return g_versionInfo.load();
     }
 
     bool ProcessFeed(const FeedContext& context) {
@@ -404,9 +539,8 @@ namespace BetterVampiresIntegration {
             return false;
         }
 
-        // Resolve before any mutation so a failure here can still fall back to Papyrus
-        if (!ResolveScriptProperties()) {
-            SKSE::log::warn("BetterVampiresIntegration::ProcessFeed: properties unresolved - aborting");
+        // 8.9-or-older script shape disables the deep path (checked once, needs a running save)
+        if (!VerifyScriptShape()) {
             return false;
         }
 
@@ -509,7 +643,10 @@ namespace BetterVampiresIntegration {
             CallBVMethod("TurnNPCIntoVampire", context.target);
             SKSE::log::info("BetterVampiresIntegration: Turning victim into a vampire");
         } else {
-            // === STEP 14: Red screen crossfade - SKIP ===
+            // === STEP 14: Red screen crossfade (BV gates it on VampireNoRedScreen) ===
+            if (!g_noRedScreen || g_noRedScreen->value == 0.0f) {
+                ApplyRedScreenCrossFade();
+            }
 
             // === STEP 15: Extract-blood perk sync ===
             if (g_extractBloodPerk && g_extractBloodToggle) {

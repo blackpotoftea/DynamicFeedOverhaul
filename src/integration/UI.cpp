@@ -2,6 +2,7 @@
 #include "../Settings.h"
 #include "../feed/TargetState.h"
 #include "../papyrus/PapyrusCall.h"
+#include "BetterVampiresIntegration.h"
 #include "../utils/log.h"
 #include "../utils/AnimUtil.h"
 #include "../utils/SoundUtil.h"
@@ -164,6 +165,9 @@ void __stdcall UI::Debug::Render() {
     RenderBoolStatus("Sacrosanct detected", PapyrusCall::GetSacrosanctFeedManagerQuest() != nullptr);
     RenderBoolStatus("Sacrilege detected", PapyrusCall::GetSacrilegeFeedManagerQuest() != nullptr);
     RenderBoolStatus("Better Vampires detected", hasBetterVampires);
+    if (hasBetterVampires) {
+        ImGuiMCP::Text("Better Vampires version: %s", BetterVampiresIntegration::GetVersionInfo());
+    }
 
     // Debug Transformations Section
     ImGuiMCP::Separator();
