@@ -144,6 +144,13 @@ void __stdcall UI::Debug::Render() {
         if (hungerStage >= 1 && hungerStage <= 4) {
             const char* hungerNames[] = {"Sated", "Peckish", "Hungry", "Starving"};
             ImGuiMCP::Text("Hunger: %s (Stage %d)", hungerNames[hungerStage - 1], hungerStage);
+
+            // This renders every frame; log only on an actual stage change, not per-frame
+            static int lastHungerStage = -1;
+            if (hungerStage != lastHungerStage) {
+                SKSE::log::info("UI: Hunger stage changed to {} (Stage {})", hungerNames[hungerStage - 1], hungerStage);
+                lastHungerStage = hungerStage;
+            }
         }
     }
 
