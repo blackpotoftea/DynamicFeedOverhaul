@@ -373,6 +373,13 @@ void FeedPromptSink::HandleFeedAccepted() {
     // Player's combat state forces lethal feed
     bool playerInCombat = player->IsInCombat();
 
+    // Snapshot the victim's feed-time state NOW (victim still alive) for the vampire-overhaul
+    // integration, which runs in MarkFeedEnded after the animation - by then a lethal victim is
+    // dead, so combat/sleeping can't be re-derived there. Combat feed = either party in combat.
+    // MarkFeedStarted already reset these above, so this set wins.
+    FeedAnimState::SetFeedInCombat(isInCombat || playerInCombat);
+    FeedAnimState::SetFeedSleeping(TargetState::IsSleeping(feedTarget));
+
     // Resolve the composite pack (and the geometry/furniture context it implies)
     // through the SAME helper the prompt callback uses, so the prompt label and the
     // actual feed path can never disagree on whether this is a composite feed. With

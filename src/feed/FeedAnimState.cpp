@@ -22,6 +22,8 @@ namespace FeedAnimState {
     std::atomic<uint32_t> vfdTriggerCount{0};
     std::atomic<bool> feedEngaged{false};
     std::atomic<bool> feedHasOAR{false};
+    std::atomic<bool> feedInCombat{false};
+    std::atomic<bool> feedSleeping{false};
 
     namespace {
         // Saving is blocked for the whole feed window: the victim's restrained
@@ -49,6 +51,8 @@ namespace FeedAnimState {
         vfdTriggerCount.store(0, std::memory_order_release);
         feedEngaged.store(false, std::memory_order_release);
         feedHasOAR.store(false, std::memory_order_release);
+        feedInCombat.store(false, std::memory_order_release);
+        feedSleeping.store(false, std::memory_order_release);
         SetSaveBlock(true);  // before any restrain can land
         SKSE::log::info("========== FEED STARTED ==========");
 
@@ -151,6 +155,8 @@ namespace FeedAnimState {
         vfdTriggerCount.store(0, std::memory_order_release);
         feedEngaged.store(false, std::memory_order_release);
         feedHasOAR.store(false, std::memory_order_release);
+        feedInCombat.store(false, std::memory_order_release);
+        feedSleeping.store(false, std::memory_order_release);
         killMoveStartSeen.store(false, std::memory_order_release);
 
         // A new session must never inherit a save block from the previous one.
@@ -192,5 +198,21 @@ namespace FeedAnimState {
 
     bool GetFeedHasOAR() {
         return feedHasOAR.load(std::memory_order_acquire);
+    }
+
+    void SetFeedInCombat(bool inCombat) {
+        feedInCombat.store(inCombat, std::memory_order_release);
+    }
+
+    bool GetFeedInCombat() {
+        return feedInCombat.load(std::memory_order_acquire);
+    }
+
+    void SetFeedSleeping(bool sleeping) {
+        feedSleeping.store(sleeping, std::memory_order_release);
+    }
+
+    bool GetFeedSleeping() {
+        return feedSleeping.load(std::memory_order_acquire);
     }
 }

@@ -2,6 +2,7 @@
 
 #include "../feed/TargetState.h"
 #include "../feed/FeedPromptSink.h"
+#include "../feed/FeedAnimState.h"
 #include "../integration/SacrosanctIntegration.h"
 #include "../integration/SacrilegeIntegration.h"
 #include "../integration/BetterVampiresIntegration.h"
@@ -304,8 +305,10 @@ namespace PapyrusCall {
         switch (integration) {
             case VampireIntegration::Sacrosanct: {
                 auto* settings = Settings::GetSingleton();
-                bool isCombatFeed = target->IsInCombat();
-                bool isSleeping = TargetState::IsSleeping(target);
+                // Read the feed-time snapshot, NOT live state: the victim may be dead by now, so
+                // target->IsInCombat()/IsSleeping() would wrongly read false (see FeedAnimState).
+                bool isCombatFeed = FeedAnimState::GetFeedInCombat();
+                bool isSleeping = FeedAnimState::GetFeedSleeping();
 
                 // Deep integration: C++ mimics Sacrosanct ProcessFeed (bypasses Papyrus)
                 // Use deep integration if: enabled AND (not combat OR combat integration enabled)
@@ -344,8 +347,10 @@ namespace PapyrusCall {
 
             case VampireIntegration::Sacrilege: {
                 auto* settings = Settings::GetSingleton();
-                bool isCombatFeed = target->IsInCombat();
-                bool isSleeping = TargetState::IsSleeping(target);
+                // Read the feed-time snapshot, NOT live state: the victim may be dead by now, so
+                // target->IsInCombat()/IsSleeping() would wrongly read false (see FeedAnimState).
+                bool isCombatFeed = FeedAnimState::GetFeedInCombat();
+                bool isSleeping = FeedAnimState::GetFeedSleeping();
 
                 // Deep integration: C++ mimics Sacrilege ProcessFeed (bypasses Papyrus)
                 // Use deep integration if: enabled AND (not combat OR combat integration enabled)
@@ -378,8 +383,10 @@ namespace PapyrusCall {
 
             case VampireIntegration::BetterVampires: {
                 auto* settings = Settings::GetSingleton();
-                bool isCombatFeed = target->IsInCombat();
-                bool isSleeping = TargetState::IsSleeping(target);
+                // Read the feed-time snapshot, NOT live state: the victim may be dead by now, so
+                // target->IsInCombat()/IsSleeping() would wrongly read false (see FeedAnimState).
+                bool isCombatFeed = FeedAnimState::GetFeedInCombat();
+                bool isSleeping = FeedAnimState::GetFeedSleeping();
 
                 // Deep integration: C++ mimics Better Vampires VampireFeed (bypasses Papyrus)
                 // Use deep integration if: enabled AND (not combat OR combat integration enabled)

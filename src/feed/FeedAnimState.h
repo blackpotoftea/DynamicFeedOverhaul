@@ -44,4 +44,14 @@ namespace FeedAnimState {
     // the kill itself, so the fallback must not double-kill).
     void SetFeedHasOAR(bool hasOAR);
     bool GetFeedHasOAR();
+
+    // Victim-state snapshot taken at feed accept, while the victim is still alive and in its
+    // original state. The vampire-overhaul integration runs in MarkFeedEnded AFTER the animation,
+    // by which point a lethal victim is dead - so IsInCombat()/IsSleeping() can't be re-derived
+    // there (they'd read false and silently skip the Blood Knight stamina cost, Kiss of Death,
+    // Lamae's Wrath, etc.). Set in HandleFeedAccepted; reset by MarkFeedStarted.
+    void SetFeedInCombat(bool inCombat);
+    bool GetFeedInCombat();
+    void SetFeedSleeping(bool sleeping);
+    bool GetFeedSleeping();
 }
