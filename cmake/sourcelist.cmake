@@ -14,6 +14,7 @@ set(sources ${sources}
     src/utils/AnimUtil.cpp
     src/utils/SoundUtil.cpp
     src/integration/OStimIntegration.cpp
+    src/integration/SexLabIntegration.cpp
     src/integration/PoiseIntegration.cpp
     src/integration/SacrosanctIntegration.cpp
     src/integration/SacrilegeIntegration.cpp

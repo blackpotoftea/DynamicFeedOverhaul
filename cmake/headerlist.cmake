@@ -12,6 +12,7 @@ set(headers ${headers}
     src/feed/CombatBark.h
     src/papyrus/PapyrusCall.h
     src/integration/OStimIntegration.h
+    src/integration/SexLabIntegration.h
     src/integration/PoiseIntegration.h
     src/integration/SkyrimNetIntegration.h
     src/utils/MenuCheck.h

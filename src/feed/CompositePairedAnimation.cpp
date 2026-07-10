@@ -374,6 +374,12 @@ namespace CompositePairedAnimation {
         const int targetState = AnimUtil::DetermineTargetState(target, isInCombat);
         res.targetState = targetState;
 
+        // Composite fires humanoid graph clips the beast skeletons don't have; VL/Werewolf
+        // fall through to the legacy path's dedicated feed animations (pack stays null).
+        if (TargetState::IsWerewolf(player) || TargetState::IsVampireLord(player)) {
+            return res;
+        }
+
         const bool playerInCombat = player->IsInCombat();
 
         // Furniture context: a target sleeping in a bed/bedroll can use a player-only
