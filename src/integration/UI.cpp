@@ -167,6 +167,32 @@ void __stdcall UI::Debug::Render() {
     RenderBoolStatus("Better Vampires detected", hasBetterVampires);
     if (hasBetterVampires) {
         ImGuiMCP::Text("Better Vampires version: %s", BetterVampiresIntegration::GetVersionInfo());
+
+        auto bv = BetterVampiresIntegration::GetHungerDebug();
+        if (!bv.valid) {
+            ImGuiMCP::TextDisabled("  (hunger state resolves after first feed)");
+        } else {
+            const char* stageModeName = bv.stageMode == 20000 ? "Two-stage"
+                                      : bv.stageMode == 10000 ? "Dynamic" : "Normal";
+            ImGuiMCP::Text("  Mode: %s", bv.bloodPointsMode ? "Blood Points (hunger via power use, not time)"
+                                                            : "Feed Timer (hunger over game-time)");
+            ImGuiMCP::Text("  Stage mode: %s", stageModeName);
+            ImGuiMCP::Text("  Hunger stage (VampireFeedReady): %.0f  |  VampireStatus: %.0f", bv.feedReady, bv.vampireStatus);
+            if (bv.bloodPointsMode) {
+                ImGuiMCP::Text("  Blood Points: %.0f", bv.bloodPoints);
+            } else {
+                ImGuiMCP::Text("  FeedTimer: %.3f game-days (last fed %.3f, now %.3f)",
+                    bv.feedTimer, bv.lastFeedTime, bv.gameDaysPassed);
+                if (!bv.feedTimerEnabled) {
+                    ImGuiMCP::TextColored(ImGuiMCP::ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
+                        "  BVCalculateFeedTimer is OFF - FeedTimer never updates!");
+                }
+            }
+            if (bv.updateGated) {
+                ImGuiMCP::TextColored(ImGuiMCP::ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "%s",
+                    "  VampireUpdateGameTime != 0 - stage updates blocked until next feed");
+            }
+        }
     }
 
     // Debug Transformations Section

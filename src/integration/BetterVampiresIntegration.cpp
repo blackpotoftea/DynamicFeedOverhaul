@@ -96,6 +96,8 @@ namespace BetterVampiresIntegration {
         RE::TESGlobal* g_neckMarksToggle = nullptr;
         RE::TESGlobal* g_targetAlreadyDeadGlobal = nullptr;
         RE::TESGlobal* g_noRedScreen = nullptr;
+        RE::TESGlobal* g_calcFeedTimer = nullptr;    // BVCalculateFeedTimer - gate for FeedTimer updates
+        RE::TESGlobal* g_updateGameTimeGate = nullptr; // VampireUpdateGameTime - blocks stage updates when != 0
 
         // Quests
         RE::TESQuest* g_playerVampireQuest = nullptr;
@@ -316,7 +318,7 @@ namespace BetterVampiresIntegration {
                 "NormalRankProgression", "EasierRankProgression", "DaysAsVampireProgression",
                 "SpecialFeedingBonus",
                 "TwoStagesSatiation", "DynamicStagesSatiation", "NormalStagesSatiation",
-                "UnregisterForUpdateGameTime", "RegisterForUpdateGameTime",
+                "RegisterForUpdateGameTime",
             };
             for (const char* funcName : kDispatchedFuncs) {
                 SKSE::log::debug("  {}: {}", funcName, TypeHasFunction(typeInfo, funcName) ? "found" : "missing");
@@ -388,6 +390,8 @@ namespace BetterVampiresIntegration {
         g_neckMarksToggle = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireNeckMarks");
         g_targetAlreadyDeadGlobal = RE::TESForm::LookupByEditorID<RE::TESGlobal>("TargetAlreadyDeadGlobal");
         g_noRedScreen = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireNoRedScreen");
+        g_calcFeedTimer = RE::TESForm::LookupByEditorID<RE::TESGlobal>("BVCalculateFeedTimer");
+        g_updateGameTimeGate = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireUpdateGameTime");
 
         // Globals - vanilla (shared)
         g_feedReady = RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireFeedReady");
@@ -470,6 +474,8 @@ namespace BetterVampiresIntegration {
         SKSE::log::debug("  VampireNeckMarks: {}", g_neckMarksToggle ? "found" : "missing");
         SKSE::log::debug("  TargetAlreadyDeadGlobal: {}", g_targetAlreadyDeadGlobal ? "found" : "missing");
         SKSE::log::debug("  VampireNoRedScreen: {}", g_noRedScreen ? "found" : "missing");
+        SKSE::log::debug("  BVCalculateFeedTimer: {}", g_calcFeedTimer ? "found" : "missing");
+        SKSE::log::debug("  VampireUpdateGameTime: {}", g_updateGameTimeGate ? "found" : "missing");
 
         // Globals - vanilla
         SKSE::log::debug("  VampireFeedReady: {}", g_feedReady ? "found" : "missing");
@@ -527,6 +533,41 @@ namespace BetterVampiresIntegration {
         return g_versionInfo.load();
     }
 
+    HungerDebug GetHungerDebug() {
+        HungerDebug d;
+        if (!g_available || !g_playerVampireQuest) return d;
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) return d;
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, g_playerVampireQuest);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) return d;
+        RE::BSTSmartPointer<RE::BSScript::Object> obj;
+        if (!vm->FindBoundObject(handle, kScriptName, obj) || !obj) return d;
+
+        // VampireStatus is an Int property (not Float) - accept both so it doesn't read as the fallback
+        auto readFloatProp = [&](const char* prop, float fallback) -> float {
+            auto* var = obj->GetProperty(prop);
+            if (var) {
+                if (var->IsFloat()) return var->GetFloat();
+                if (var->IsInt()) return static_cast<float>(var->GetSInt());
+            }
+            return fallback;
+        };
+
+        d.valid = true;
+        d.bloodPointsMode = g_enableBloodPoints && g_enableBloodPoints->value == 10000.0f;
+        d.stageMode = g_dynamicStages ? static_cast<int>(g_dynamicStages->value) : 0;
+        d.feedReady = g_feedReady ? g_feedReady->value : -1.0f;
+        d.bloodPoints = g_bloodPoints ? g_bloodPoints->value : -1.0f;
+        d.gameDaysPassed = g_gameDaysPassed ? g_gameDaysPassed->value : -1.0f;
+        d.feedTimerEnabled = g_calcFeedTimer && g_calcFeedTimer->value > 0.0f;
+        d.updateGated = g_updateGameTimeGate && g_updateGameTimeGate->value != 0.0f;
+        d.vampireStatus = readFloatProp("VampireStatus", -1.0f);
+        d.feedTimer = readFloatProp("FeedTimer", -1.0f);
+        d.lastFeedTime = readFloatProp("LastFeedTime", -1.0f);
+        return d;
+    }
+
     bool ProcessFeed(const FeedContext& context) {
         if (!context.target) {
             SKSE::log::error("BetterVampiresIntegration::ProcessFeed: target is null");
@@ -546,6 +587,19 @@ namespace BetterVampiresIntegration {
 
         SKSE::log::info("BetterVampiresIntegration::ProcessFeed: target={}, lethal={}, combat={}, sleeping={}",
             context.target->GetName(), context.isLethal, context.isCombatFeed, context.isSleeping);
+
+        // Full pre-feed hunger snapshot (save values, valid now the game is running). Comparing
+        // FeedTimer / VampireStatus across consecutive feeds shows whether hunger advanced while
+        // waiting - a frozen FeedTimer after a long wait is the smoking gun.
+        {
+            HungerDebug h = GetHungerDebug();
+            SKSE::log::info("BetterVampiresIntegration: hunger snapshot - mode={}, stageMode={}, VampireFeedReady={:.0f}, "
+                "VampireStatus={:.0f}, VampireBloodPoints={:.0f}, FeedTimer={:.3f}, LastFeedTime={:.3f}, GameDaysPassed={:.3f}, "
+                "feedTimerEnabled={}, updateGated={}",
+                h.bloodPointsMode ? "BloodPoints" : "FeedTimer", h.stageMode, h.feedReady,
+                h.vampireStatus, h.bloodPoints, h.feedTimer, h.lastFeedTime, h.gameDaysPassed,
+                h.feedTimerEnabled, h.updateGated);
+        }
 
         auto* targetAV = context.target->AsActorValueOwner();
         auto* playerAV = player->AsActorValueOwner();
@@ -775,9 +829,12 @@ namespace BetterVampiresIntegration {
         if (g_bottledBlood) g_bottledBlood->value = 0.0f;
         if (g_extractingBlood) g_extractingBlood->value = 0.0f;
 
-        // === STEP 29: Restart the hunger tick from a full stomach ===
-        CallPapyrusMethod(g_playerVampireQuest, kScriptName, "UnregisterForUpdateGameTime");
-        CallBVMethod("RegisterForUpdateGameTime", 1.0f);
+        // === STEP 29: Re-arm the hunger tick from a full stomach. RegisterForUpdateGameTime
+        // replaces any existing registration, so it both resets the timer and (re)enables it -
+        // no separate unregister. BV's Papyrus unregisters first, but dispatched async that
+        // call could land AFTER this one and cancel the tick, freezing hunger progression. ===
+        const bool reReg = CallBVMethod("RegisterForUpdateGameTime", 1.0f);
+        SKSE::log::debug("BetterVampiresIntegration: RegisterForUpdateGameTime dispatch {}", reReg ? "ok" : "FAILED");
 
         SKSE::log::info("BetterVampiresIntegration::ProcessFeed: Complete");
         return true;
