@@ -317,20 +317,15 @@ namespace CompositePairedAnimation {
             // Seed the first gulp a randomized moment after the bite latches.
             gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,
                                    settings->HealthDrain.GulpIntervalMax);
-            // Feeding has truly begun — fire the vampire feed integration NOW, at the
-            // moment drinking starts, instead of waiting for MarkFeedEnded. The resolved
-            // integration (overhaul or vanilla, mutually exclusive) and the OnVampireFeed
-            // event apply immediately, so an interrupted feed still registers.
-            // isLethal is false here (composite lethality is emergent — it only flips on
-            // the drain-dry kill below); hasOAR is true for composite, which suppresses
-            // the vanilla manual-kill in FeedIntegration::Run (the Loop owns the kill).
-            // We deliberately do NOT call MarkFeedEngaged(): leaving feedEngaged false
-            // makes MarkFeedEnded()'s ConsumeFeedEngaged() a no-op for the composite
-            // path, so the integration fires exactly once. Stopping during Intro (before
-            // reaching Loop) still means no integration, as before.
-            FeedIntegration::Run(target,
-                                 FeedAnimState::IsCurrentFeedLethal(),
-                                 FeedAnimState::GetFeedHasOAR());
+            // Emit only the feed-start narrative events now (NPCs react as drinking starts);
+            // the mechanical ProcessFeed is deferred. Composite lethality is emergent - it
+            // only flips true on the drain-dry kill below - so committing lethal-vs-not here
+            // would lose every lethal-only effect. MarkFeedEngaged arms the single fire at
+            // MarkFeedEnded, which every completion path reaches and which reads the final
+            // IsCurrentFeedLethal()/GetFeedHasOAR(). killed=false: the drain-dry kill sends
+            // its own killed=true event.
+            FeedAnimState::MarkFeedEngaged();
+            FeedIntegration::RunFeedStart(target, /*isLethal*/ false);
         }
 
         // Exit -> Drained (or straight to Done when there is no aftermath clip).

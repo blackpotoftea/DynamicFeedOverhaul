@@ -24,6 +24,7 @@ namespace FeedAnimState {
     std::atomic<bool> feedHasOAR{false};
     std::atomic<bool> feedInCombat{false};
     std::atomic<bool> feedSleeping{false};
+    std::atomic<bool> feedStartNotified{false};
 
     namespace {
         // Saving is blocked for the whole feed window: the victim's restrained
@@ -53,6 +54,7 @@ namespace FeedAnimState {
         feedHasOAR.store(false, std::memory_order_release);
         feedInCombat.store(false, std::memory_order_release);
         feedSleeping.store(false, std::memory_order_release);
+        feedStartNotified.store(false, std::memory_order_release);
         SetSaveBlock(true);  // before any restrain can land
         SKSE::log::info("========== FEED STARTED ==========");
 
@@ -87,12 +89,11 @@ namespace FeedAnimState {
         // both the overhaul integration and the confidence-based witness reaction.
         auto victim = FeedPromptSink::GetSingleton()->GetActiveFeedTarget();
 
-        // Centralized vampire-overhaul trigger: fire ONCE here for both the
-        // legacy and composite paths, now that the feed is actually done.
-        // Gated on feedEngaged (skips aborted feeds) and read-and-cleared so a
-        // double MarkFeedEnded (timeout + event) can't double-fire. Runs BEFORE
-        // the active target is cleared below. isLethal/hasOAR are the per-feed
-        // context stashed at start (composite flips lethal true on the Kill stage).
+        // Fire the vampire-overhaul integration ONCE for both paths, now that the feed's
+        // final lethality is known. feedEngaged skips aborted feeds and is read-and-cleared
+        // so a double MarkFeedEnded (timeout + event) can't double-fire. Runs BEFORE the
+        // active target is cleared below. Composite already sent the narrative events at
+        // Loop start, so Run() applies only the mechanical effects; legacy sends both here.
         if (ConsumeFeedEngaged()) {
             if (victim) {
                 FeedIntegration::Run(victim.get(), IsCurrentFeedLethal(), GetFeedHasOAR());
@@ -157,6 +158,7 @@ namespace FeedAnimState {
         feedHasOAR.store(false, std::memory_order_release);
         feedInCombat.store(false, std::memory_order_release);
         feedSleeping.store(false, std::memory_order_release);
+        feedStartNotified.store(false, std::memory_order_release);
         killMoveStartSeen.store(false, std::memory_order_release);
 
         // A new session must never inherit a save block from the previous one.
@@ -214,5 +216,13 @@ namespace FeedAnimState {
 
     bool GetFeedSleeping() {
         return feedSleeping.load(std::memory_order_acquire);
+    }
+
+    void SetFeedStartNotified(bool notified) {
+        feedStartNotified.store(notified, std::memory_order_release);
+    }
+
+    bool GetFeedStartNotified() {
+        return feedStartNotified.load(std::memory_order_acquire);
     }
 }

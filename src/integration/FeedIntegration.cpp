@@ -4,6 +4,7 @@
 #include "integration/VampireIntegrationUtils.h"
 #include "integration/SkyrimNetIntegration.h"
 #include "feed/TargetState.h"
+#include "feed/FeedAnimState.h"
 #include "utils/AnimUtil.h"
 
 namespace {
@@ -92,34 +93,30 @@ namespace {
     }
 }
 
-namespace FeedIntegration {
-    void Run(RE::Actor* callbackTarget, bool isLethal, bool hasOARAnimation) {
-        if (!callbackTarget) {
-            SKSE::log::warn("RunFeedIntegration: target is null");
-            return;
-        }
+namespace {
+    // Feed-start narrative: the mod's custom DAO_VampireFeed event and the SkyrimNet
+    // vampire_feed event. Emitted once per feed - at feed end (legacy) or at Loop start
+    // (composite, via RunFeedStart). killed=isLethal is authoritative for the legacy path;
+    // the composite path passes killed=false here and emits its own killed=true from the
+    // drain-dry kill in CompositePairedAnimation.
+    void SendFeedStartEvents(RE::PlayerCharacter* player, RE::Actor* target, bool isLethal) {
+        if (!player) return;
 
-        SKSE::log::info("RunFeedIntegration: target={}, lethal={}, hasOAR={}",
-            callbackTarget->GetName(), isLethal, hasOARAnimation);
+        PapyrusCall::SendDAO_VampireFeedEvent(player, target);
 
-        auto* player = RE::PlayerCharacter::GetSingleton();
-
-        // Send custom DAO_VampireFeed event with attacker and target (always send our custom event)
-        if (player) {
-            PapyrusCall::SendDAO_VampireFeedEvent(player, callbackTarget);
-        }
-
-        // Notify SkyrimNet of the feed (fires once per feed for both the legacy paired and
-        // composite paths, since both funnel through Run). Gated on the integration + the
-        // send-events toggle; RegisterVampireFeedEvent no-ops if SkyrimNet isn't installed.
+        // Gated on the integration + send-events toggle; RegisterVampireFeedEvent no-ops
+        // if SkyrimNet isn't installed.
         auto* settings = Settings::GetSingleton();
-        if (player && settings->Integration.EnableSkyrimNet && settings->Integration.SkyrimNetSendEvents) {
-            // killed=isLethal: correct for the legacy path (Run fires at feed completion with
-            // lethality known). The composite path calls Run at Loop start with isLethal=false;
-            // its drain-dry kill emits its own killed=true event from CompositePairedAnimation.
-            SkyrimNetIntegration::RegisterVampireFeedEvent(player, callbackTarget, isLethal);
+        if (settings->Integration.EnableSkyrimNet && settings->Integration.SkyrimNetSendEvents) {
+            SkyrimNetIntegration::RegisterVampireFeedEvent(player, target, isLethal);
         }
+    }
 
+    // Mechanical feed effects: werewolf corpse feeding OR the mutually-exclusive vampire
+    // overhaul ProcessFeed (+ vanilla OnVampireFeed event + manual-kill fallback). Runs
+    // with the feed's FINAL lethality, so lethal-only effects land correctly even for the
+    // composite path (whose lethality only resolves at the drain-dry kill).
+    void RunMechanical(RE::PlayerCharacter* player, RE::Actor* callbackTarget, bool isLethal, bool hasOARAnimation) {
         PapyrusCall::VampireIntegration integration = PapyrusCall::DetectVampireIntegration();
 
         // Werewolf corpse feeding is its own path - not a vampire feed, so it does not run
@@ -196,5 +193,41 @@ namespace FeedIntegration {
                 }
                 break;
         }
+    }
+}
+
+namespace FeedIntegration {
+    void Run(RE::Actor* callbackTarget, bool isLethal, bool hasOARAnimation) {
+        if (!callbackTarget) {
+            SKSE::log::warn("RunFeedIntegration: target is null");
+            return;
+        }
+
+        SKSE::log::info("RunFeedIntegration: target={}, lethal={}, hasOAR={}",
+            callbackTarget->GetName(), isLethal, hasOARAnimation);
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+
+        // Emit the feed-start narrative events unless the composite path already sent them
+        // at Loop start (RunFeedStart). This is the single fire point for the legacy path;
+        // for composite it fires only the mechanical effects, now with the true lethality.
+        if (!FeedAnimState::GetFeedStartNotified()) {
+            SendFeedStartEvents(player, callbackTarget, isLethal);
+        }
+
+        RunMechanical(player, callbackTarget, isLethal, hasOARAnimation);
+    }
+
+    void RunFeedStart(RE::Actor* target, bool isLethal) {
+        if (!target) {
+            SKSE::log::warn("RunFeedStart: target is null");
+            return;
+        }
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        SendFeedStartEvents(player, target, isLethal);
+        FeedAnimState::SetFeedStartNotified(true);
+        SKSE::log::info("RunFeedStart: feed-start events sent for {} (mechanical ProcessFeed deferred to feed end)",
+            target->GetName());
     }
 }

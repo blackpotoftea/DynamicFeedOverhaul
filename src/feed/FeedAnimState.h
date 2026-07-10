@@ -54,4 +54,12 @@ namespace FeedAnimState {
     bool GetFeedInCombat();
     void SetFeedSleeping(bool sleeping);
     bool GetFeedSleeping();
+
+    // Set by FeedIntegration::RunFeedStart when the composite path emits the feed-start
+    // narrative events (DAO_VampireFeed + SkyrimNet) at Loop start. Read by
+    // FeedIntegration::Run (fired from MarkFeedEnded with the FINAL lethality) so those
+    // events aren't re-sent for composite. The legacy path leaves this false and Run
+    // sends them once at feed end. Reset by MarkFeedStarted.
+    void SetFeedStartNotified(bool notified);
+    bool GetFeedStartNotified();
 }
