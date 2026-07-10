@@ -401,6 +401,16 @@ namespace AnimUtil {
         };
 
         if (FeedAnimState::ConsumeKillMoveStart()) { finish(true); return; }
+        // Known limitation: the engine sometimes runs the paired idle without emitting
+        // KillMoveStart. bIsSynced/bInKillMove is ground truth the anim actually started,
+        // so a dropped event isn't a false failure. Genuine no-play leaves these false.
+        if (auto ref = g_Retry.actorHandle.get()) {
+            if (auto* a = ref->As<RE::Actor>(); a && IsInPairedAnimation(a)) {
+                SKSE::log::info("[AnimUtil::playIdle] Confirmed via graph state (bIsSynced/bInKillMove) - KillMoveStart event dropped");
+                finish(true);
+                return;
+            }
+        }
         if (std::chrono::steady_clock::now() < g_Retry.nextRetryAt) return;
         if (g_Retry.attempt >= kMaxAttempts) { finish(false); return; }
 

@@ -31,7 +31,7 @@
  *  4   | DisablePlayerControls + Utility.Wait       | SKIP - our animation owns controls
  *  5   | Route: MoveTo / PlayIdle vanilla anims     | SKIP - replaced by our paired anims
  *  6   | Route: SendAssaultAlarm                    | SKIP - WitnessDetection owns crime
- *  7   | Route: sneak escape minigame (20/20/60)    | SKIP - player decides via prompt
+ *  7   | Route: sneak escape minigame (20/20/60)    | SKIP - no sneak route; our gate decides feed eligibility, not BV sneak state
  *  8   | Route: blood points (+50/+75/+100/+150)    | ✅ DONE
  *  9   | Route: victim mark Variable08/05, drain    | ✅ DONE
  * 10   | Route: lethal drain kill + essential msgs  | ✅ DONE
@@ -51,10 +51,85 @@
  * 23   | Satiation stages (3 modes) + LastTimeFed   | ✅ DONE - Papyrus dispatch
  * 24   | Dead target Variable08 = 9                 | ✅ DONE
  * 25   | EnablePlayerControls / SetPlayerAIDriven   | SKIP - our teardown handles
- * 26   | Sneak victim 15s fear reset                | SKIP - tied to skipped minigame
+ * 26   | Sneak victim 15s fear reset                | SKIP - only fires after the sneak minigame, which we never enter
  * 27   | Skill point chance (2/100)                 | ✅ DONE
  * 28   | Reset BottledBlood/ExtractingBlood globals | ✅ DONE
  * 29   | Re-register UpdateGameTime (hunger tick)   | ✅ DONE - Papyrus dispatch
+ *
+ * =============================================================================
+ * KNOWN LIMITATIONS
+ * =============================================================================
+ *
+ * - Hunger-stage progression runs on BV's own OnUpdateGameTime tick; we re-arm it
+ *   (RegisterForUpdateGameTime) but do not reimplement it. BV reads its own script
+ *   properties there, so a save with unfilled (None) BV properties has broken hunger
+ *   regardless of this integration.
+ * - Feed sound is a vanilla SOUN whose EditorID isn't cached; resolved by FormID
+ *   (descriptor MAGVampireTransform01SD = 0x000FF9E8).
+ * - StartVampireFeed and per-route DLC1VampireTurn.PlayerBitesMe are skipped (no-ops
+ *   for an already-turned vampire).
+ * - Requires BV 9.1+ script shape (TurnedNPCRefresh present); 8.9 or older disables
+ *   the deep path and falls back to Papyrus.
+ *
+ * =============================================================================
+ * FORM DEPENDENCIES (cached in Initialize())
+ * =============================================================================
+ *
+ * Quests:
+ *   - PlayerVampireQuest
+ *
+ * Globals (BV):
+ *   - State/flags: UsingBetterVampiresScripts, VampireFeedReady, VampireBloodPoints,
+ *     EnableVampireBloodPoints, VampireDynamicStages, VampireFeedOffDead, CreateVampire,
+ *     VampireExtractingBlood, VampireBottledBlood, TargetAlreadyDeadGlobal
+ *   - Rank/stage: VampireRank, VampireRankProgression, VampireEngorge, VampireEngorgeAmount
+ *   - Hunger tick gates: BVCalculateFeedTimer, VampireUpdateGameTime, VampireLastTimeFed
+ *   - Notoriety: VampireNecksBittenDiscovered
+ *   - Toggles: VampireMenuSpell, VampireExtractBlood, VampireNeckMarks, VampireNoRedScreen,
+ *     VampireStatusMessages, BVSpecialVictimFeeding
+ *   - Skill points: BVMCMSkillPointsTotal, BVMCMSkillPointsAvailable, BVMCMGiveAllSkillPointsGlobal
+ *
+ * Globals (vanilla):
+ *   - GameDaysPassed
+ *
+ * Factions:   VampirePCFamily
+ * Keywords:   Vampire
+ * Spells:     BetterVampiresMenuOptionsSpell, VampireVictimDamage2, BleedingSpell
+ * Perks:      VampireExtractBloodPotions
+ * Sounds:     MAGVampireTransform01 (SOUN) / MAGVampireTransform01SD (descriptor)
+ * Shaders:    NeckMarksRight
+ * ImageSpace: VampireTransformDecreaseISMD
+ * FormLists:  BVPowerfulFeedingVictims
+ * Locations:  9 cities (+2 notoriety), 9 towns (+1), else +0.5
+ *
+ * =============================================================================
+ * PAPYRUS FUNCTIONS DISPATCHED (on PlayerVampireQuestScript)
+ * =============================================================================
+ *
+ *   - TurnNPCIntoVampire, AmaranthGainSkills, SpecialFeedingBonus
+ *   - Rank: NormalRankProgression, EasierRankProgression, DaysAsVampireProgression
+ *   - Satiation: NormalStagesSatiation, DynamicStagesSatiation, TwoStagesSatiation
+ *   - Hunger tick: RegisterForUpdateGameTime
+ *
+ * =============================================================================
+ * CUSTOM PERK ABILITIES - NOT REIMPLEMENTED
+ * =============================================================================
+ *
+ * BV fires its abilities from perk-fragment entry points (PRKF_* scripts, all
+ * Fragment_N(ObjectReference akTargetRef, Actor akActor) - separate points for
+ * standing / sneaking / in-bed / dead-target / custom-race). Each fragment calls
+ * StartVampireFeed + one quest-script ability. We replace those entry points with
+ * our own eligibility gate + prompt, so NO PRKF_* fragment runs and only the ability
+ * we reimplement (VampireFeed) is covered.
+ *
+ * Quest-script abilities (PlayerVampireQuestScript):
+ *   - VampireFeed(Actor)     -> DONE   (ProcessFeed reimplements it)
+ *   - VampireBite(Actor)     -> COVERED (our composite non-lethal feed is a partial bite; separate impl likely unneeded)
+ *   - VampireEnthrall(Actor) -> NOT COVERED (binds an NPC as an enthralled thrall)
+ *
+ * Feed variants NOT reimplemented (they only reach BV via the skipped PRKF_* fragments):
+ *   - Extract blood -> potion (VampireExtractingBlood=10000 + DLC1BloodPotion/DLC1BloodPotion2)
+ *   - Enthrall
  *
  * =============================================================================
  */
