@@ -633,6 +633,19 @@ namespace BetterVampiresIntegration {
         return g_versionInfo.load();
     }
 
+    int GetNecksBittenStat() {
+        // Base-game stat, so query independent of BV availability. Throttle so the async
+        // QueryStat isn't re-dispatched every frame the debug UI renders.
+        using clock = std::chrono::steady_clock;
+        static clock::time_point lastQuery{};
+        auto now = clock::now();
+        if (now - lastQuery > std::chrono::milliseconds(500)) {
+            lastQuery = now;
+            RefreshNecksBittenStat();
+        }
+        return g_necksBittenStat.load();
+    }
+
     HungerDebug GetHungerDebug() {
         HungerDebug d;
         if (!g_available || !g_playerVampireQuest) return d;
@@ -667,16 +680,7 @@ namespace BetterVampiresIntegration {
         d.lastFeedTime = readFloatProp("LastFeedTime", -1.0f);
 
         // Necks Bitten: the vanilla feed-count stat (async, cached) plus BV's separate notoriety/rank globals
-        {
-            using clock = std::chrono::steady_clock;
-            static clock::time_point lastQuery{};
-            auto now = clock::now();
-            if (now - lastQuery > std::chrono::milliseconds(500)) {
-                lastQuery = now;
-                RefreshNecksBittenStat();
-            }
-        }
-        d.necksBitten = g_necksBittenStat.load();
+        d.necksBitten = GetNecksBittenStat();
         d.necksBittenDiscovered = g_necksBittenDiscovered ? g_necksBittenDiscovered->value : -1.0f;
         d.vampireRank = g_vampireRank ? g_vampireRank->value : -1.0f;
         return d;

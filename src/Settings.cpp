@@ -62,6 +62,25 @@ static std::string JoinIntList(const std::vector<int>& list) {
     return result;
 }
 
+// Overhaul ability gate (Embrace, etc.) - one INI section, uniform keys. Keeping load/save
+// here means adding a new overhaul ability never repeats the per-key boilerplate.
+void Settings::AbilityGate::Load(const CSimpleIniA& ini, const char* section, const char* key) {
+    Mode = static_cast<int>(ini.GetLongValue(section, key, Mode));
+    if (Mode < Off) Mode = Off;
+    if (Mode > Unrestricted) Mode = Unrestricted;
+}
+
+void Settings::AbilityGate::Save(CSimpleIniA& ini, const char* section, const char* key, const char* comment) const {
+    // The ability-specific header (if any) rides above the shared mode-ladder legend.
+    std::string text =
+        "; Targeting mode: 0=Off, 1=Restricted (generic NPCs only), "
+        "2=Followers (allow Protected) [default], 3=Unrestricted (also Essential/vampire/in-combat)";
+    if (comment) {
+        text = std::string(comment) + "\n" + text;
+    }
+    ini.SetLongValue(section, key, Mode, text.c_str());
+}
+
 void Settings::LoadINI() {
     CSimpleIniA ini;
     ini.SetUnicode();
@@ -222,6 +241,9 @@ void Settings::LoadINI() {
     Integration.EnableSkyrimNet = ini.GetBoolValue("Integration", "EnableSkyrimNet", Integration.EnableSkyrimNet);
     Integration.SkyrimNetSendEvents = ini.GetBoolValue("Integration", "SkyrimNetSendEvents", Integration.SkyrimNetSendEvents);
 
+    // Overhaul ability gates - grouped by overhaul: [Section]=mod, key=<ability>_Mode
+    Embrace.Load(ini, "Sacrosanct", "Embrace_Mode");
+
     SKSE::log::info("Settings loaded:");
     SKSE::log::info("  [General] EnableMod={}, LogLevel={}, Werewolf={}, VL={}, ForceVampire={}, CheckHunger={} (min={}), ForceFeedType={}, DebugAnimationCycle={}, AnimationTimeout={}, PeriodicCheckInterval={}, PromptDelaySeconds={}",
         General.EnableMod, General.LogLevel, General.EnableWerewolf, General.EnableVampireLord, General.ForceVampire,
@@ -257,6 +279,8 @@ void Settings::LoadINI() {
         Integration.DeepSacrosanctIntegration, Integration.DeepSacrilegeIntegration, Integration.DeepBetterVampiresIntegration,
         Integration.EnableSacrosanctInCombat, Integration.EnableSacrilegeInCombat, Integration.EnableBetterVampiresInCombat,
         Integration.EnableSkyrimNet, Integration.SkyrimNetSendEvents);
+    SKSE::log::info("  [Sacrosanct] Embrace_Mode={} (Enabled={}, AllowProtected={}, AllowEssential={}, AllowInCombat={}, AllowVampireTarget={})",
+        Embrace.Mode, Embrace.Enabled(), Embrace.AllowProtected(), Embrace.AllowEssential(), Embrace.AllowInCombat(), Embrace.AllowVampireTarget());
 }
 
 void Settings::SaveINI() {
@@ -522,6 +546,10 @@ void Settings::SaveINI() {
         "; Enable SkyrimNet (LLM-driven NPC mod) integration: detect the mod and register hooks on startup (auto-detects mod)");
     ini.SetBoolValue("Integration", "SkyrimNetSendEvents", Integration.SkyrimNetSendEvents,
         "; When SkyrimNet is enabled, send vampire_feed / vampire_feed_failed events to it at feed time (disable to stop sending events)");
+
+    // Overhaul ability gates - grouped by overhaul: [Section]=mod, key=<ability>_Mode
+    Embrace.Save(ini, "Sacrosanct", "Embrace_Mode",
+        "; Embrace (Foster Childe perk): turn a live NPC into a vampire thrall - gates the Embrace prompt only");
 
     SI_Error rc = ini.SaveFile(INI_PATH);
     if (rc < 0) {

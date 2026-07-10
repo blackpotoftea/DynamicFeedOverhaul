@@ -184,6 +184,36 @@ public:
         bool SkyrimNetSendEvents{ true };           // When SkyrimNet is enabled, send vampire_feed / vampire_feed_failed events to it
     } Integration;
 
+    // Reusable gate for an overhaul-provided secondary "convert/turn" ability (e.g. Sacrosanct
+    // Embrace). A single Mode picks how permissively the ability may target NPCs; each level is a
+    // superset of the one below, so it maps to a simple ordered dropdown / one INI value. Gates
+    // ONLY that ability's prompt - the base Feed prompt keeps its own rules (hunger, distance...).
+    // In the INI these group by overhaul: one [Section] per mod, one key per ability/spell
+    // (e.g. [Sacrosanct] Embrace_Mode). Adding an ability is a one-liner: declare an AbilityGate
+    // member and Load/Save it with the overhaul section + its item key.
+    struct AbilityGate {
+        enum Policy : int {
+            Off = 0,          // ability prompt hidden
+            Restricted = 1,   // generic NPCs only: no Protected, no Essential, out of combat
+            Followers = 2,    // + Protected NPCs (followers/potential-followers)  [default]
+            Unrestricted = 3, // + Essential, already-vampires, and in combat
+        };
+        int Mode{ Followers };  // one tunable; drives all the derived allow-checks below
+
+        [[nodiscard]] bool Enabled()            const { return Mode > Off; }
+        [[nodiscard]] bool AllowProtected()     const { return Mode >= Followers; }
+        [[nodiscard]] bool AllowEssential()     const { return Mode >= Unrestricted; }
+        [[nodiscard]] bool AllowInCombat()      const { return Mode >= Unrestricted; }
+        [[nodiscard]] bool AllowVampireTarget() const { return Mode >= Unrestricted; }
+
+        // section = overhaul name (e.g. "Sacrosanct"); key = per-ability item (e.g. "Embrace_Mode").
+        void Load(const CSimpleIniA& ini, const char* section, const char* key);
+        void Save(CSimpleIniA& ini, const char* section, const char* key, const char* comment = nullptr) const;
+    };
+
+    // Sacrosanct "Embrace" (Foster Childe perk: turn a live NPC into a vampire thrall). [Embrace]
+    AbilityGate Embrace{};
+
     void LoadINI();
     void SaveINI();
 

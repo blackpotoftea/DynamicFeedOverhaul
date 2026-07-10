@@ -46,10 +46,16 @@ namespace {
         });
     }
 
+    // Grace before a corpse prompt appears. Longer than the idle delay so a fresh
+    // kill (last-enemy feed ends combat, unmasking the body) can't be drained by a
+    // still-held feed key.
+    constexpr float kCorpseFeedGraceSeconds = 1.0f;
+
     // Combat-aware prompt delay: combat targets use the (typically shorter)
-    // combat delay, everyone else the idle delay.
+    // combat delay, everyone else the idle delay; corpses use the grace above.
     float PromptDelayForTarget(RE::Actor* target) {
         auto* settings = Settings::GetSingleton();
+        if (target->IsDead()) return kCorpseFeedGraceSeconds;
         return target->IsInCombat() ? settings->Combat.PromptDelayCombatSeconds
                                      : settings->General.PromptDelayIdleSeconds;
     }
@@ -853,12 +859,20 @@ void FeedPromptSink::OnCrosshairUpdate(RE::Actor* newTarget) {
         // Use combat-specific delay (default 0) if target is in combat, otherwise general delay
         float delaySeconds = PromptDelayForTarget(newTarget);
 
-        // Feed just ended - show prompt immediately (no delay)
+        // Feed just ended - a living target (still sippable) re-shows immediately.
+        // A fresh corpse must not: combat just ended so it's no longer combat-
+        // excluded, and the feed key may still be held. Restart the pending timer
+        // so the corpse grace elapses before it can be drained.
         if (feedJustEnded) {
-            pendingTarget_.reset();
-            ShowPrompt(newTarget);
-            SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) (after feed ended)",
-                newTarget->GetName(), newTarget->GetFormID());
+            if (newTarget->IsDead()) {
+                pendingTarget_ = newTargetHandle;
+                pendingTargetTime_ = std::chrono::steady_clock::now();
+            } else {
+                pendingTarget_.reset();
+                ShowPrompt(newTarget);
+                SKSE::log::info("Showing feed prompt for: {} (FormID: {:X}) (after feed ended)",
+                    newTarget->GetName(), newTarget->GetFormID());
+            }
         }
         // New target - start delay timer
         else if (currentTarget != newTarget && pendingTarget_ != newTargetHandle) {

@@ -182,6 +182,10 @@ namespace FeedAnimState {
         return feedEngaged.exchange(false, std::memory_order_acq_rel);
     }
 
+    bool HasFeedEngaged() {
+        return feedEngaged.load(std::memory_order_acquire);
+    }
+
     void SetFeedHasOAR(bool hasOAR) {
         feedHasOAR.store(hasOAR, std::memory_order_release);
     }

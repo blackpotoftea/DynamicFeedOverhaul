@@ -34,6 +34,18 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
             SKSE::log::debug("{} ignored - composite feed owns its lifecycle", tag.c_str());
             return RE::BSEventNotifyControl::kContinue;
         }
+        // Ignore a stop that arrives BEFORE the feed animation has actually engaged. In combat,
+        // switching the player out of their combat animation into the feed idle makes the
+        // OUTGOING animation emit IdleStop; if that lands before MarkFeedEngaged() (set by the
+        // paired PlayIdle callback once the idle is confirmed in the engine), tearing down here
+        // would run MarkFeedEnded while feedEngaged is still false - skipping the entire
+        // vampire-overhaul integration. The genuine end-of-feed stop arrives after engagement.
+        // A feed that never engages is still torn down by the PlayIdle-failure / timeout paths,
+        // so we don't leak here (registeredTime_ is left armed for the timeout on purpose).
+        if (!FeedAnimState::HasFeedEngaged()) {
+            SKSE::log::debug("{} ignored - feed not yet engaged (stray stop from outgoing animation)", tag.c_str());
+            return RE::BSEventNotifyControl::kContinue;
+        }
         SKSE::log::info("{} detected - marking feed ended", tag.c_str());
 
         {

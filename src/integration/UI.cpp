@@ -155,6 +155,17 @@ void __stdcall UI::Debug::Render() {
         }
     }
 
+    // Necks Bitten is a vanilla feed-count game stat (it drives Better Vampires' rank but exists
+    // in the base game), so show it for every player rather than only when BV is detected.
+    {
+        int necksBitten = BetterVampiresIntegration::GetNecksBittenStat();
+        if (necksBitten >= 0) {
+            ImGuiMCP::Text("Necks Bitten (feed count): %d", necksBitten);
+        } else {
+            ImGuiMCP::TextDisabled("Necks Bitten (feed count): querying...");
+        }
+    }
+
     // Vampire Overhaul Integration Section
     ImGuiMCP::Separator();
     ImGuiMCP::Text("Vampire Overhaul Integration");
@@ -201,14 +212,9 @@ void __stdcall UI::Debug::Render() {
                     "  VampireUpdateGameTime != 0 - stage updates blocked until next feed");
             }
 
-            // Necks Bitten: the feed-count stat (drives rank) vs BV's separate discovery/notoriety meter
+            // BV's separate discovery/notoriety meter (the vanilla feed-count stat shows in Player Status)
             ImGuiMCP::Separator();
             ImGuiMCP::TextDisabled("Necks Bitten tracking");
-            if (bv.necksBitten >= 0) {
-                ImGuiMCP::Text("  Necks Bitten (feed count -> rank): %d", bv.necksBitten);
-            } else {
-                ImGuiMCP::TextDisabled("  Necks Bitten (feed count): querying...");
-            }
             ImGuiMCP::Text("  Necks Bitten Discovered (notoriety): %.1f", bv.necksBittenDiscovered);
             ImGuiMCP::SetItemTooltip("VampireNecksBittenDiscovered: +2 city / +1 town / +0.5 else; a random 10-20 triggers vampire-hunter spawns");
             {
@@ -657,6 +663,22 @@ void __stdcall UI::Settings::Render() {
         ImGuiMCP::SetItemTooltip("Detect SkyrimNet (LLM NPC mod) and register integration hooks on startup (takes effect on next launch)");
         changed |= ImGuiMCP::Checkbox("SkyrimNet Send Events", &settings->Integration.SkyrimNetSendEvents);
         ImGuiMCP::SetItemTooltip("Send vampire_feed / vampire_feed_failed events to SkyrimNet when feeds happen (requires Enable SkyrimNet)");
+
+        // Sacrosanct "Embrace" (Foster Childe) secondary ability - only shown when Sacrosanct
+        // is actually installed, since the ability doesn't exist otherwise.
+        if (SacrosanctIntegration::IsAvailable()) {
+            ImGuiMCP::Separator();
+            const char* embraceModes[] = { "Off", "Restricted", "Followers", "Unrestricted" };
+            if (ImGuiMCP::Combo("Sacrosanct Embrace Targeting", &settings->Embrace.Mode, embraceModes, 4)) {
+                changed = true;
+            }
+            ImGuiMCP::SetItemTooltip(
+                "Who the Embrace prompt (turn a live NPC into a vampire thrall) can target. Requires the Foster Childe perk + Sacrosanct.\n"
+                "Off: never shown.\n"
+                "Restricted: generic NPCs only (no Protected/Essential, out of combat).\n"
+                "Followers: also Protected NPCs - followers/potential-followers (default).\n"
+                "Unrestricted: also Essential NPCs, already-vampires, and in combat.");
+        }
     }
 
     // Save if any setting changed

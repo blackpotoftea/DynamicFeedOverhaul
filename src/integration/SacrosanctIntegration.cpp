@@ -1,6 +1,7 @@
 #include "PCH.h"
 #include "SacrosanctIntegration.h"
 #include "VampireIntegrationUtils.h"
+#include "../Settings.h"
 #include "utils/SoundUtil.h"
 #include "feed/FeedPromptSink.h"
 #include "feed/TargetState.h"
@@ -778,13 +779,24 @@ namespace SacrosanctIntegration {
 
             float restoreAmount = g_wassailNerfAmount->value;
             if (restoreAmount > 0.0f) {
-                // Note: The Papyrus uses string AV names stored in properties
-                // We'll restore to all three main stats as a reasonable default
+                // The Wassail nerf was applied via ModActorValue on the stats named by the quest's
+                // SCS_Stat0/1/2 string properties (default health/magicka/stamina, but MCM-tunable).
+                // Read those names back and undo the nerf with ModActorValue - mirrors the Papyrus
+                // exactly instead of assuming the three vanilla stats.
                 auto* avOwner = player->AsActorValueOwner();
-                avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreAmount);
-                avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, restoreAmount);
-                avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restoreAmount);
-                SKSE::log::info("Helpers: Reset Wassail, restored {} to stats", restoreAmount);
+                auto* avList = RE::ActorValueList::GetSingleton();
+                for (const char* prop : { "SCS_Stat0", "SCS_Stat1", "SCS_Stat2" }) {
+                    std::string statName;
+                    if (!VampireIntegrationUtils::GetScriptPropertyString(g_sacrosanctQuest, "SCS_FeedManager_Quest", prop, statName)
+                        || statName.empty()) {
+                        continue;  // Papyrus skips empty stat slots (if SCS_StatN)
+                    }
+                    RE::ActorValue av = avList ? avList->LookupActorValueByName(statName) : RE::ActorValue::kNone;
+                    if (av != RE::ActorValue::kNone) {
+                        avOwner->ModActorValue(av, restoreAmount);
+                    }
+                }
+                SKSE::log::info("Helpers: Reset Wassail, restored {} to configured stats", restoreAmount);
             }
 
             g_wassailCurrent->value = 0.0f;
@@ -797,7 +809,10 @@ namespace SacrosanctIntegration {
             RE::TESGlobal* ageBonus = isLethal ? g_ageBonusFromDrain : g_ageBonusFromFeed;
             if (!ageBonus) return;
 
-            CallPapyrusMethodFloat(g_scsMain500Quest, "SCS_Main500_Quest", "Age", ageBonus->value);
+            // Age() lives on the SCS_FUtil_Script attached to the SCS_Main500_Quest form.
+            // DispatchMethodCall keys on the SCRIPT CLASS name, not the quest editor ID, so this
+            // must be "SCS_FUtil_Script" - passing the editor ID "SCS_Main500_Quest" silently no-ops.
+            CallPapyrusMethodFloat(g_scsMain500Quest, "SCS_FUtil_Script", "Age", ageBonus->value);
             SKSE::log::info("Helpers: Processed age bonus (lethal={}, amount={})", isLethal, ageBonus->value);
         }
 
@@ -869,14 +884,15 @@ namespace SacrosanctIntegration {
         // === STEP 7: Racial abilities (Dunmer/Altmer/Orc) ===
         Helpers::ApplyRacialAbility(player, context.target, context.isSleeping);
 
-        // === STEP 8: Sneak feed alarm + spell ===
+        // === STEP 8: Sneak feed spell ===
+        // Papyrus also calls akTarget.SendAssaultAlarm() here to flag the feed as a crime. We skip
+        // it deliberately: this plugin's built-in witness detection owns crime/alarm handling for
+        // feeds, so raising the vanilla assault alarm here would double up.
         if (context.isSneakFeed) {
-            // SendAssaultAlarm - requires Papyrus call
-            // context.target->SendAssaultAlarm(); // No direct C++ API
             if (g_sneakFeedSpell) {
                 Helpers::CastSpell(g_sneakFeedSpell, player, context.target);
             }
-            SKSE::log::info("SacrosanctIntegration: Sneak feed processed");
+            SKSE::log::info("SacrosanctIntegration: Sneak feed processed (alarm handled by witness detection)");
         }
 
         // === STEP 9: Lethal kill ===
@@ -914,12 +930,14 @@ namespace SacrosanctIntegration {
         }
 
         // === STEP 15: Kiss of Death (sleeping + lethal) ===
+        // Papyrus uses ModActorValue -> a PERMANENT H/M/S boost, not a heal. The amount is the mod's
+        // SCS_Mechanics_Global_KissOfDeath_Amount global (already read from Sacrosanct, not hardcoded).
         if (context.isSleeping && context.isLethal && g_kissOfDeathAbility && g_kissOfDeathAmount) {
             if (player->HasSpell(g_kissOfDeathAbility)) {
                 float bonus = g_kissOfDeathAmount->value;
-                avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, bonus);
-                avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, bonus);
-                avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, bonus);
+                avOwner->ModActorValue(RE::ActorValue::kHealth, bonus);
+                avOwner->ModActorValue(RE::ActorValue::kMagicka, bonus);
+                avOwner->ModActorValue(RE::ActorValue::kStamina, bonus);
                 SKSE::log::info("SacrosanctIntegration: Kiss of Death bonus: {}", bonus);
             }
         }
@@ -1138,12 +1156,19 @@ namespace SacrosanctIntegration {
 
         promptSink->RegisterPromptCallback([](RE::Actor* target) -> std::vector<PromptDef> {
             std::vector<PromptDef> prompts;
+            const auto& cfg = Settings::GetSingleton()->Embrace;
+
+            // Master toggle (Mode == Off) - lets players turn the Embrace prompt off entirely.
+            if (!cfg.Enabled()) {
+                return prompts;
+            }
 
             if (!target) {
                 SKSE::log::debug("Embrace callback: no target");
                 return prompts;
             }
 
+            // Foster Childe perk + Sacrosanct availability are intrinsic requirements (not configurable).
             if (!CanEmbrace()) {
                 SKSE::log::debug("Embrace callback: CanEmbrace=false (perk={}, available={})",
                     g_fosterChildePerk ? "found" : "missing", g_sacrosanctAvailable);
@@ -1156,27 +1181,33 @@ namespace SacrosanctIntegration {
                 return prompts;
             }
 
-            // Don't show Embrace for dead targets
+            // Dead targets are never embraceable (turning requires a live NPC) - not configurable.
             if (target->IsDead()) {
                 SKSE::log::debug("Embrace callback: target is dead");
                 return prompts;
             }
 
-            // Don't show Embrace in combat
-            if (player->IsInCombat() || target->IsInCombat()) {
+            // Combat gate - opened at Mode Unrestricted.
+            if (!cfg.AllowInCombat() && (player->IsInCombat() || target->IsInCombat())) {
                 SKSE::log::debug("Embrace callback: in combat (player={}, target={})",
                     player->IsInCombat(), target->IsInCombat());
                 return prompts;
             }
 
-            // Don't show Embrace for essential/protected NPCs (can't be killed/turned)
-            if (TargetState::IsEssentialOrProtected(target)) {
-                SKSE::log::debug("Embrace callback: target is essential/protected");
+            // Essential / Protected gates. Protected followers/potential-followers are the usual
+            // Embrace candidates, so they open at Mode Followers; Essential (plot-critical) only
+            // opens at Mode Unrestricted.
+            if (!cfg.AllowEssential() && target->IsEssential()) {
+                SKSE::log::debug("Embrace callback: target is essential (Mode<Unrestricted)");
+                return prompts;
+            }
+            if (!cfg.AllowProtected() && target->IsProtected()) {
+                SKSE::log::debug("Embrace callback: target is protected (Mode<Followers)");
                 return prompts;
             }
 
-            // Don't show Embrace if target is already a vampire
-            if (g_vampireKeyword && target->HasKeyword(g_vampireKeyword)) {
+            // Already-a-vampire gate - opened at Mode Unrestricted.
+            if (!cfg.AllowVampireTarget() && g_vampireKeyword && target->HasKeyword(g_vampireKeyword)) {
                 SKSE::log::debug("Embrace callback: target is vampire");
                 return prompts;
             }

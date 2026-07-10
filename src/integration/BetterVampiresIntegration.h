@@ -44,6 +44,11 @@ namespace BetterVampiresIntegration {
     };
     HungerDebug GetHungerDebug();
 
+    // Vanilla "Necks Bitten" feed-count game stat (async QueryStat, cached + throttled).
+    // It's a base-game statistic, so this resolves even when Better Vampires isn't installed.
+    // Returns -1 until the first query resolves.
+    int GetNecksBittenStat();
+
     // Process a vampire feed using direct C++ implementation
     bool ProcessFeed(const FeedContext& context);
 }

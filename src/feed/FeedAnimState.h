@@ -36,6 +36,7 @@ namespace FeedAnimState {
     // directly at Loop start, leaving the gate closed. Reset by MarkFeedStarted.
     void MarkFeedEngaged();
     bool ConsumeFeedEngaged();             // exchange(false): true if a feed had engaged
+    bool HasFeedEngaged();                 // non-consuming peek; does NOT clear the gate
 
     // Whether the current feed used an OAR animation that bakes in the kill.
     // Consulted by the vanilla manual-kill fallback in FeedIntegration::Run.

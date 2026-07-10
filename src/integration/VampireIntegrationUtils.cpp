@@ -225,6 +225,38 @@ namespace VampireIntegrationUtils {
         return true;
     }
 
+    bool GetScriptPropertyString(RE::TESQuest* quest, const char* scriptName, const char* propertyName, std::string& outValue) {
+        if (!quest) return false;
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            SKSE::log::warn("VampireIntegrationUtils::GetScriptPropertyString: VM not available");
+            return false;
+        }
+
+        auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, quest);
+        if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
+            SKSE::log::warn("VampireIntegrationUtils::GetScriptPropertyString: Failed to get handle for quest");
+            return false;
+        }
+
+        RE::BSTSmartPointer<RE::BSScript::Object> object;
+        if (!vm->FindBoundObject(handle, scriptName, object) || !object) {
+            SKSE::log::warn("VampireIntegrationUtils::GetScriptPropertyString: Script '{}' not found on quest", scriptName);
+            return false;
+        }
+
+        auto* property = object->GetProperty(propertyName);
+        if (!property || !property->IsString()) {
+            SKSE::log::warn("VampireIntegrationUtils::GetScriptPropertyString: Property '{}' not found or not a string", propertyName);
+            return false;
+        }
+
+        outValue = property->GetString();
+        SKSE::log::debug("VampireIntegrationUtils::GetScriptPropertyString: {}.{} = '{}'", scriptName, propertyName, outValue);
+        return true;
+    }
+
     bool SetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int value) {
         if (!quest) return false;
 
