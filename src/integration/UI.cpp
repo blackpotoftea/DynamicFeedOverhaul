@@ -178,9 +178,10 @@ void __stdcall UI::Debug::Render() {
                                                             : "Feed Timer (hunger over game-time)");
             ImGuiMCP::Text("  Stage mode: %s", stageModeName);
             ImGuiMCP::Text("  Hunger stage (VampireFeedReady): %.0f  |  VampireStatus: %.0f", bv.feedReady, bv.vampireStatus);
-            if (bv.bloodPointsMode) {
-                ImGuiMCP::Text("  Blood Points: %.0f", bv.bloodPoints);
-            } else {
+            // Blood Points holds a value in both modes; it only drives hunger in Blood Points mode
+            ImGuiMCP::Text("  Blood Points: %.0f%s", bv.bloodPoints,
+                bv.bloodPointsMode ? "" : " (inactive in Feed Timer mode)");
+            if (!bv.bloodPointsMode) {
                 ImGuiMCP::Text("  FeedTimer: %.3f game-days (last fed %.3f, now %.3f)",
                     bv.feedTimer, bv.lastFeedTime, bv.gameDaysPassed);
                 if (!bv.feedTimerEnabled) {
