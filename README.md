@@ -13,6 +13,7 @@ An SKSE plugin for Skyrim Special Edition that overhauls the vampire feeding sys
   - Sacrilege
 - Optional integrations:
   - OStim NG (scene exclusion)
+  - SexLab (scene exclusion)
   - Poise mod (stagger behavior)
 
 ## Requirements
