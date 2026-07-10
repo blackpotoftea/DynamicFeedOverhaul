@@ -1,0 +1,33 @@
+digraph FeedPrompt {
+    rankdir=TB;
+    bgcolor="white";
+    node [shape=box, style="rounded,filled", fontname="Arial", fontsize=13, margin="0.25,0.15"];
+    edge [fontname="Arial", fontsize=12];
+
+    start [label="You look at an NPC", fillcolor="#E8E8E8"];
+
+    combatQ [label="Target in combat?", shape=diamond, fillcolor="#FFF2CC", margin="0.1,0.1"];
+
+    start -> combatQ;
+
+    // ============ COMBAT ============
+    combatCond [label="Prompt appears if ANY of:\n\n• Target HP below 25%\n• Target is STAGGERED\n   (and weaker than you)\n• You are VAMPIRE LORD\n   and target is much weaker\n   (works at any HP)", fillcolor="#F8CECC"];
+
+    combatPrompt [label="KILL FEED\nalways lethal\nhunger does NOT matter", fillcolor="#CC4444", fontcolor="white", fontsize=15];
+
+    combatQ -> combatCond [label="  YES", color="#CC4444", penwidth=2];
+    combatCond -> combatPrompt;
+
+    // ============ PEACEFUL ============
+    peaceCond [label="Prompt appears if ALL of:\n\n• You are HUNGRY\n   (vampire stage 2+)\n• Target standing or sleeping\n   (sitting in chair = no)\n• Target not 10+ levels\n   above you", fillcolor="#D5E8D4"];
+
+    peacePrompt [label="FEED\ntap = feed and stop\nkeep feeding / hold = KILL\n(essentials can't be killed)", fillcolor="#448844", fontcolor="white", fontsize=15];
+
+    combatQ -> peaceCond [label="  NO", color="#448844", penwidth=2];
+    peaceCond -> peacePrompt;
+
+    // ============ CORPSE ============
+    corpse [label="DRAIN CORPSE\nfresh corpse only (< 2 hours)\nonce per corpse\nnot while you fight\n(Werewolf: devour any corpse)", fillcolor="#DAE8FC"];
+
+    combatQ -> corpse [label="  DEAD", color="#6688BB", penwidth=2];
+}

@@ -2,6 +2,7 @@
 #include "../Settings.h"
 #include "../feed/TargetState.h"
 #include "../papyrus/PapyrusCall.h"
+#include "BetterVampiresIntegration.h"
 #include "../utils/log.h"
 #include "../utils/AnimUtil.h"
 #include "../utils/SoundUtil.h"
@@ -171,6 +172,54 @@ void __stdcall UI::Debug::Render() {
     RenderBoolStatus("Sacrosanct detected", PapyrusCall::GetSacrosanctFeedManagerQuest() != nullptr);
     RenderBoolStatus("Sacrilege detected", PapyrusCall::GetSacrilegeFeedManagerQuest() != nullptr);
     RenderBoolStatus("Better Vampires detected", hasBetterVampires);
+    if (hasBetterVampires) {
+        ImGuiMCP::Text("Better Vampires version: %s", BetterVampiresIntegration::GetVersionInfo());
+
+        auto bv = BetterVampiresIntegration::GetHungerDebug();
+        if (!bv.valid) {
+            ImGuiMCP::TextDisabled("  (hunger state resolves after first feed)");
+        } else {
+            const char* stageModeName = bv.stageMode == 20000 ? "Two-stage"
+                                      : bv.stageMode == 10000 ? "Dynamic" : "Normal";
+            ImGuiMCP::Text("  Mode: %s", bv.bloodPointsMode ? "Blood Points (hunger via power use, not time)"
+                                                            : "Feed Timer (hunger over game-time)");
+            ImGuiMCP::Text("  Stage mode: %s", stageModeName);
+            ImGuiMCP::Text("  Hunger stage (VampireFeedReady): %.0f  |  VampireStatus: %.0f", bv.feedReady, bv.vampireStatus);
+            // Blood Points holds a value in both modes; it only drives hunger in Blood Points mode
+            ImGuiMCP::Text("  Blood Points: %.0f%s", bv.bloodPoints,
+                bv.bloodPointsMode ? "" : " (inactive in Feed Timer mode)");
+            if (!bv.bloodPointsMode) {
+                ImGuiMCP::Text("  FeedTimer: %.3f game-days (last fed %.3f, now %.3f)",
+                    bv.feedTimer, bv.lastFeedTime, bv.gameDaysPassed);
+                if (!bv.feedTimerEnabled) {
+                    ImGuiMCP::TextColored(ImGuiMCP::ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
+                        "  BVCalculateFeedTimer is OFF - FeedTimer never updates!");
+                }
+            }
+            if (bv.updateGated) {
+                ImGuiMCP::TextColored(ImGuiMCP::ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "%s",
+                    "  VampireUpdateGameTime != 0 - stage updates blocked until next feed");
+            }
+
+            // Necks Bitten: the feed-count stat (drives rank) vs BV's separate discovery/notoriety meter
+            ImGuiMCP::Separator();
+            ImGuiMCP::TextDisabled("Necks Bitten tracking");
+            if (bv.necksBitten >= 0) {
+                ImGuiMCP::Text("  Necks Bitten (feed count -> rank): %d", bv.necksBitten);
+            } else {
+                ImGuiMCP::TextDisabled("  Necks Bitten (feed count): querying...");
+            }
+            ImGuiMCP::Text("  Necks Bitten Discovered (notoriety): %.1f", bv.necksBittenDiscovered);
+            ImGuiMCP::SetItemTooltip("VampireNecksBittenDiscovered: +2 city / +1 town / +0.5 else; a random 10-20 triggers vampire-hunter spawns");
+            {
+                const int rank = static_cast<int>(bv.vampireRank);
+                const char* rankName = rank >= 60000 ? "Nightlord" : rank >= 50000 ? "Master"
+                                     : rank >= 40000 ? "Nightstalker" : rank >= 30000 ? "Blooded"
+                                     : rank >= 20000 ? "Vampire" : rank >= 10000 ? "Fledgling" : "None";
+                ImGuiMCP::Text("  Vampire Rank: %s (%d)", rankName, rank);
+            }
+        }
+    }
 
     // Debug Transformations Section
     ImGuiMCP::Separator();
@@ -596,8 +645,11 @@ void __stdcall UI::Settings::Render() {
         changed |= ImGuiMCP::Checkbox("Deep Sacrosanct Integration", &settings->Integration.DeepSacrosanctIntegration);
         ImGuiMCP::SetItemTooltip("Use C++ to mimic Sacrosanct ProcessFeed (bypasses Papyrus)");
         changed |= ImGuiMCP::Checkbox("Deep Sacrilege Integration", &settings->Integration.DeepSacrilegeIntegration);
+        changed |= ImGuiMCP::Checkbox("Deep Better Vampires Integration", &settings->Integration.DeepBetterVampiresIntegration);
+        ImGuiMCP::SetItemTooltip("Use C++ to mimic Better Vampires VampireFeed (bypasses Papyrus)");
         changed |= ImGuiMCP::Checkbox("Enable Sacrosanct In Combat", &settings->Integration.EnableSacrosanctInCombat);
         changed |= ImGuiMCP::Checkbox("Enable Sacrilege In Combat", &settings->Integration.EnableSacrilegeInCombat);
+        changed |= ImGuiMCP::Checkbox("Enable Better Vampires In Combat", &settings->Integration.EnableBetterVampiresInCombat);
         changed |= ImGuiMCP::Checkbox("Enable SkyrimNet", &settings->Integration.EnableSkyrimNet);
         ImGuiMCP::SetItemTooltip("Detect SkyrimNet (LLM NPC mod) and register integration hooks on startup (takes effect on next launch)");
         changed |= ImGuiMCP::Checkbox("SkyrimNet Send Events", &settings->Integration.SkyrimNetSendEvents);

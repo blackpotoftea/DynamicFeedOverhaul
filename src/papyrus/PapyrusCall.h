@@ -4,6 +4,7 @@
 #include "../feed/FeedPromptSink.h"
 #include "../integration/SacrosanctIntegration.h"
 #include "../integration/SacrilegeIntegration.h"
+#include "../integration/BetterVampiresIntegration.h"
 
 // Forward declaration to avoid including Settings.h
 class Settings;
@@ -376,13 +377,43 @@ namespace PapyrusCall {
             }
 
             case VampireIntegration::BetterVampires: {
-                SKSE::log::info("Using Better Vampires integration");
+                auto* settings = Settings::GetSingleton();
+                bool isCombatFeed = target->IsInCombat();
+                bool isSleeping = TargetState::IsSleeping(target);
+
+                // Deep integration: C++ mimics Better Vampires VampireFeed (bypasses Papyrus)
+                // Use deep integration if: enabled AND (not combat OR combat integration enabled)
+                bool useDeepIntegration = settings->Integration.DeepBetterVampiresIntegration &&
+                    (!isCombatFeed || settings->Integration.EnableBetterVampiresInCombat);
+                if (useDeepIntegration && BetterVampiresIntegration::IsAvailable()) {
+                    SKSE::log::info("Better Vampires: Using deep C++ integration (combat={})", isCombatFeed);
+
+                    BetterVampiresIntegration::FeedContext ctx;
+                    ctx.target = target;
+                    ctx.isLethal = isLethal;
+                    ctx.isSleeping = isSleeping;
+                    ctx.isCombatFeed = isCombatFeed;
+                    ctx.animationHandlesKill = animationHandlesKill;
+
+                    if (BetterVampiresIntegration::ProcessFeed(ctx)) return true;
+                    SKSE::log::warn("Better Vampires: deep integration failed - falling back to Papyrus");
+                }
+
+                SKSE::log::info("Better Vampires: Using Papyrus integration (lethal={}, combat={})", isLethal, isCombatFeed);
                 return CallVampireFeedAuto(quest, target);
             }
 
             case VampireIntegration::Vanilla:
             default: {
                 SKSE::log::info("Using Vanilla integration");
+                // Vanilla declares VampireFeed() with 0 args - a 1-arg signature here means an
+                // unrecognized script override (not BV/Sacrosanct/Sacrilege) whose behavior we can't vouch for.
+                if (GetVampireFeedSignature(quest) == 2) {
+                    SKSE::log::warn(
+                        "Unknown mod overrides PlayerVampireQuestScript with VampireFeed(Actor) - "
+                        "not a supported vampire overhaul; combat feeds may sheathe the weapon or lock controls. "
+                        "Check which mod wins the conflict for Scripts\\PlayerVampireQuestScript.pex");
+                }
                 return CallVampireFeedAuto(quest, target);
             }
         }

@@ -17,6 +17,7 @@ set(sources ${sources}
     src/integration/PoiseIntegration.cpp
     src/integration/SacrosanctIntegration.cpp
     src/integration/SacrilegeIntegration.cpp
+    src/integration/BetterVampiresIntegration.cpp
     src/integration/VampireIntegrationUtils.cpp
     src/integration/FeedIntegration.cpp
     src/integration/SkyrimNetIntegration.cpp
