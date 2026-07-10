@@ -9,6 +9,7 @@
 #include "feed/CompositePairedAnimation.h"
 #include "feed/FeedIconOverlay.h"
 #include "integration/OStimIntegration.h"
+#include "integration/SexLabIntegration.h"
 #include "integration/VampireIntegrationUtils.h"
 #include "utils/MenuCheck.h"
 #include "feed/AnimationRegistry.h"
@@ -789,6 +790,21 @@ bool FeedPromptSink::IsValidFeedTarget(RE::Actor* target) {
         // Check Player
         if (OStimIntegration::IsActorInScene(player)) {
             SKSE::log::debug("IsValidFeedTarget: false - player in OStim scene");
+            return false;
+        }
+    }
+
+    // 5. Check SexLab Scenes (Player AND Target)
+    if (settings->Filtering.ExcludeSexLabScenes) {
+        // Check Target
+        if (SexLabIntegration::IsActorInScene(target)) {
+            SKSE::log::debug("IsValidFeedTarget: false - target {} in SexLab scene", target->GetName());
+            return false;
+        }
+
+        // Check Player
+        if (SexLabIntegration::IsActorInScene(player)) {
+            SKSE::log::debug("IsValidFeedTarget: false - player in SexLab scene");
             return false;
         }
     }

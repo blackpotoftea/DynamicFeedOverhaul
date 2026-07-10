@@ -154,6 +154,7 @@ void Settings::LoadINI() {
     // Filtering
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
     Filtering.ExcludeOStimScenes = ini.GetBoolValue("Filtering", "ExcludeOStimScenes", Filtering.ExcludeOStimScenes);
+    Filtering.ExcludeSexLabScenes = ini.GetBoolValue("Filtering", "ExcludeSexLabScenes", Filtering.ExcludeSexLabScenes);
     Filtering.ExcludeDead = ini.GetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead);
     Filtering.AllowRecentlyDead = ini.GetBoolValue("Filtering", "AllowRecentlyDead", Filtering.AllowRecentlyDead);
     Filtering.MaxDeadHours = static_cast<float>(ini.GetDoubleValue("Filtering", "MaxDeadHours", Filtering.MaxDeadHours));
@@ -240,8 +241,8 @@ void Settings::LoadINI() {
         Combat.VampireLordLowLevelFeed, Combat.VampireLordLowLevelFeedDifference,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds,
         Combat.EnableWitnessCombatReaction, Combat.AssaultConfidenceThreshold, Combat.WitnessRelationshipAware, Combat.WitnessAssaultBounty);
-    SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
-        Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeDead,
+    SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeSexLab={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
+        Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeSexLabScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
         JoinKeywordList(Filtering.IncludeKeywords), JoinKeywordList(Filtering.ExcludeKeywords), JoinKeywordList(Filtering.ExcludeActorIDs));
     SKSE::log::info("  [Animation] EnableRandom={}, HungryThreshold={}, EnableTimeSlowdown={}, TimeSlowdownMultiplier={}, FeedSoundForm='{}', FailureSoundForm='{}'",
@@ -397,6 +398,8 @@ void Settings::SaveINI() {
         "; Exclude targets currently in a scene (dialogues, scripted events)");
     ini.SetBoolValue("Filtering", "ExcludeOStimScenes", Filtering.ExcludeOStimScenes,
         "; Exclude targets in OStim NG scenes (auto-detects OStim, gracefully disabled if not installed)");
+    ini.SetBoolValue("Filtering", "ExcludeSexLabScenes", Filtering.ExcludeSexLabScenes,
+        "; Exclude targets in SexLab scenes (auto-detects SexLab, gracefully disabled if not installed)");
     ini.SetBoolValue("Filtering", "ExcludeDead", Filtering.ExcludeDead,
         "; Exclude dead actors from feeding");
     ini.SetBoolValue("Filtering", "AllowRecentlyDead", Filtering.AllowRecentlyDead,

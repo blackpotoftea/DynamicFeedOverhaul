@@ -408,6 +408,9 @@ void __stdcall UI::Settings::Render() {
         changed |= ImGuiMCP::Checkbox("Exclude In Scene", &settings->Filtering.ExcludeInScene);
         ImGuiMCP::SetItemTooltip("Skip actors in dialogues/scripted events");
         changed |= ImGuiMCP::Checkbox("Exclude OStim Scenes", &settings->Filtering.ExcludeOStimScenes);
+        ImGuiMCP::SetItemTooltip("Skip actors in OStim NG scenes (auto-disabled if OStim not installed)");
+        changed |= ImGuiMCP::Checkbox("Exclude SexLab Scenes", &settings->Filtering.ExcludeSexLabScenes);
+        ImGuiMCP::SetItemTooltip("Skip actors in SexLab scenes (auto-disabled if SexLab not installed)");
 
         // --- Dead Targets (Non-Combat only) ---
         ImGuiMCP::Spacing();

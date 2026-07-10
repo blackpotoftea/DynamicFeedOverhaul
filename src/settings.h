@@ -100,6 +100,7 @@ public:
     struct {
         bool ExcludeInScene{ true };            // Skip actors in scenes (dialogues, scripted events)
         bool ExcludeOStimScenes{ true };        // Skip actors in OStim scenes (requires OStim NG)
+        bool ExcludeSexLabScenes{ true };       // Skip actors in SexLab scenes (requires SexLab)
         bool ExcludeDead{ true };               // Skip dead actors
         bool AllowRecentlyDead{ false };        // Allow feeding on recently dead actors
         float MaxDeadHours{ 2.0f };             // Maximum hours since death to allow feeding

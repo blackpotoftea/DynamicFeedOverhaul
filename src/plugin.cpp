@@ -8,6 +8,7 @@
 #include "feed/FeedIconOverlay.h"
 #include "feed/FeedHealthBarOverlay.h"
 #include "integration/OStimIntegration.h"
+#include "integration/SexLabIntegration.h"
 #include "integration/PoiseIntegration.h"
 #include "integration/SacrosanctIntegration.h"
 #include "integration/SacrilegeIntegration.h"
@@ -42,6 +43,12 @@ void OnDataLoaded()
         SKSE::log::info("OStim NG integration initialized successfully");
     } else {
         SKSE::log::info("OStim NG not detected - scene exclusion will be skipped");
+    }
+
+    if (SexLabIntegration::Initialize()) {
+        SKSE::log::info("SexLab integration initialized successfully");
+    } else {
+        SKSE::log::info("SexLab not detected - scene exclusion will be skipped");
     }
 
     if (PoiseIntegration::Initialize()) {
