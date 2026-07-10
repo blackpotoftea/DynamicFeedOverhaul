@@ -38,6 +38,9 @@ namespace BetterVampiresIntegration {
         float gameDaysPassed = -1.0f;   // GameDaysPassed global (now)
         bool feedTimerEnabled = false;  // BVCalculateFeedTimer > 0 (else FeedTimer never updates)
         bool updateGated = false;       // VampireUpdateGameTime != 0 (blocks stage updates)
+        int necksBitten = -1;                // Game stat "Necks Bitten" (feed count -> rank). -1 = not queried yet
+        float necksBittenDiscovered = -1.0f; // VampireNecksBittenDiscovered (notoriety -> hunter spawns)
+        float vampireRank = -1.0f;           // VampireRank global (0 / 10000 ... 61000)
     };
     HungerDebug GetHungerDebug();
 

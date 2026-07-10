@@ -181,8 +181,12 @@ namespace BetterVampiresIntegration {
             if (!vm) return;
 
             RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new VampireIntegrationUtils::EmptyCallback());
+            // Game.IncrementStat(string, int aiModAmount=1) is native - dispatch must pass BOTH args
+            // (no Papyrus default-filling), or the call silently no-ops and the stat never moves.
             RE::BSFixedString stat("Necks Bitten");
-            vm->DispatchStaticCall("Game", "IncrementStat", RE::MakeFunctionArguments(std::move(stat)), callback);
+            std::int32_t amount = 1;
+            vm->DispatchStaticCall("Game", "IncrementStat",
+                RE::MakeFunctionArguments(std::move(stat), std::move(amount)), callback);
         }
 
         void TriggerScreenBlood(int count) {
@@ -257,6 +261,27 @@ namespace BetterVampiresIntegration {
             RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(new RankFeedNotifyCallback());
             RE::BSFixedString stat("Necks Bitten");
             vm->DispatchStaticCall("Game", "QueryStat", RE::MakeFunctionArguments(std::move(stat)), callback);
+        }
+
+        // Live "Necks Bitten" game stat for the debug UI. QueryStat is async, so a callback caches
+        // the last value and GetHungerDebug re-queries on a throttle.
+        std::atomic<int> g_necksBittenStat{-1};
+
+        class NecksBittenStatCallback : public RE::BSScript::IStackCallbackFunctor {
+        public:
+            void operator()(RE::BSScript::Variable a_result) override {
+                if (a_result.IsInt()) g_necksBittenStat = a_result.GetSInt();
+            }
+            bool CanSave() const override { return false; }
+            void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
+        };
+
+        void RefreshNecksBittenStat() {
+            auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+            if (!vm) return;
+            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb(new NecksBittenStatCallback());
+            RE::BSFixedString stat("Necks Bitten");
+            vm->DispatchStaticCall("Game", "QueryStat", RE::MakeFunctionArguments(std::move(stat)), cb);
         }
 
         // Papyrus IsInLocation semantics: current location or any parent matches
@@ -565,6 +590,20 @@ namespace BetterVampiresIntegration {
         d.vampireStatus = readFloatProp("VampireStatus", -1.0f);
         d.feedTimer = readFloatProp("FeedTimer", -1.0f);
         d.lastFeedTime = readFloatProp("LastFeedTime", -1.0f);
+
+        // Necks Bitten: the vanilla feed-count stat (async, cached) plus BV's separate notoriety/rank globals
+        {
+            using clock = std::chrono::steady_clock;
+            static clock::time_point lastQuery{};
+            auto now = clock::now();
+            if (now - lastQuery > std::chrono::milliseconds(500)) {
+                lastQuery = now;
+                RefreshNecksBittenStat();
+            }
+        }
+        d.necksBitten = g_necksBittenStat.load();
+        d.necksBittenDiscovered = g_necksBittenDiscovered ? g_necksBittenDiscovered->value : -1.0f;
+        d.vampireRank = g_vampireRank ? g_vampireRank->value : -1.0f;
         return d;
     }
 

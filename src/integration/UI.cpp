@@ -192,6 +192,24 @@ void __stdcall UI::Debug::Render() {
                 ImGuiMCP::TextColored(ImGuiMCP::ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "%s",
                     "  VampireUpdateGameTime != 0 - stage updates blocked until next feed");
             }
+
+            // Necks Bitten: the feed-count stat (drives rank) vs BV's separate discovery/notoriety meter
+            ImGuiMCP::Separator();
+            ImGuiMCP::TextDisabled("Necks Bitten tracking");
+            if (bv.necksBitten >= 0) {
+                ImGuiMCP::Text("  Necks Bitten (feed count -> rank): %d", bv.necksBitten);
+            } else {
+                ImGuiMCP::TextDisabled("  Necks Bitten (feed count): querying...");
+            }
+            ImGuiMCP::Text("  Necks Bitten Discovered (notoriety): %.1f", bv.necksBittenDiscovered);
+            ImGuiMCP::SetItemTooltip("VampireNecksBittenDiscovered: +2 city / +1 town / +0.5 else; a random 10-20 triggers vampire-hunter spawns");
+            {
+                const int rank = static_cast<int>(bv.vampireRank);
+                const char* rankName = rank >= 60000 ? "Nightlord" : rank >= 50000 ? "Master"
+                                     : rank >= 40000 ? "Nightstalker" : rank >= 30000 ? "Blooded"
+                                     : rank >= 20000 ? "Vampire" : rank >= 10000 ? "Fledgling" : "None";
+                ImGuiMCP::Text("  Vampire Rank: %s (%d)", rankName, rank);
+            }
         }
     }
 
