@@ -94,6 +94,14 @@ public:
         int AssaultConfidenceThreshold{ 3 };     // Min victim Confidence to fight back (0=Cowardly..4=Foolhardy)
         bool WitnessRelationshipAware{ true };   // Use relationship/faction (friendly ignore, hostile attack) vs confidence-only
         int WitnessAssaultBounty{ 0 };           // Bounty for a witnessed public feed; 0 = use the hold's vanilla assault crime gold
+        bool WitnessIgnoreVampires{ true };      // Vampire / Vampire Lord bystanders never report or attack a feed
+        // Feeding on an NPC in ANY of these factions is a legal feed (no crime for anyone). Vampire's
+        // Seduction adds DLC1VampireFeedNoCrimeFaction to its target automatically. Entries are editor
+        // IDs or PluginName|0xFormID.
+        std::vector<std::string> NoCrimeFeedFactions{ "DLC1VampireFeedNoCrimeFaction" };
+        // NPCs in ANY of these factions never report/attack a feed they witness or are the victim of;
+        // a non-member witness can still report a feed on them (e.g. DLC1ThrallFaction thralls).
+        std::vector<std::string> IgnoreWitnessFactions{ "DLC1ThrallFaction" };
     } Combat;
 
     // Target filtering settings

@@ -169,6 +169,9 @@ void Settings::LoadINI() {
     Combat.AssaultConfidenceThreshold = static_cast<int>(ini.GetLongValue("Combat", "AssaultConfidenceThreshold", Combat.AssaultConfidenceThreshold));
     Combat.WitnessRelationshipAware = ini.GetBoolValue("Combat", "WitnessRelationshipAware", Combat.WitnessRelationshipAware);
     Combat.WitnessAssaultBounty = static_cast<int>(ini.GetLongValue("Combat", "WitnessAssaultBounty", Combat.WitnessAssaultBounty));
+    Combat.WitnessIgnoreVampires = ini.GetBoolValue("Combat", "WitnessIgnoreVampires", Combat.WitnessIgnoreVampires);
+    Combat.NoCrimeFeedFactions = ParseKeywordList(ini.GetValue("Combat", "NoCrimeFeedFactions", "DLC1VampireFeedNoCrimeFaction"));
+    Combat.IgnoreWitnessFactions = ParseKeywordList(ini.GetValue("Combat", "IgnoreWitnessFactions", "DLC1ThrallFaction"));
 
     // Filtering
     Filtering.ExcludeInScene = ini.GetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene);
@@ -257,12 +260,13 @@ void Settings::LoadINI() {
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
         NonCombat.UseCompositePairedAnimation, NonCombat.UseCompositeFurnitureAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
         NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
-    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, VLLowLevelFeed={}, VLLowLevelFeedDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, WitnessCombatReaction={}, AssaultConfThreshold={}, RelationshipAware={}, AssaultBounty={}",
+    SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, VLLowLevelFeed={}, VLLowLevelFeedDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, WitnessCombatReaction={}, AssaultConfThreshold={}, RelationshipAware={}, AssaultBounty={}, IgnoreVampires={}, NoCrimeFeedFactions=[{}], IgnoreWitnessFactions=[{}]",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
         Combat.VampireLordLowLevelFeed, Combat.VampireLordLowLevelFeedDifference,
         Combat.EnableWitnessDetection, Combat.WitnessDetectionRadius, Combat.WitnessCheckInterval, Combat.WitnessDebugLogging, Combat.PromptDelayCombatSeconds,
-        Combat.EnableWitnessCombatReaction, Combat.AssaultConfidenceThreshold, Combat.WitnessRelationshipAware, Combat.WitnessAssaultBounty);
+        Combat.EnableWitnessCombatReaction, Combat.AssaultConfidenceThreshold, Combat.WitnessRelationshipAware, Combat.WitnessAssaultBounty,
+        Combat.WitnessIgnoreVampires, JoinKeywordList(Combat.NoCrimeFeedFactions), JoinKeywordList(Combat.IgnoreWitnessFactions));
     SKSE::log::info("  [Filtering] ExcludeInScene={}, ExcludeOStim={}, ExcludeSexLab={}, ExcludeDead={}, AllowRecentlyDead={}, MaxDeadHours={}, MaxDeadFeeds={}, IncludeKW=[{}], ExcludeKW=[{}], ExcludeActorIDs=[{}]",
         Filtering.ExcludeInScene, Filtering.ExcludeOStimScenes, Filtering.ExcludeSexLabScenes, Filtering.ExcludeDead,
         Filtering.AllowRecentlyDead, Filtering.MaxDeadHours, Filtering.MaxDeadFeeds,
@@ -416,6 +420,12 @@ void Settings::SaveINI() {
         "; Factor in relationship/faction: friends never attack or report, foes/enemies always attack, others decide by Confidence (off = Confidence only)");
     ini.SetLongValue("Combat", "WitnessAssaultBounty", Combat.WitnessAssaultBounty,
         "; Bounty added when a feed is witnessed in public, applied once per feed. 0 = use the hold's vanilla assault crime gold");
+    ini.SetBoolValue("Combat", "WitnessIgnoreVampires", Combat.WitnessIgnoreVampires,
+        "; Vampire and Vampire Lord bystanders never report or attack a feed they witness");
+    ini.SetValue("Combat", "NoCrimeFeedFactions", JoinKeywordList(Combat.NoCrimeFeedFactions).c_str(),
+        "; Feeding on an NPC in ANY of these factions is a legal feed - no bounty, no alarm, no combat. Vampire's Seduction adds DLC1VampireFeedNoCrimeFaction to its target automatically. Multiple factions separated by commas (editor IDs or PluginName|0xFormID), e.g. DLC1VampireFeedNoCrimeFaction, MyMod.esp|0x001234");
+    ini.SetValue("Combat", "IgnoreWitnessFactions", JoinKeywordList(Combat.IgnoreWitnessFactions).c_str(),
+        "; NPCs in ANY of these factions never report or attack a feed they witness or are the victim of; a non-member witness can still report a feed on them. Multiple factions separated by commas (editor IDs or PluginName|0xFormID), e.g. DLC1ThrallFaction, MyMod.esp|0x005678");
 
     // Filtering
     ini.SetBoolValue("Filtering", "ExcludeInScene", Filtering.ExcludeInScene,

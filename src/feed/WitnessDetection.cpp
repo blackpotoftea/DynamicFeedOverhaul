@@ -3,8 +3,10 @@
 #include "TargetState.h"
 #include "CompositePairedAnimation.h"
 #include "papyrus/PapyrusCall.h"
+#include "utils/FormUtils.h"
 
 #include <atomic>
+#include <unordered_map>
 
 namespace {
     // Custom relocation for SendAssaultAlarm function not exposed in CommonLibSSE
@@ -50,6 +52,55 @@ namespace {
     // runs on the feed-start (prompt-accept) path while reads/sets run on the update hook -
     // the same cross-path access FeedAnimState guards with atomics.
     std::atomic<bool> g_feedReported{ false };
+
+    // Resolve a faction identifier - an editor ID, or "PluginName|0xFormID" - to a faction, cached
+    // per string so an MCM-edited list pays the lookup only once per distinct entry.
+    RE::TESFaction* ResolveFaction(const std::string& id) {
+        static std::unordered_map<std::string, RE::TESFaction*> cache;
+        if (auto it = cache.find(id); it != cache.end()) return it->second;
+
+        RE::TESFaction* faction = nullptr;
+        if (const auto pipe = id.find('|'); pipe != std::string::npos) {
+            auto trim = [](std::string s) {
+                const auto b = s.find_first_not_of(" \t");
+                const auto e = s.find_last_not_of(" \t");
+                return b == std::string::npos ? std::string{} : s.substr(b, e - b + 1);
+            };
+            const std::string plugin = trim(id.substr(0, pipe));
+            const std::string formStr = trim(id.substr(pipe + 1));
+            try {
+                faction = FormUtils::LookupForm<RE::TESFaction>(
+                    static_cast<RE::FormID>(std::stoul(formStr, nullptr, 16)), plugin);
+            } catch (...) {}
+        } else {
+            faction = RE::TESForm::LookupByEditorID<RE::TESFaction>(id);
+        }
+        cache[id] = faction;
+        return faction;
+    }
+
+    // True when the actor belongs to any faction in the configured list.
+    bool IsInAnyFaction(RE::Actor* actor, const std::vector<std::string>& factionIDs) {
+        if (!actor) return false;
+        for (const auto& id : factionIDs) {
+            auto* faction = ResolveFaction(id);
+            if (faction && actor->IsInFaction(faction)) return true;
+        }
+        return false;
+    }
+
+    // Feeding on this actor is a legal feed: no bounty, no alarm, no combat - for anyone. Vampire's
+    // Seduction/Mesmerize adds its target to DLC1VampireFeedNoCrimeFaction (see DLC1VampireMesmerizeScript),
+    // so this faction list also covers charmed victims without a separate magic-effect check.
+    bool IsFeedCrimeExempt(RE::Actor* actor) {
+        return IsInAnyFaction(actor, Settings::GetSingleton()->Combat.NoCrimeFeedFactions);
+    }
+
+    // This actor personally never reports/attacks a feed (as witness or victim), e.g. the player's
+    // own thralls - but a non-member witness can still report a feed on it.
+    bool IsIgnoredWitness(RE::Actor* actor) {
+        return IsInAnyFaction(actor, Settings::GetSingleton()->Combat.IgnoreWitnessFactions);
+    }
 }
 
 namespace WitnessDetection {
@@ -78,6 +129,17 @@ namespace WitnessDetection {
         if (potentialWitness->IsPlayerTeammate()) {
             if (Settings::GetSingleton()->Combat.WitnessDebugLogging) {
                 SKSE::log::trace("[WitnessDetection] {} is player teammate, skipping", potentialWitness->GetName());
+            }
+            return false;
+        }
+
+        // Fellow vampires/Vampire Lords, and members of the no-crime / ignore-witness factions
+        // (e.g. the player's own thralls), never report or fight over a feed they witness.
+        const bool vampKin = Settings::GetSingleton()->Combat.WitnessIgnoreVampires &&
+            (TargetState::IsVampire(potentialWitness) || TargetState::IsVampireLord(potentialWitness));
+        if (vampKin || IsFeedCrimeExempt(potentialWitness) || IsIgnoredWitness(potentialWitness)) {
+            if (Settings::GetSingleton()->Combat.WitnessDebugLogging) {
+                SKSE::log::trace("[WitnessDetection] {} is vampire-kin/exempt-faction, skipping", potentialWitness->GetName());
             }
             return false;
         }
@@ -305,6 +367,16 @@ namespace WitnessDetection {
             return;
         }
 
+        // Victim in a no-crime feed faction (incl. anyone under Vampire's Seduction, which adds
+        // DLC1VampireFeedNoCrimeFaction): a legal feed. Suppress bystander combat, victim self-report,
+        // and the bounty together. No latch - re-checking is cheap and resumes if the flag clears.
+        if (IsFeedCrimeExempt(target)) {
+            if (settings->Combat.WitnessDebugLogging) {
+                SKSE::log::debug("[WitnessDetection] target is in a no-crime feed faction - feed is legal, skipping");
+            }
+            return;
+        }
+
         // Bystander combat reactions: evaluated live every tick so each hostile witness engages
         // the moment it notices the feed. Independent of the one-shot bounty below (and of the
         // victim, which is restrained until release - handled at feed end in ApplyWitnessReactions).
@@ -323,8 +395,9 @@ namespace WitnessDetection {
 
         // Check if the victim themselves should raise alarm (if awake and not a follower).
         // A friendly victim (kIgnore) won't report you and must NOT short-circuit the
-        // scan below - a nearby non-friendly NPC can still see it and report.
-        if (!target->IsPlayerTeammate() && TargetState::IsConsciousAndAware(target)) {
+        // scan below - a nearby non-friendly NPC can still see it and report. An ignore-witness
+        // victim (e.g. a thrall) never self-reports, but is left in the scan so a non-member guard can.
+        if (!target->IsPlayerTeammate() && !IsIgnoredWitness(target) && TargetState::IsConsciousAndAware(target)) {
             if (ClassifyWitness(target, player) != WitnessReaction::kIgnore) {
                 if (settings->Combat.WitnessDebugLogging) {
                     SKSE::log::debug("[WitnessDetection] Victim {} is conscious and not a teammate - raising alarm",
@@ -412,6 +485,10 @@ namespace WitnessDetection {
     void ApplyWitnessReactions(RE::Actor* player, RE::Actor* victim) {
         auto* settings = Settings::GetSingleton();
         if (!settings->Combat.EnableWitnessCombatReaction || !player) return;
+
+        // A no-crime-faction victim (legal feed) or an ignore-witness victim (e.g. a thrall) never
+        // fights back at release.
+        if (IsFeedCrimeExempt(victim) || IsIgnoredWitness(victim)) return;
 
         // Victim-only. Bystanders already turned hostile live during the feed (see
         // TriggerBystanderCombat in PerformWitnessCheck). The victim can only react here, at

@@ -82,6 +82,29 @@ namespace {
             changed |= ImGuiMCP::Checkbox("Relationship Aware", &settings->Combat.WitnessRelationshipAware);
             ImGuiMCP::SetItemTooltip("Friends never attack or report you; foes/enemies always attack; others decide by Confidence. Off = Confidence only.");
         }
+        ImGuiMCP::Separator();
+        changed |= ImGuiMCP::Checkbox("Ignore Vampire Witnesses", &settings->Combat.WitnessIgnoreVampires);
+        ImGuiMCP::SetItemTooltip("Vampire and Vampire Lord bystanders never report or attack a feed they witness.");
+
+        ImGuiMCP::TextDisabled("Exempt Factions (comma-separated editor IDs or Plugin.esm|0xFormID)");
+        static char noCrimeFactionsBuf[512] = "";
+        static char ignoreWitnessFactionsBuf[512] = "";
+        static bool witnessFactionBufsInit = false;
+        if (!witnessFactionBufsInit) {
+            strncpy(noCrimeFactionsBuf, JoinStrings(settings->Combat.NoCrimeFeedFactions).c_str(), sizeof(noCrimeFactionsBuf) - 1);
+            strncpy(ignoreWitnessFactionsBuf, JoinStrings(settings->Combat.IgnoreWitnessFactions).c_str(), sizeof(ignoreWitnessFactionsBuf) - 1);
+            witnessFactionBufsInit = true;
+        }
+        if (ImGuiMCP::InputText("No-Crime Feed Factions", noCrimeFactionsBuf, sizeof(noCrimeFactionsBuf))) {
+            settings->Combat.NoCrimeFeedFactions = SplitStrings(noCrimeFactionsBuf);
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("Feeding on an NPC in ANY of these factions is a legal feed: no bounty, no alarm, no combat. Vampire's Seduction adds DLC1VampireFeedNoCrimeFaction automatically.");
+        if (ImGuiMCP::InputText("Ignore-Witness Factions", ignoreWitnessFactionsBuf, sizeof(ignoreWitnessFactionsBuf))) {
+            settings->Combat.IgnoreWitnessFactions = SplitStrings(ignoreWitnessFactionsBuf);
+            changed = true;
+        }
+        ImGuiMCP::SetItemTooltip("NPCs in ANY of these factions never report/attack a feed they witness or are the victim of; a non-member witness can still report a feed on them (e.g. DLC1ThrallFaction).");
     }
 }
 
