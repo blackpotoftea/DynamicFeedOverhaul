@@ -39,7 +39,11 @@ namespace {
         }
 
         switch (TargetState::GetDisposition(witness, player)) {
-        case TargetState::Disposition::Friendly: return WitnessReaction::kIgnore;
+        case TargetState::Disposition::Friendly:
+            // A guard enforces the law even for someone it likes: Thane-status faction
+            // friendliness shouldn't make a feed invisible. Only non-guards look away.
+            if (!witness->IsGuard()) return WitnessReaction::kIgnore;
+            return brave ? WitnessReaction::kAttack : WitnessReaction::kReport;
         case TargetState::Disposition::Hostile:  return WitnessReaction::kAttack;
         default:                                 return brave ? WitnessReaction::kAttack : WitnessReaction::kReport;
         }
