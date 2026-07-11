@@ -3,6 +3,7 @@
 #include <RE/Skyrim.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace FormUtils {
 
@@ -128,6 +129,42 @@ namespace FormUtils {
         Cache::VampireLordRace = nullptr;
         Cache::KeywordsByEditorID.clear();
         SKSE::log::info("FormUtils: Cache cleared");
+    }
+
+    // Resolve a faction identifier - an editor ID, or "PluginName|0xFormID" - to a faction, cached
+    // per string so a config list pays the lookup only once per distinct entry.
+    inline RE::TESFaction* ResolveFaction(const std::string& id) {
+        static std::unordered_map<std::string, RE::TESFaction*> cache;
+        if (auto it = cache.find(id); it != cache.end()) return it->second;
+
+        RE::TESFaction* faction = nullptr;
+        if (const auto pipe = id.find('|'); pipe != std::string::npos) {
+            auto trim = [](std::string s) {
+                const auto b = s.find_first_not_of(" \t");
+                const auto e = s.find_last_not_of(" \t");
+                return b == std::string::npos ? std::string{} : s.substr(b, e - b + 1);
+            };
+            const std::string plugin = trim(id.substr(0, pipe));
+            const std::string formStr = trim(id.substr(pipe + 1));
+            try {
+                faction = LookupForm<RE::TESFaction>(
+                    static_cast<RE::FormID>(std::stoul(formStr, nullptr, 16)), plugin);
+            } catch (...) {}
+        } else {
+            faction = RE::TESForm::LookupByEditorID<RE::TESFaction>(id);
+        }
+        cache[id] = faction;
+        return faction;
+    }
+
+    // True when the actor belongs to any faction in the configured list.
+    inline bool IsInAnyFaction(RE::Actor* actor, const std::vector<std::string>& factionIDs) {
+        if (!actor) return false;
+        for (const auto& id : factionIDs) {
+            auto* faction = ResolveFaction(id);
+            if (faction && actor->IsInFaction(faction)) return true;
+        }
+        return false;
     }
 
     // Check if actor's base form matches a specific form ID string (format: PluginName|0xFormID)

@@ -6,7 +6,6 @@
 #include "utils/FormUtils.h"
 
 #include <atomic>
-#include <unordered_map>
 
 namespace {
     // Custom relocation for SendAssaultAlarm function not exposed in CommonLibSSE
@@ -53,53 +52,17 @@ namespace {
     // the same cross-path access FeedAnimState guards with atomics.
     std::atomic<bool> g_feedReported{ false };
 
-    // Resolve a faction identifier - an editor ID, or "PluginName|0xFormID" - to a faction, cached
-    // per string so an MCM-edited list pays the lookup only once per distinct entry.
-    RE::TESFaction* ResolveFaction(const std::string& id) {
-        static std::unordered_map<std::string, RE::TESFaction*> cache;
-        if (auto it = cache.find(id); it != cache.end()) return it->second;
-
-        RE::TESFaction* faction = nullptr;
-        if (const auto pipe = id.find('|'); pipe != std::string::npos) {
-            auto trim = [](std::string s) {
-                const auto b = s.find_first_not_of(" \t");
-                const auto e = s.find_last_not_of(" \t");
-                return b == std::string::npos ? std::string{} : s.substr(b, e - b + 1);
-            };
-            const std::string plugin = trim(id.substr(0, pipe));
-            const std::string formStr = trim(id.substr(pipe + 1));
-            try {
-                faction = FormUtils::LookupForm<RE::TESFaction>(
-                    static_cast<RE::FormID>(std::stoul(formStr, nullptr, 16)), plugin);
-            } catch (...) {}
-        } else {
-            faction = RE::TESForm::LookupByEditorID<RE::TESFaction>(id);
-        }
-        cache[id] = faction;
-        return faction;
-    }
-
-    // True when the actor belongs to any faction in the configured list.
-    bool IsInAnyFaction(RE::Actor* actor, const std::vector<std::string>& factionIDs) {
-        if (!actor) return false;
-        for (const auto& id : factionIDs) {
-            auto* faction = ResolveFaction(id);
-            if (faction && actor->IsInFaction(faction)) return true;
-        }
-        return false;
-    }
-
     // Feeding on this actor is a legal feed: no bounty, no alarm, no combat - for anyone. Vampire's
     // Seduction/Mesmerize adds its target to DLC1VampireFeedNoCrimeFaction (see DLC1VampireMesmerizeScript),
     // so this faction list also covers charmed victims without a separate magic-effect check.
     bool IsFeedCrimeExempt(RE::Actor* actor) {
-        return IsInAnyFaction(actor, Settings::GetSingleton()->Combat.NoCrimeFeedFactions);
+        return FormUtils::IsInAnyFaction(actor, Settings::GetSingleton()->Combat.NoCrimeFeedFactions);
     }
 
     // This actor personally never reports/attacks a feed (as witness or victim), e.g. the player's
     // own thralls - but a non-member witness can still report a feed on it.
     bool IsIgnoredWitness(RE::Actor* actor) {
-        return IsInAnyFaction(actor, Settings::GetSingleton()->Combat.IgnoreWitnessFactions);
+        return FormUtils::IsInAnyFaction(actor, Settings::GetSingleton()->Combat.IgnoreWitnessFactions);
     }
 }
 

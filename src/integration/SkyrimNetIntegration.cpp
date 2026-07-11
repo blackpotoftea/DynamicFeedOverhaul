@@ -2,6 +2,8 @@
 #include "SkyrimNetIntegration.h"
 #include "VampireIntegrationUtils.h"  // EmptyCallback for VM dispatch
 #include "feed/TargetState.h"          // sleep/sit posture helpers
+#include "Settings.h"                  // NoCrimeFeedFactions (charmed-victim list)
+#include "utils/FormUtils.h"           // IsInAnyFaction (shared faction resolver)
 #include <nlohmann/json.hpp>           // safe event-data JSON building
 #include <ctime>                       // std::time for unique event ids
 
@@ -318,6 +320,16 @@ namespace SkyrimNetIntegration {
             feedType = "willing";
         }
 
+        // A charmed victim (in DLC1VampireFeedNoCrimeFaction - Vampire's Seduction adds it, the same
+        // list the crime system exempts) must not react to being fed upon, and that reaction is driven
+        // purely by whether the event is tagged as "involving" them. So we still emit the feed (names
+        // stay in the payload, so the global record shows who fed on whom), but pass a null target tag:
+        // the event never enters the victim's context/memory - deterministic, not a prompt hint. How a
+        // charmed NPC otherwise behaves is SkyrimNet's charm handling, not ours.
+        const bool victimCharmed =
+            FormUtils::IsInAnyFaction(target, Settings::GetSingleton()->Combat.NoCrimeFeedFactions);
+        RE::Actor* eventTarget = victimCharmed ? nullptr : target;
+
         nlohmann::json j;
         j["attacker"] = attackerName;
         j["target"] = targetName;
@@ -331,9 +343,10 @@ namespace SkyrimNetIntegration {
         const std::string description = attackerName + (killed ? " drains " : " feeds on ") + targetName +
             (killed ? " dry" : "");
         RegisterEventByContext(eventId.c_str(), "vampire_feed", description, j.dump(), ttl,
-            attacker, target, inCombat);
-        SKSE::log::debug("SkyrimNet vampire_feed emitted: {} -> {} ({}{})",
-            attackerName, targetName, feedType, killed ? ", killed" : "");
+            attacker, eventTarget, inCombat);
+        SKSE::log::debug("SkyrimNet vampire_feed emitted: {} -> {} ({}{}{})",
+            attackerName, targetName, feedType, killed ? ", killed" : "",
+            victimCharmed ? ", untargeted (charmed)" : "");
     }
 
     void RegisterVampireFeedFailedEvent(RE::Actor* attacker, RE::Actor* target,
