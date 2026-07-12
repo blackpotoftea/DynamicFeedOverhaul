@@ -330,6 +330,9 @@ namespace SacrosanctIntegration {
         g_hemomancySteps = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Hemomancy_Global_Stage_Steps");
         g_hemomancyStepsToNext = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Hemomancy_Global_Stage_StepsToNext");
         g_hemomancyStepsAddPerStep = RE::TESForm::LookupByEditorID<RE::TESGlobal>("SCS_VampireSpells_Hemomancy_Global_Stage_StepsToNext_AddPerStep");
+        // The Papyrus properties SCS_Mechanics_FormList_HemomancyExpanded and
+        // SCS_Abilities_Mechanics_Spell_Ab_AddRemoveHemomancySpells are AUTO props whose CK bindings
+        // point at differently-named forms - the editor IDs below. Property name != editor ID.
         g_hemomancyFormList = RE::TESForm::LookupByEditorID<RE::BGSListForm>("SCS_Mechanics_FormList_Hemomancy");
         g_hemomancyBaseAbility = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Mechanics_Spell_Ab_AddRemoveHemomancySpells");
         g_hemomancyHelpMessage = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Help_GetHemomancyByFeeding");
@@ -526,6 +529,48 @@ namespace SacrosanctIntegration {
         return g_sacrosanctAvailable;
     }
 
+    ProgressInfo GetProgressInfo() {
+        ProgressInfo info;
+        if (!IsAvailable()) return info;
+        info.available = true;
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+
+        // --- Hemomancy ---
+        info.hemomancyReady = g_hemomancyFormList && g_hemomancyBaseAbility;
+        if (g_hemomancyFormList) info.hemoMax = static_cast<int>(g_hemomancyFormList->forms.size());
+        if (g_hemomancyStage) info.hemoStage = static_cast<int>(g_hemomancyStage->value);
+        if (g_hemomancySteps) info.hemoSteps = g_hemomancySteps->value;
+        if (g_hemomancyStepsToNext) info.hemoStepsToNext = g_hemomancyStepsToNext->value;
+        if (player && g_hemomancyBaseAbility) info.hasBaseAbility = player->HasSpell(g_hemomancyBaseAbility);
+        if (g_hemomancyFormList && info.hemoStage >= 0 && info.hemoStage < info.hemoMax) {
+            if (auto* next = g_hemomancyFormList->forms[info.hemoStage]) info.hemoNextSpell = next->GetName();
+        }
+
+        // --- Strong Blood ("Blue Blood") ---
+        for (auto* s : g_strongBloodSpells) if (s) ++info.strongAbilityCap;
+        if (g_strongBloodBase) info.strongTotal = static_cast<int>(g_strongBloodBase->forms.size());
+        if (g_strongBloodTrack) {
+            // Track is runtime-filled via Papyrus AddForm, so its live entries are script-added temp
+            // forms - GetSize() = static forms + scriptAddedFormCount (see ProcessStrongBlood/HasForm).
+            info.strongRemaining = static_cast<int>(g_strongBloodTrack->forms.size()) +
+                                   static_cast<int>(g_strongBloodTrack->scriptAddedFormCount);
+        }
+        // Read StrongBloodCounter inline (no logging): GetProgressInfo runs every Debug-panel frame,
+        // and the shared helper would spam a log line per frame.
+        if (auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton(); vm && g_sacrosanctQuest) {
+            auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(RE::TESQuest::FORMTYPE, g_sacrosanctQuest);
+            RE::BSTSmartPointer<RE::BSScript::Object> object;
+            if (handle != vm->GetObjectHandlePolicy()->EmptyHandle() &&
+                vm->FindBoundObject(handle, "SCS_FeedManager_Quest", object) && object) {
+                if (auto* prop = object->GetProperty("StrongBloodCounter")) {
+                    info.strongGranted = prop->GetSInt();
+                }
+            }
+        }
+        return info;
+    }
+
     // === HELPER FUNCTIONS ===
     namespace Helpers {
 
@@ -585,8 +630,12 @@ namespace SacrosanctIntegration {
             SKSE::log::info("Helpers::ProcessLethalKill: Killed {}", target->GetName());
         }
 
-        void ProcessHemomancy(RE::Actor* player, bool isLethal) {
-            if (!isLethal || !g_hemomancyFormList || !g_hemomancyStage || !g_hemomancySteps || !g_hemomancyStepsToNext) {
+        void ProcessHemomancy(RE::Actor* player, bool isLethal, bool isSleeping) {
+            // Sacrosanct's ProcessFeed guards Hemomancy with akIsLethal only, because vanilla
+            // Sacrosanct's lethal drains are effectively always on a sleeping/helpless victim - the
+            // wiki's "Draining a sleeping victim". This mod adds lethal COMBAT kill-feeds, so we add
+            // the sleeping gate the Papyrus took for granted (else a battle kill would grant it).
+            if (!isLethal || !isSleeping || !g_hemomancyFormList || !g_hemomancyStage || !g_hemomancySteps || !g_hemomancyStepsToNext) {
                 return;
             }
 
@@ -663,18 +712,10 @@ namespace SacrosanctIntegration {
             auto* targetBase = target->GetActorBase();
             if (!targetBase) return;
 
-            // Check if target's base is in the Strong Blood tracking list
-            bool found = false;
-            int foundIndex = -1;
-            for (uint32_t i = 0; i < g_strongBloodTrack->forms.size(); ++i) {
-                if (g_strongBloodTrack->forms[i] == targetBase) {
-                    found = true;
-                    foundIndex = static_cast<int>(i);
-                    break;
-                }
-            }
-
-            if (!found) return;
+            // StrongBlood_Track is filled at runtime via Papyrus AddForm (InitFeedList), so its
+            // entries live in scriptAddedTempForms, not the static forms array. HasForm walks both
+            // (mirrors Papyrus Find() >= 0); a raw ->forms scan sees an empty list, granting nothing.
+            if (!g_strongBloodTrack->HasForm(targetBase)) return;
 
             // Get current counter value from script property
             int counter = 0;
@@ -959,8 +1000,8 @@ namespace SacrosanctIntegration {
         // === STEP 18: Dispel progression spells ===
         Helpers::DispelFeedDebuffs(player);
 
-        // === STEP 19: Hemomancy progression (lethal only) ===
-        Helpers::ProcessHemomancy(player, context.isLethal);
+        // === STEP 19: Hemomancy progression (lethal drain of a sleeping victim) ===
+        Helpers::ProcessHemomancy(player, context.isLethal, context.isSleeping);
 
         // === STEP 20: Strong Blood quest (unique NPCs) ===
         Helpers::ProcessStrongBlood(player, context.target, g_sacrosanctQuest);

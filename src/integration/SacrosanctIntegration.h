@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 // Sacrosanct Integration - Direct C++ implementation bypassing Papyrus AI-driven state
 // This allows combat feeding without the player being put into AI-driven mode
 namespace SacrosanctIntegration {
@@ -39,6 +41,28 @@ namespace SacrosanctIntegration {
     // Register Embrace prompt callback with FeedPromptSink
     // Call this after Initialize() and after FeedPromptSink is ready
     void RegisterEmbracePrompt();
+
+    // Read-only snapshot of the two feed-reward progressions for the Debug UI. All fields are
+    // zero/false when Sacrosanct is unavailable or the backing form failed to resolve.
+    struct ProgressInfo {
+        bool available = false;
+
+        // Hemomancy - any lethal drain advances this.
+        bool hemomancyReady = false;   // list + base ability resolved (else the feature is dead)
+        bool hasBaseAbility = false;   // player currently carries the spell-manager ability
+        int  hemoStage = 0;            // spells unlocked so far
+        int  hemoMax = 0;              // total spells in the list
+        float hemoSteps = 0.0f;        // drainings banked toward the next unlock
+        float hemoStepsToNext = 0.0f;  // drainings needed for the next unlock
+        std::string hemoNextSpell;     // name of the next spell to unlock ("" if maxed)
+
+        // Strong Blood / "Blue Blood" - feeding on flagged uniques.
+        int strongGranted = 0;         // abilities already earned (StrongBloodCounter)
+        int strongAbilityCap = 0;      // total abilities available (SCS_Spell array length, 7)
+        int strongTotal = 0;           // uniques in the master list
+        int strongRemaining = 0;       // uniques still un-fed (tracking list size)
+    };
+    ProgressInfo GetProgressInfo();
 
     // Direct game state manipulation (vanilla vampire globals)
     // These work with or without Sacrosanct

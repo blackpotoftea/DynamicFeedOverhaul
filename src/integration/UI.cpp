@@ -3,6 +3,7 @@
 #include "../feed/TargetState.h"
 #include "../papyrus/PapyrusCall.h"
 #include "BetterVampiresIntegration.h"
+#include "SacrosanctIntegration.h"
 #include "../utils/log.h"
 #include "../utils/AnimUtil.h"
 #include "../utils/SoundUtil.h"
@@ -248,6 +249,36 @@ void __stdcall UI::Debug::Render() {
                 ImGuiMCP::Text("  Vampire Rank: %s (%d)", rankName, rank);
             }
         }
+    }
+
+    // Sacrosanct feed-reward progression (Hemomancy + Strong Blood / "Blue Blood").
+    // Only meaningful when Sacrosanct is the active overhaul; both advance on the deep C++ feed path.
+    if (SacrosanctIntegration::IsAvailable()) {
+        auto prog = SacrosanctIntegration::GetProgressInfo();
+        ImGuiMCP::Separator();
+        ImGuiMCP::TextDisabled("Sacrosanct Progression");
+
+        // Hemomancy (advances on a lethal drain of a sleeping victim)
+        if (!prog.hemomancyReady) {
+            ImGuiMCP::TextColored(ImGuiMCP::ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
+                "Hemomancy: list/ability not resolved - feature inactive (check init log)");
+        } else {
+            ImGuiMCP::Text("Hemomancy: %d / %d spells", prog.hemoStage, prog.hemoMax);
+            if (prog.hemoStage < prog.hemoMax) {
+                ImGuiMCP::Text("  Next: %s  (%.0f / %.0f drainings)",
+                    prog.hemoNextSpell.empty() ? "?" : prog.hemoNextSpell.c_str(),
+                    prog.hemoSteps, prog.hemoStepsToNext);
+            } else {
+                ImGuiMCP::TextDisabled("  All hemomancy spells unlocked");
+            }
+            RenderBoolStatus("  Spell-manager ability present", prog.hasBaseAbility);
+        }
+
+        // Strong Blood ("Blue Blood") - feeding on flagged uniques
+        ImGuiMCP::Text("Blue Blood: %d / %d abilities  (%d strong targets left)",
+            prog.strongGranted, prog.strongAbilityCap, prog.strongRemaining);
+        ImGuiMCP::SetItemTooltip("Abilities earned by feeding on strong uniques (Ulfric, Elenwen, ...). "
+            "'targets left' is the tracking list; it fills after your first feed once the Blue Blood quest starts.");
     }
 
     // Debug Transformations Section
