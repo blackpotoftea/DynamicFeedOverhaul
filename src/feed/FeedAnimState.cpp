@@ -113,9 +113,10 @@ namespace FeedAnimState {
         PairedAnimation::OnComplete();
         CompositePairedAnimation::OnComplete();
 
-        // After teardown released the restraint: evaluate the victim and any bystanders
-        // who saw the feed and start combat on those who turn hostile (3-tier
-        // relationship/confidence model; deferred so the AI reset settles first).
+        // After teardown released the restraint, settle the victim's own reaction: it reports the
+        // feed as a crime (deferred here so a drained-dry victim, now dead, files no bounty) and,
+        // if it turns hostile under the 3-tier model, starts combat. Deferred so the AI reset
+        // settles first. Bystanders were already handled live during the feed.
         WitnessDetection::ApplyWitnessReactions(RE::PlayerCharacter::GetSingleton(), victim.get());
 
         FeedPromptSink::GetSingleton()->RefreshPrompt();

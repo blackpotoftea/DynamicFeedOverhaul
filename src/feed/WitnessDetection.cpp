@@ -23,11 +23,11 @@ namespace {
     //   kAttack - turns hostile and fights the player (also implies a report)
     enum class WitnessReaction { kIgnore, kReport, kAttack };
 
-    // 3-tier witness model (friendly ignores, hostile attacks, neutral decides by
-    // Confidence). When relationship-awareness is off, fall back to a pure Confidence
-    // decision (report vs attack) and never ignore. The relationship/disposition and
-    // Confidence queries are general actor facts and live in TargetState; this stays
-    // here as the witness policy that consults settings.
+    // 3-tier witness model (friendly ignores - except on-duty guards, who always enforce;
+    // hostile attacks; neutral decides by Confidence). When relationship-awareness is off,
+    // fall back to a pure Confidence decision (report vs attack) and never ignore. The
+    // relationship/disposition and Confidence queries are general actor facts and live in
+    // TargetState; this stays here as the witness policy that consults settings.
     WitnessReaction ClassifyWitness(RE::Actor* witness, RE::Actor* player) {
         if (!witness || !player) return WitnessReaction::kIgnore;
         auto* settings = Settings::GetSingleton();
@@ -360,21 +360,11 @@ namespace WitnessDetection {
                 player->GetName(), target->GetName());
         }
 
-        // Check if the victim themselves should raise alarm (if awake and not a follower).
-        // A friendly victim (kIgnore) won't report you and must NOT short-circuit the
-        // scan below - a nearby non-friendly NPC can still see it and report. An ignore-witness
-        // victim (e.g. a thrall) never self-reports, but is left in the scan so a non-member guard can.
-        if (!target->IsPlayerTeammate() && !IsIgnoredWitness(target) && TargetState::IsConsciousAndAware(target)) {
-            if (ClassifyWitness(target, player) != WitnessReaction::kIgnore) {
-                if (settings->Combat.WitnessDebugLogging) {
-                    SKSE::log::debug("[WitnessDetection] Victim {} is conscious and not a teammate - raising alarm",
-                        target->GetName());
-                }
-                OnDetectedByWitness(player, target, target);  // Victim is their own witness
-                return;  // Victim reported; no need to scan for other witnesses
-            }
-            // Friendly aware victim: skip self-report, fall through to the bystander scan.
-        }
+        // The victim's OWN report is settled at feed end (ApplyWitnessReactions), not here: a
+        // restrained victim can't reach a guard mid-feed, and a killed victim never reports at
+        // all. Deferring it there and gating on survival makes a lethal feed silent (the corpse
+        // files no bounty) without having to predict the composite path's emergent lethality
+        // mid-feed. Bystanders are free actors, so they still report live in the scan below.
 
         // Use the WitnessDetection module to check for witnesses
         RE::Actor* witness = CheckForWitnesses(player, target);
@@ -451,18 +441,32 @@ namespace WitnessDetection {
 
     void ApplyWitnessReactions(RE::Actor* player, RE::Actor* victim) {
         auto* settings = Settings::GetSingleton();
-        if (!settings->Combat.EnableWitnessCombatReaction || !player) return;
+        if (!player || !victim) return;
 
         // A no-crime-faction victim (legal feed) or an ignore-witness victim (e.g. a thrall) never
-        // fights back at release.
+        // reports or fights back at release.
         if (IsFeedCrimeExempt(victim) || IsIgnoredWitness(victim)) return;
 
-        // Victim-only. Bystanders already turned hostile live during the feed (see
-        // TriggerBystanderCombat in PerformWitnessCheck). The victim can only react here, at
-        // feed end, because it was restrained in the paired animation until teardown released
-        // it. Attack only if the awake, surviving, non-follower victim's 3-tier model says so.
-        if (victim && !victim->IsDead() && !victim->IsDisabled() &&
-            !victim->IsPlayerTeammate() && TargetState::IsConsciousAndAware(victim) &&
+        // Victim self-report (crime/bounty), deferred here from the per-tick scan. A restrained
+        // victim can't reach a guard until freed, and a killed victim never reports - so gating on
+        // survival makes a lethal feed silent (the corpse files no bounty) while a survived feed
+        // still reports, without predicting the composite path's emergent lethality mid-feed. Gated
+        // by EnableWitnessDetection (not the combat setting); g_feedReported means a bystander
+        // already settled the feed live, and a hostile victim's death is not a reportable crime.
+        if (settings->Combat.EnableWitnessDetection && !g_feedReported &&
+            !victim->IsDead() && !victim->IsDisabled() && !victim->IsPlayerTeammate() &&
+            !victim->IsHostileToActor(player) && TargetState::IsConsciousAndAware(victim) &&
+            ClassifyWitness(victim, player) != WitnessReaction::kIgnore) {
+            OnDetectedByWitness(player, victim, victim);  // victim is its own witness
+        }
+
+        // Victim combat reaction. Bystanders already turned hostile live during the feed (see
+        // TriggerBystanderCombat in PerformWitnessCheck); the victim can only react here because it
+        // was restrained until teardown. Attack only if the awake, surviving, non-follower victim's
+        // 3-tier model says so.
+        if (settings->Combat.EnableWitnessCombatReaction &&
+            !victim->IsDead() && !victim->IsDisabled() && !victim->IsPlayerTeammate() &&
+            TargetState::IsConsciousAndAware(victim) &&
             ClassifyWitness(victim, player) == WitnessReaction::kAttack) {
             StartCombatDeferred(victim);
         }
