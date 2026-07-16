@@ -119,6 +119,32 @@ if (Test-Path -LiteralPath $bdiSource) {
     Write-Host "BehaviorDataInjector source directory not found: $bdiSource"
 }
 
+# Papyrus detection header: the compiled .pex is what the game loads so other
+# mods can call DynamicFeedOverhaul.IsInstalled(). Ship the .psc source too so
+# integrators can compile against it. Run compile_papyrus.ps1 to (re)build the .pex.
+$scriptsSource = Join-Path $PSScriptRoot 'Scripts'
+$scriptsDest = Join-Path $modRoot 'Scripts'
+$pex = Join-Path $scriptsSource 'DynamicFeedOverhaul.pex'
+
+if (Test-Path -LiteralPath $pex) {
+    if (-not (Test-Path -LiteralPath $scriptsDest)) {
+        New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $pex -Destination (Join-Path $scriptsDest 'DynamicFeedOverhaul.pex') -Force
+
+    $psc = Join-Path $scriptsSource 'Source\DynamicFeedOverhaul.psc'
+    if (Test-Path -LiteralPath $psc) {
+        $pscDest = Join-Path $scriptsDest 'Source'
+        if (-not (Test-Path -LiteralPath $pscDest)) {
+            New-Item -ItemType Directory -Path $pscDest -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $psc -Destination (Join-Path $pscDest 'DynamicFeedOverhaul.psc') -Force
+    }
+    Write-Host "Copied Papyrus detection script to $scriptsDest"
+} else {
+    Write-Warning "Papyrus .pex not found (run compile_papyrus.ps1): $pex - mod presence will not be detectable from Papyrus"
+}
+
 $nemesisSource = Join-Path $PSScriptRoot 'Nemesis_Engine'
 $nemesisDest = Join-Path $modRoot 'Nemesis_Engine'
 

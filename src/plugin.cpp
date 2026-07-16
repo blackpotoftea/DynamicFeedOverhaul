@@ -22,6 +22,7 @@
 #include "feed/PairedAnimation.h"
 #include "feed/CompositePairedAnimation.h"
 #include "feed/WitnessDetection.h"
+#include "papyrus/PapyrusNatives.h"
 
 std::atomic<SkyPromptAPI::ClientID> g_clientID{0};
 
@@ -155,6 +156,11 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
 
     // Register SKSE Menu Framework UI (no-op if framework not installed)
     UI::Register();
+
+    // Expose presence/version natives so other mods can detect this plugin
+    if (auto* papyrus = SKSE::GetPapyrusInterface()) {
+        papyrus->Register(PapyrusNatives::Register);
+    }
 
     auto messaging = SKSE::GetMessagingInterface();
 	if (!messaging->RegisterListener("SKSE", MessageHandler)) {

@@ -518,21 +518,21 @@ namespace PapyrusCall {
         return result;
     }
 
-    // Send DAO_VampireFeed custom mod event to the target actor
-    // Event signature: DAO_VampireFeed(Actor akAttacker, Actor akTarget)
-    inline bool SendDAO_VampireFeedEvent(RE::Actor* attacker, RE::Actor* target) {
+    // Send DFO_VampireFeed custom mod event to the target actor
+    // Event signature: DFO_VampireFeed(Actor akAttacker, Actor akTarget)
+    inline bool SendDFO_VampireFeedEvent(RE::Actor* attacker, RE::Actor* target) {
         if (!attacker) {
-            SKSE::log::error("SendDAO_VampireFeedEvent: attacker is null");
+            SKSE::log::error("SendDFO_VampireFeedEvent: attacker is null");
             return false;
         }
         if (!target) {
-            SKSE::log::error("SendDAO_VampireFeedEvent: target is null");
+            SKSE::log::error("SendDFO_VampireFeedEvent: target is null");
             return false;
         }
 
         auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
         if (!vm) {
-            SKSE::log::error("SendDAO_VampireFeedEvent: VM is null");
+            SKSE::log::error("SendDFO_VampireFeedEvent: VM is null");
             return false;
         }
 
@@ -540,7 +540,7 @@ namespace PapyrusCall {
         auto handle = vm->GetObjectHandlePolicy()->GetHandleForObject(
             RE::Actor::FORMTYPE, target);
         if (handle == vm->GetObjectHandlePolicy()->EmptyHandle()) {
-            SKSE::log::error("SendDAO_VampireFeedEvent: failed to get handle for {}", target->GetName());
+            SKSE::log::error("SendDFO_VampireFeedEvent: failed to get handle for {}", target->GetName());
             return false;
         }
 
@@ -548,9 +548,9 @@ namespace PapyrusCall {
         // Note: SendEvent always takes ownership of args (unlike DispatchMethodCall)
         auto* args = RE::MakeFunctionArguments(std::move(attacker), std::move(target));
 
-        vm->SendEvent(handle, "DAO_VampireFeed", args);
+        vm->SendEvent(handle, "DFO_VampireFeed", args);
 
-        SKSE::log::debug("SendDAO_VampireFeedEvent: sent to {} (FormID: {:X}) with attacker {} (FormID: {:X})",
+        SKSE::log::debug("SendDFO_VampireFeedEvent: sent to {} (FormID: {:X}) with attacker {} (FormID: {:X})",
             target->GetName(), target->GetFormID(), attacker->GetName(), attacker->GetFormID());
         return true;
     }

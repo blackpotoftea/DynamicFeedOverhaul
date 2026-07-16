@@ -89,6 +89,19 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot "$meshRoot\animations\OpenAnimat
 Copy-Into (Join-Path $PSScriptRoot "$meshRoot\behaviors\FNIS_DynamicFeedOverhaul_Behavior.hkx") `
           "$meshRoot\behaviors\FNIS_DynamicFeedOverhaul_Behavior.hkx"
 
+# --- Scripts (Papyrus detection header) ---------------------------------------
+# The compiled .pex is what the game loads for DynamicFeedOverhaul.IsInstalled();
+# ship the .psc source alongside it for integrators. Warn (don't silently omit)
+# if the .pex was never compiled - run compile_papyrus.ps1 first.
+$pex = Join-Path $PSScriptRoot 'Scripts\DynamicFeedOverhaul.pex'
+if (Test-Path -LiteralPath $pex) {
+    Copy-Into $pex 'Scripts\DynamicFeedOverhaul.pex'
+    Copy-Into (Join-Path $PSScriptRoot 'Scripts\Source\DynamicFeedOverhaul.psc') `
+              'Scripts\Source\DynamicFeedOverhaul.psc'
+} else {
+    Write-Warning "Papyrus .pex missing (run compile_papyrus.ps1): $pex - the zip will NOT be Papyrus-detectable"
+}
+
 # Defensive prune: drop any art sources / linker artifacts that slipped into a tree.
 # Filter with Where-Object, not -Include: -Include is silently ignored alongside
 # -LiteralPath, which would match (and delete) every file.

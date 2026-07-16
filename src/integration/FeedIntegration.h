@@ -5,7 +5,7 @@
 // depend on the other to fire the post-bite integration.
 namespace FeedIntegration {
     // Fire the resolved vampire feed integration with the feed's FINAL lethality: the
-    // feed-start narrative events (custom DAO_VampireFeed + SkyrimNet) plus the mechanical
+    // feed-start narrative events (custom DFO_VampireFeed + SkyrimNet) plus the mechanical
     // effects - the mutually-exclusive Sacrosanct/Sacrilege/BetterVampires/Vanilla
     // ProcessFeed (hunger, blood, XP, kill handling) and the vanilla OnVampireFeed event.
     // Also handles werewolf corpse feeding.
@@ -19,7 +19,7 @@ namespace FeedIntegration {
     // or the composite Loop owns the kill).
     void Run(RE::Actor* target, bool isLethal, bool hasOARAnimation);
 
-    // Composite-only: emit ONLY the feed-start narrative events (DAO_VampireFeed +
+    // Composite-only: emit ONLY the feed-start narrative events (DFO_VampireFeed +
     // SkyrimNet vampire_feed) at the instant drinking begins, so NPCs react as feeding
     // starts rather than when it ends. The mechanical ProcessFeed is deliberately deferred
     // to Run() (fired at MarkFeedEnded), because composite lethality is emergent - it only

@@ -94,7 +94,7 @@ namespace {
 }
 
 namespace {
-    // Feed-start narrative: the mod's custom DAO_VampireFeed event and the SkyrimNet
+    // Feed-start narrative: the mod's custom DFO_VampireFeed event and the SkyrimNet
     // vampire_feed event. Emitted once per feed - at feed end (legacy) or at Loop start
     // (composite, via RunFeedStart). killed=isLethal is authoritative for the legacy path;
     // the composite path passes killed=false here and emits its own killed=true from the
@@ -102,7 +102,7 @@ namespace {
     void SendFeedStartEvents(RE::PlayerCharacter* player, RE::Actor* target, bool isLethal) {
         if (!player) return;
 
-        PapyrusCall::SendDAO_VampireFeedEvent(player, target);
+        PapyrusCall::SendDFO_VampireFeedEvent(player, target);
 
         // Gated on the integration + send-events toggle; RegisterVampireFeedEvent no-ops
         // if SkyrimNet isn't installed.
@@ -184,7 +184,7 @@ namespace {
                 // ApplyVanillaVampireFeed(player, vampireQuest);
 
                 bool animationHandlesKill = isLethal;
-                // DISABLE TMP to test
+ 
                 PapyrusCall::CallVampireFeed(vampireQuest, callbackTarget, isLethal, animationHandlesKill);
                 PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
                 if (isLethal && !hasOARAnimation) {
