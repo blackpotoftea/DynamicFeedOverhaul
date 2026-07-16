@@ -94,15 +94,12 @@ namespace {
 }
 
 namespace {
-    // Feed-start narrative: the mod's custom DFO_VampireFeed event and the SkyrimNet
-    // vampire_feed event. Emitted once per feed - at feed end (legacy) or at Loop start
-    // (composite, via RunFeedStart). killed=isLethal is authoritative for the legacy path;
-    // the composite path passes killed=false here and emits its own killed=true from the
-    // drain-dry kill in CompositePairedAnimation.
-    void SendFeedStartEvents(RE::PlayerCharacter* player, RE::Actor* target, bool isLethal) {
+    // Feed-START narrative: the SkyrimNet vampire_feed event, so NPCs react as feeding
+    // begins. Emitted once per feed - at feed end (legacy) or at Loop start (composite,
+    // via RunFeedStart). killed=isLethal is authoritative for the legacy path; the composite
+    // path passes killed=false here and emits its own killed=true from the drain-dry kill.
+    void SendSkyrimNetFeedEvent(RE::PlayerCharacter* player, RE::Actor* target, bool isLethal) {
         if (!player) return;
-
-        PapyrusCall::SendDFO_VampireFeedEvent(player, target);
 
         // Gated on the integration + send-events toggle; RegisterVampireFeedEvent no-ops
         // if SkyrimNet isn't installed.
@@ -110,6 +107,24 @@ namespace {
         if (settings->Integration.EnableSkyrimNet && settings->Integration.SkyrimNetSendEvents) {
             SkyrimNetIntegration::RegisterVampireFeedEvent(player, target, isLethal);
         }
+    }
+
+    // Feed-OUTCOME event: the mod's custom DFO_VampireFeed, fired at feed END for BOTH paths
+    // so listeners know what happened to the victim - including how much health was drained
+    // (0-100). Read from the victim's health at feed end: a lethal victim is dead by now, so
+    // it reads ~100%.
+    void SendFeedOutcomeEvent(RE::PlayerCharacter* player, RE::Actor* target) {
+        if (!player || !target) return;
+
+        float drainedPct = 0.0f;
+        if (auto* av = target->AsActorValueOwner()) {
+            const float max = av->GetPermanentActorValue(RE::ActorValue::kHealth);
+            if (max > 0.0f) {
+                const float cur = av->GetActorValue(RE::ActorValue::kHealth);
+                drainedPct = std::clamp(100.0f * (1.0f - cur / max), 0.0f, 100.0f);
+            }
+        }
+        PapyrusCall::SendDFO_VampireFeedEvent(player, target, drainedPct);
     }
 
     // Mechanical feed effects: werewolf corpse feeding OR the mutually-exclusive vampire
@@ -208,14 +223,18 @@ namespace FeedIntegration {
 
         auto* player = RE::PlayerCharacter::GetSingleton();
 
-        // Emit the feed-start narrative events unless the composite path already sent them
-        // at Loop start (RunFeedStart). This is the single fire point for the legacy path;
-        // for composite it fires only the mechanical effects, now with the true lethality.
+        // SkyrimNet feed-start narrative: the legacy path fires it here; the composite path
+        // already fired it at Loop start (RunFeedStart), so skip to avoid a double send.
         if (!FeedAnimState::GetFeedStartNotified()) {
-            SendFeedStartEvents(player, callbackTarget, isLethal);
+            SendSkyrimNetFeedEvent(player, callbackTarget, isLethal);
         }
 
         RunMechanical(player, callbackTarget, isLethal, hasOARAnimation);
+
+        // DFO_VampireFeed OUTCOME event fires at feed END for BOTH paths - AFTER the
+        // mechanical effects (incl. the vanilla manual-kill fallback) so the victim's
+        // final drained-health percent is what listeners receive.
+        SendFeedOutcomeEvent(player, callbackTarget);
     }
 
     void RunFeedStart(RE::Actor* target, bool isLethal) {
@@ -225,9 +244,9 @@ namespace FeedIntegration {
         }
 
         auto* player = RE::PlayerCharacter::GetSingleton();
-        SendFeedStartEvents(player, target, isLethal);
+        SendSkyrimNetFeedEvent(player, target, isLethal);
         FeedAnimState::SetFeedStartNotified(true);
-        SKSE::log::info("RunFeedStart: feed-start events sent for {} (mechanical ProcessFeed deferred to feed end)",
+        SKSE::log::info("RunFeedStart: SkyrimNet feed-start event sent for {} (DFO outcome + mechanical ProcessFeed deferred to feed end)",
             target->GetName());
     }
 }

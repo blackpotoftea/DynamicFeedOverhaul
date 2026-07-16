@@ -435,7 +435,12 @@ void __stdcall UI::Settings::Render() {
         changed |= ImGuiMCP::Checkbox("Ignore Hunger Check", &settings->Combat.IgnoreHungerCheck);
         changed |= ImGuiMCP::Checkbox("Require Low Health", &settings->Combat.RequireLowHealth);
         if (settings->Combat.RequireLowHealth) {
-            changed |= ImGuiMCP::SliderFloat("Low Health Threshold", &settings->Combat.LowHealthThreshold, 0.05f, 0.75f, "%.0f%%");
+            // stored as 0-1 fraction; drive the slider in percent-space so the "%%" label reads true
+            float lowHealthPct = settings->Combat.LowHealthThreshold * 100.0f;
+            if (ImGuiMCP::SliderFloat("Low Health Threshold", &lowHealthPct, 5.0f, 75.0f, "%.0f%%")) {
+                settings->Combat.LowHealthThreshold = lowHealthPct / 100.0f;
+                changed = true;
+            }
         }
         ImGuiMCP::Separator();
         changed |= ImGuiMCP::Checkbox("Allow Staggered", &settings->Combat.AllowStaggered);

@@ -518,9 +518,10 @@ namespace PapyrusCall {
         return result;
     }
 
-    // Send DFO_VampireFeed custom mod event to the target actor
-    // Event signature: DFO_VampireFeed(Actor akAttacker, Actor akTarget)
-    inline bool SendDFO_VampireFeedEvent(RE::Actor* attacker, RE::Actor* target) {
+    // Send DFO_VampireFeed custom mod event to the target actor. healthPercentDrained is
+    // the victim's drained-health percent at feed end, 0-100 (100 = drained dry / killed).
+    // Event signature: DFO_VampireFeed(Actor akAttacker, Actor akTarget, Float afHealthPercentDrained)
+    inline bool SendDFO_VampireFeedEvent(RE::Actor* attacker, RE::Actor* target, float healthPercentDrained) {
         if (!attacker) {
             SKSE::log::error("SendDFO_VampireFeedEvent: attacker is null");
             return false;
@@ -544,14 +545,14 @@ namespace PapyrusCall {
             return false;
         }
 
-        // Send the event with both attacker and target as arguments
+        // Send the event with attacker, target, and drained-health percent as arguments
         // Note: SendEvent always takes ownership of args (unlike DispatchMethodCall)
-        auto* args = RE::MakeFunctionArguments(std::move(attacker), std::move(target));
+        auto* args = RE::MakeFunctionArguments(std::move(attacker), std::move(target), std::move(healthPercentDrained));
 
         vm->SendEvent(handle, "DFO_VampireFeed", args);
 
-        SKSE::log::debug("SendDFO_VampireFeedEvent: sent to {} (FormID: {:X}) with attacker {} (FormID: {:X})",
-            target->GetName(), target->GetFormID(), attacker->GetName(), attacker->GetFormID());
+        SKSE::log::debug("SendDFO_VampireFeedEvent: sent to {} (FormID: {:X}) with attacker {} (FormID: {:X}), drained {:.1f}%",
+            target->GetName(), target->GetFormID(), attacker->GetName(), attacker->GetFormID(), healthPercentDrained);
         return true;
     }
 
