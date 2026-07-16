@@ -40,7 +40,7 @@
  * 14   | Reset feed timer                 | ✅ DONE - via PlayerVampireQuest.VampireFeed()
  * 15   | Restore H/M/S (100 + level*20)   | ✅ DONE - RestoreActorValue()
  * 16   | Combat cleanup (controls/AI)     | SKIP - animation system handles
- * 17   | Blood Knight stamina cost        | ✅ DONE - combat feed stamina drain
+ * 17   | Blood Knight stamina cost        | ⛔ DISABLED - see note below (STEP 13)
  * 18   | Kiss of Death (sleeping+lethal)  | ✅ DONE - stat bonus
  * 19   | Embrace spell                    | ✅ DONE - CastSpell()
  * 20   | Psychic Vampire perk             | ✅ DONE - perk check + spell
@@ -60,6 +60,12 @@
  * =============================================================================
  *
  * - SetRelationshipRank: No direct C++ API, using faction system instead
+ *
+ * - Blood Knight combat-feed stamina cost (STEP 13): DISABLED. In vanilla Sacrosanct the
+ *   stamina damage is applied right before the H/M/S restore, which cancels it out, so it
+ *   nets to zero at full stamina and is effectively pointless. Left off for now; a real
+ *   combat-feed stamina cost (an actual drain, ideally behind a global setting so it applies
+ *   across integrations) is planned as a later feature.
  *
  * =============================================================================
  * FORM DEPENDENCIES (cached in Initialize())
@@ -955,20 +961,25 @@ namespace SacrosanctIntegration {
 
         // NOTE: Steps 11-12 (hunger stage + feed timer) are handled by PlayerVampireQuest.VampireFeed() above
 
-        // === STEP 13: Restore Health/Magicka/Stamina ===
-        float restoreAmount = 100.0f + static_cast<float>(targetLevel) * 20.0f;
         auto* avOwner = player->AsActorValueOwner();
+
+        // === STEP 13: Blood Knight stamina cost (combat feed) — DISABLED ===
+        // Vanilla Sacrosanct damages stamina here, but in Papyrus order the H/M/S restore below
+        // immediately cancels it (RestoreActorValue clamps the damage modifier at 0), so at full
+        // stamina it nets to zero - pointless. Disabled for now; a real combat-feed stamina cost
+        // (an actual, non-cancelled drain, ideally behind a global setting) is a planned later feature.
+        // if (context.isCombatFeed && g_bloodKnightCost) {
+        //     float staminaCost = g_bloodKnightCost->value;
+        //     avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -staminaCost);
+        //     SKSE::log::info("SacrosanctIntegration: Blood Knight stamina cost: {}", staminaCost);
+        // }
+
+        // === STEP 14: Restore Health/Magicka/Stamina ===
+        float restoreAmount = 100.0f + static_cast<float>(targetLevel) * 20.0f;
         avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreAmount);
         avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, restoreAmount);
         avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restoreAmount);
         SKSE::log::info("SacrosanctIntegration: Restored {:.0f} H/M/S (target level {})", restoreAmount, targetLevel);
-
-        // === STEP 14: Blood Knight stamina cost (combat feed) ===
-        if (context.isCombatFeed && g_bloodKnightCost) {
-            float staminaCost = g_bloodKnightCost->value;
-            avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -staminaCost);
-            SKSE::log::info("SacrosanctIntegration: Blood Knight stamina cost: {}", staminaCost);
-        }
 
         // === STEP 15: Kiss of Death (sleeping + lethal) ===
         // Papyrus uses ModActorValue -> a PERMANENT H/M/S boost, not a heal. The amount is the mod's
