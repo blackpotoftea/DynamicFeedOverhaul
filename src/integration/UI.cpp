@@ -421,6 +421,8 @@ void __stdcall UI::Settings::Render() {
         if (settings->NonCombat.EnableLethalFeed) {
             changed |= ImGuiMCP::SliderFloat("Lethal Hold Duration", &settings->NonCombat.LethalHoldDuration, 1.0f, 15.0f, "%.1f sec");
             changed |= ImGuiMCP::Checkbox("Exclude Essential From Lethal", &settings->NonCombat.ExcludeEssentialFromLethal);
+            changed |= ImGuiMCP::Checkbox("Aware NPC Level Guard", &settings->NonCombat.AwareLethalLevelGuard);
+            ImGuiMCP::SetItemTooltip("Aware victims can only be drain-killed if at least Max Level Difference levels below you; asleep or sneaking-undetected targets are always killable.");
         }
         changed |= ImGuiMCP::Checkbox("Enable Rotation", &settings->NonCombat.EnableRotation);
         changed |= ImGuiMCP::Checkbox("Enable Level Check", &settings->NonCombat.EnableLevelCheck);

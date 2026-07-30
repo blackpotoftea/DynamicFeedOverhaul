@@ -146,6 +146,7 @@ void Settings::LoadINI() {
     NonCombat.EnableLethalFeed = ini.GetBoolValue("NonCombat", "EnableLethalFeed", NonCombat.EnableLethalFeed);
     NonCombat.LethalHoldDuration = static_cast<float>(ini.GetDoubleValue("NonCombat", "LethalHoldDuration", NonCombat.LethalHoldDuration));
     NonCombat.ExcludeEssentialFromLethal = ini.GetBoolValue("NonCombat", "ExcludeEssentialFromLethal", NonCombat.ExcludeEssentialFromLethal);
+    NonCombat.AwareLethalLevelGuard = ini.GetBoolValue("NonCombat", "AwareLethalLevelGuard", NonCombat.AwareLethalLevelGuard);
     NonCombat.EnableRotation = ini.GetBoolValue("NonCombat", "EnableRotation", NonCombat.EnableRotation);
     NonCombat.EnableLevelCheck = ini.GetBoolValue("NonCombat", "EnableLevelCheck", NonCombat.EnableLevelCheck);
     NonCombat.MaxLevelDifference = static_cast<int>(ini.GetLongValue("NonCombat", "MaxLevelDifference", NonCombat.MaxLevelDifference));
@@ -255,11 +256,11 @@ void Settings::LoadINI() {
         Input.FeedKey, Input.FeedGamepadKey, Input.SecondaryKey, Input.SecondaryGamepadKey);
     SKSE::log::info("  [PromptDisplay] RequireWeaponDrawn={}, ShowWhenSneaking={}, RequirePlayerFacing={}, FacingAngleThreshold={}",
         PromptDisplay.RequireWeaponDrawn, PromptDisplay.ShowWhenSneaking, PromptDisplay.RequirePlayerFacing, PromptDisplay.FacingAngleThreshold);
-    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), CompositePaired={}, CompositeFurniture={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, EnableLevelCheck={}, MaxLevelDiff={}",
+    SKSE::log::info("  [NonCombat] Standing={}, Sleeping={}, SittingChair={}, HeightAdjust={} (min={}, max={}), CompositePaired={}, CompositeFurniture={}, EnableLethalFeed={}, LethalHoldDuration={}, ExcludeEssentialFromLethal={}, AwareLethalLevelGuard={}, EnableLevelCheck={}, MaxLevelDiff={}",
         NonCombat.AllowStanding, NonCombat.AllowSleeping, NonCombat.AllowSittingChair,
         NonCombat.EnableHeightAdjust, NonCombat.MinHeightDiff, NonCombat.MaxHeightDiff,
         NonCombat.UseCompositePairedAnimation, NonCombat.UseCompositeFurnitureAnimation, NonCombat.EnableLethalFeed, NonCombat.LethalHoldDuration, NonCombat.ExcludeEssentialFromLethal,
-        NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
+        NonCombat.AwareLethalLevelGuard, NonCombat.EnableLevelCheck, NonCombat.MaxLevelDifference);
     SKSE::log::info("  [Combat] Enabled={}, IgnoreHungerCheck={}, RequireLowHealth={}, LowHealthThreshold={}, AllowStaggered={}, StaggerRequireLowerLevel={}, StaggerMaxLevelDiff={}, VLLowLevelFeed={}, VLLowLevelFeedDiff={}, WitnessDetection={}, WitnessRadius={}, WitnessInterval={}, WitnessDebugLog={}, PromptDelay={}, WitnessCombatReaction={}, AssaultConfThreshold={}, RelationshipAware={}, AssaultBounty={}, IgnoreVampires={}, NoCrimeFeedFactions=[{}], IgnoreWitnessFactions=[{}]",
         Combat.Enabled, Combat.IgnoreHungerCheck, Combat.RequireLowHealth, Combat.LowHealthThreshold, Combat.AllowStaggered,
         Combat.StaggerRequireLowerLevel, Combat.StaggerMaxLevelDifference,
@@ -376,6 +377,8 @@ void Settings::SaveINI() {
         "; Enable hold-to-kill feature: Hold button for LethalHoldDuration to kill non-combat targets");
     ini.SetDoubleValue("NonCombat", "LethalHoldDuration", NonCombat.LethalHoldDuration,
         "; Seconds to hold button for lethal feed (default 5.0)");
+    ini.SetBoolValue("NonCombat", "AwareLethalLevelGuard", NonCombat.AwareLethalLevelGuard,
+        "; Aware victims can only be drain-killed if at least MaxLevelDifference levels below the player; asleep or sneaking-undetected targets are exempt");
     ini.SetBoolValue("NonCombat", "EnableRotation", NonCombat.EnableRotation,
         "; Rotate player and target to face each other before feed animation");
     ini.SetBoolValue("NonCombat", "EnableLevelCheck", NonCombat.EnableLevelCheck,

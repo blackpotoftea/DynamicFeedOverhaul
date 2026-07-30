@@ -157,26 +157,26 @@ void FeedPromptSink::RegisterCorePromptCallback() {
             });
         }
         else {
-            // Non-combat. If this feed will run as a composite (staged drain-toggle)
-            // animation, the kill is governed by how long the player feeds, not by a
-            // hold-to-kill choice — so show a plain single-press "Feed" and let the
-            // composite own lethality. Only the legacy fallback path uses the
-            // EnableLethalFeed hold-to-kill prompt.
-            bool willUseComposite = player &&
-                CompositePairedAnimation::Resolve(player, target).pack != nullptr;
-
+            // Non-combat: hold to kill (legacy lethal path), tap to feed non-lethally.
             bool canLethal = settings->NonCombat.EnableLethalFeed &&
                             !(settings->NonCombat.ExcludeEssentialFromLethal && isEssential);
 
-            if (willUseComposite) {
-                prompts.push_back({
-                    .text = "Feed",
-                    .type = SkyPromptAPI::PromptType::kSinglePress,
-                    .color = 0xFFFFFFFF,
-                    .priority = 1000,
-                    .onAccept = nullptr  // composite controls lethality via the drain toggle
-                });
-            } else if (canLethal) {
+            // An AWARE victim can only be drain-killed if it's meaningfully weaker - at least
+            // MaxLevelDifference levels BELOW the player (same rule as the combat stagger feed) -
+            // otherwise the kill would be a skill-free execution of a peer/stronger foe. Unaware
+            // victims (asleep, or you're sneaking and they haven't detected you) are exempt: that's
+            // a stealth-earned kill, like a vanilla assassination, so no level cap applies.
+            if (canLethal && settings->NonCombat.AwareLethalLevelGuard && player) {
+                const bool undetected = player->IsSneaking() &&
+                    target->RequestDetectionLevel(player, RE::DETECTION_PRIORITY::kNormal) <= 0;
+                const bool unaware = TargetState::IsSleeping(target) || undetected;
+                const int maxLethalLevel = static_cast<int>(player->GetLevel()) - settings->NonCombat.MaxLevelDifference;
+                if (!unaware && static_cast<int>(target->GetLevel()) > maxLethalLevel) {
+                    canLethal = false;
+                }
+            }
+
+            if (canLethal) {
                 prompts.push_back({
                     .text = "Feed (Hold to Kill)",
                     .type = SkyPromptAPI::PromptType::kHold,
@@ -391,7 +391,8 @@ void FeedPromptSink::HandleFeedAccepted() {
     bool isBehind = resolution.isBehind;
     bool isFurnitureFeed = resolution.isFurnitureFeed;
     const Feed::CompositePack* compositePack = resolution.pack;
-    const bool useComposite = (compositePack != nullptr);
+    // Lethal always uses the legacy kill path; composite is non-lethal taps only.
+    const bool useComposite = (compositePack != nullptr) && !wantLethal;
 
     SKSE::log::debug("Target state: {} (targetCombat={}, playerCombat={})", targetState, isInCombat, playerInCombat);
 

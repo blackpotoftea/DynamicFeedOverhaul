@@ -69,6 +69,7 @@ public:
         bool EnableLethalFeed{ true };      // Enable hold-to-kill feature for non-combat targets
         float LethalHoldDuration{ 5.0f };    // Seconds to hold button for lethal feed
         bool ExcludeEssentialFromLethal{ true };  // Don't show kill prompt for Essential actors
+        bool AwareLethalLevelGuard{ true };  // Aware victims lethal only if >=MaxLevelDifference levels below player; asleep/undetected are exempt
         bool EnableRotation{ true };         // Rotate player/target to face each other before feed
         bool EnableLevelCheck{ false };      // Exclude targets above player level (non-combat only)
         int MaxLevelDifference{ 10 };        // Max levels above player to allow feeding
