@@ -1,6 +1,7 @@
 #include "UI.h"
 #include "../Settings.h"
 #include "../feed/TargetState.h"
+#include "../feed/FeedPromptSink.h"
 #include "../papyrus/PapyrusCall.h"
 #include "BetterVampiresIntegration.h"
 #include "SacrosanctIntegration.h"
@@ -381,14 +382,21 @@ void __stdcall UI::Settings::Render() {
         ImGuiMCP::TextDisabled("  E=18, R=19, F=33, G=34, H=35");
         ImGuiMCP::TextDisabled("  Gamepad: A=4096, B=8192, X=16384, Y=32768");
         ImGuiMCP::Separator();
-        changed |= ImGuiMCP::InputInt("Feed Key (Keyboard)", &settings->Input.FeedKey, 1, 16);
+        bool inputChanged = false;
+        inputChanged |= ImGuiMCP::InputInt("Feed Key (Keyboard)", &settings->Input.FeedKey, 1, 16);
         ImGuiMCP::SetItemTooltip("Primary feed key (default: 34 = G)");
-        changed |= ImGuiMCP::InputInt("Feed Key (Gamepad)", &settings->Input.FeedGamepadKey, 4096, 4096);
+        inputChanged |= ImGuiMCP::InputInt("Feed Key (Gamepad)", &settings->Input.FeedGamepadKey, 4096, 4096);
         ImGuiMCP::SetItemTooltip("Primary feed gamepad button (default: 4096 = A)");
-        changed |= ImGuiMCP::InputInt("Secondary Key (Keyboard)", &settings->Input.SecondaryKey, 1, 16);
+        inputChanged |= ImGuiMCP::InputInt("Secondary Key (Keyboard)", &settings->Input.SecondaryKey, 1, 16);
         ImGuiMCP::SetItemTooltip("Secondary prompt key for Embrace (default: 35 = H)");
-        changed |= ImGuiMCP::InputInt("Secondary Key (Gamepad)", &settings->Input.SecondaryGamepadKey, 4096, 4096);
+        inputChanged |= ImGuiMCP::InputInt("Secondary Key (Gamepad)", &settings->Input.SecondaryGamepadKey, 4096, 4096);
         ImGuiMCP::SetItemTooltip("Secondary prompt gamepad button (default: 8192 = B)");
+        if (inputChanged) {
+            changed = true;
+            // Rebuild the live feed/secondary button bindings so a rebind takes effect now.
+            // SaveINI alone only persists them; the running prompt keeps the old buttons otherwise.
+            FeedPromptSink::GetSingleton()->UpdateFeedButtons();
+        }
     }
 
     // Prompt Display Settings
@@ -424,6 +432,8 @@ void __stdcall UI::Settings::Render() {
             changed |= ImGuiMCP::Checkbox("Aware NPC Level Guard", &settings->NonCombat.AwareLethalLevelGuard);
             ImGuiMCP::SetItemTooltip("Aware victims can only be drain-killed if at least Max Level Difference levels below you; asleep or sneaking-undetected targets are always killable.");
         }
+        changed |= ImGuiMCP::Checkbox("Allow Lethal Sleeping Feed", &settings->NonCombat.AllowLethalSleepingFeed);
+        ImGuiMCP::SetItemTooltip("Sleeping victims can be drained to death by the multi-stage feed; off = they always survive.");
         changed |= ImGuiMCP::Checkbox("Enable Rotation", &settings->NonCombat.EnableRotation);
         changed |= ImGuiMCP::Checkbox("Enable Level Check", &settings->NonCombat.EnableLevelCheck);
         if (settings->NonCombat.EnableLevelCheck) {

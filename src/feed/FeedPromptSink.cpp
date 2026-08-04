@@ -156,8 +156,21 @@ void FeedPromptSink::RegisterCorePromptCallback() {
                 }
             });
         }
+        else if (TargetState::IsSleeping(target)) {
+            // Sleeping victims always take the multi-stage composite feed; its lethality is
+            // emergent (drain-dry, gated by AllowLethalSleepingFeed), so there's no hold-to-kill
+            // choice here - just "Feed". The composite owns the kill inline, which is reliable on
+            // a bedded victim (a killmove is not).
+            prompts.push_back({
+                .text = "Feed",
+                .type = SkyPromptAPI::PromptType::kSinglePress,
+                .color = 0xFFFFFFFF,
+                .priority = 1000,
+                .onAccept = nullptr
+            });
+        }
         else {
-            // Non-combat: hold to kill (legacy lethal path), tap to feed non-lethally.
+            // Awake non-combat: hold to kill (legacy lethal path), tap to feed non-lethally.
             bool canLethal = settings->NonCombat.EnableLethalFeed &&
                             !(settings->NonCombat.ExcludeEssentialFromLethal && isEssential);
 

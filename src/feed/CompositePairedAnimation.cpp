@@ -454,9 +454,15 @@ namespace CompositePairedAnimation {
         posLogTimer_ = 0.0f;
         playerReleased_ = false;
         playerOnly_ = pack.playerOnly;
-        // Essential/protected victims are never drained to death when the setting is on.
-        protectedFromKill_ = settings->NonCombat.ExcludeEssentialFromLethal &&
-                             TargetState::IsEssentialOrProtected(target);
+        // Essential/protected victims are never drained to death when the setting is on. A sleeping
+        // victim is also protected unless lethal feeds AND AllowLethalSleepingFeed are both enabled -
+        // that flag is what lets the staged feed drain a sleeper to death (uses the feed-time
+        // snapshot, not live state: EnterFeedState may have already run by now).
+        const bool sleepingLethalAllowed = settings->NonCombat.EnableLethalFeed &&
+                                           settings->NonCombat.AllowLethalSleepingFeed;
+        protectedFromKill_ = (settings->NonCombat.ExcludeEssentialFromLethal &&
+                              TargetState::IsEssentialOrProtected(target)) ||
+                             (FeedAnimState::GetFeedSleeping() && !sleepingLethalAllowed);
 
         SKSE::log::info("[CompositePairedAnimation] Starting staged feed on {} (FormID: {:X}), pack '{}' (playerOnly={})",
             target->GetName(), target->GetFormID(), pack.name, playerOnly_);

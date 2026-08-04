@@ -128,10 +128,11 @@ namespace {
     }
 
     // Mechanical feed effects: werewolf corpse feeding OR the mutually-exclusive vampire
-    // overhaul ProcessFeed (+ vanilla OnVampireFeed event + manual-kill fallback). Runs
-    // with the feed's FINAL lethality, so lethal-only effects land correctly even for the
-    // composite path (whose lethality only resolves at the drain-dry kill).
-    void RunMechanical(RE::PlayerCharacter* player, RE::Actor* callbackTarget, bool isLethal, bool hasOARAnimation) {
+    // overhaul ProcessFeed (+ vanilla OnVampireFeed event). Runs with the feed's FINAL
+    // lethality, so lethal-only effects land correctly even for the composite path (whose
+    // lethality only resolves at the drain-dry kill). A universal post-switch net enforces
+    // the "lethal feed => dead victim" invariant when the animation/overhaul didn't kill.
+    void RunMechanical(RE::PlayerCharacter* player, RE::Actor* callbackTarget, bool isLethal) {
         PapyrusCall::VampireIntegration integration = PapyrusCall::DetectVampireIntegration();
 
         // Werewolf corpse feeding is its own path - not a vampire feed, so it does not run
@@ -169,9 +170,10 @@ namespace {
             return;
         }
 
-        // Each integration owns its COMPLETE handling here: the feed call plus the post-feed
-        // work (vanilla event + manual kill). The 4th CallVampireFeed arg (animationHandlesKill
-        // = isLethal) tells the integration the kill-move animation does the kill on a lethal feed.
+        // Each integration runs its own feed call plus any per-integration post-feed work (e.g. the
+        // vanilla OnVampireFeed event); the shared lethal-kill net after the switch guarantees death.
+        // The 4th CallVampireFeed arg (animationHandlesKill = isLethal) tells the integration the
+        // kill-move animation does the kill on a lethal feed, so it doesn't kill twice.
         switch (integration) {
             case PapyrusCall::VampireIntegration::Sacrosanct:
                 // Sacrosanct's ProcessFeed performs the feed and owns the kill.
@@ -184,29 +186,31 @@ namespace {
                 break;
 
             case PapyrusCall::VampireIntegration::Sacrilege:
-                // Sacrilege's ProcessFeed only handles the kill in some cases; manual fallback otherwise.
+                // Sacrilege's ProcessFeed only handles the kill in some cases; the universal net below covers the rest.
                 PapyrusCall::CallVampireFeed(vampireQuest, callbackTarget, isLethal, isLethal);
-                if (isLethal && !hasOARAnimation) {
-                    SKSE::log::info("No OAR animation found - manually killing target after animation");
-                    AnimUtil::KillTarget(callbackTarget);
-                }
                 break;
 
             case PapyrusCall::VampireIntegration::Vanilla:
                 // Vanilla: replicate VampireFeed() in C++ (no Papyrus VampireFeed dispatch, so the
-                // paired feed idle is never interrupted), fire the vanilla OnVampireFeed event,
-                // then the manual-kill fallback.
+                // paired feed idle is never interrupted), fire the vanilla OnVampireFeed event.
+                // The kill (if any) is left to the universal net below.
                 // ApplyVanillaVampireFeed(player, vampireQuest);
 
                 bool animationHandlesKill = isLethal;
  
                 PapyrusCall::CallVampireFeed(vampireQuest, callbackTarget, isLethal, animationHandlesKill);
                 PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
-                if (isLethal && !hasOARAnimation) {
-                    SKSE::log::info("No OAR animation found - manually killing target after animation");
-                    AnimUtil::KillTarget(callbackTarget);
-                }
                 break;
+        }
+
+        // Universal net: a lethal feed must leave the victim dead. If the overhaul deferred the kill
+        // to an animation that didn't land (killmove on an odd target state, or a missing OAR clip),
+        // finish it here. Skip Essential actors - they're engine-protected from death and a killmove
+        // would never have killed them either (Protected stays killable: the player may kill those).
+        // The IsDead guard means a kill the animation/overhaul already did isn't repeated.
+        if (isLethal && callbackTarget && !callbackTarget->IsDead() && !callbackTarget->IsEssential()) {
+            SKSE::log::info("Lethal feed left target alive - enforcing kill");
+            AnimUtil::KillTarget(callbackTarget);
         }
     }
 }
@@ -229,7 +233,7 @@ namespace FeedIntegration {
             SendSkyrimNetFeedEvent(player, callbackTarget, isLethal);
         }
 
-        RunMechanical(player, callbackTarget, isLethal, hasOARAnimation);
+        RunMechanical(player, callbackTarget, isLethal);
 
         // DFO_VampireFeed OUTCOME event fires at feed END for BOTH paths - AFTER the
         // mechanical effects (incl. the vanilla manual-kill fallback) so the victim's
