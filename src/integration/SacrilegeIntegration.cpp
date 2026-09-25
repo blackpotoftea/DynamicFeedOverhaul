@@ -218,7 +218,8 @@ namespace SacrilegeIntegration {
 
         // Spells
         g_vampireLordPower = RE::TESForm::LookupByEditorID<RE::SpellItem>("SQL_VampireLord_Power_Spell_VampireLord");
-        g_dunmerProcSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SQL_Racial_Spell_Dunmer_Proc");
+        // EditorID is DarkElf_Proc; the quest's Papyrus property spelling (Dunmer_Proc) is not the form's EDID.
+        g_dunmerProcSpell = RE::TESForm::LookupByEditorID<RE::SpellItem>("SQL_Racial_Spell_DarkElf_Proc");
 
         // Effects
         g_dunmerEffect = RE::TESForm::LookupByEditorID<RE::EffectSetting>("SQL_Racial_Effect_Dunmer_Ab");
@@ -278,7 +279,7 @@ namespace SacrilegeIntegration {
 
         // Spells
         SKSE::log::debug("  SQL_VampireLord_Power_Spell_VampireLord: {}", g_vampireLordPower ? "found" : "missing");
-        SKSE::log::debug("  SQL_Racial_Spell_Dunmer_Proc: {}", g_dunmerProcSpell ? "found" : "missing");
+        SKSE::log::debug("  SQL_Racial_Spell_DarkElf_Proc: {}", g_dunmerProcSpell ? "found" : "missing");
 
         // Effects
         SKSE::log::debug("  SQL_Racial_Effect_Dunmer_Ab: {}", g_dunmerEffect ? "found" : "missing");
