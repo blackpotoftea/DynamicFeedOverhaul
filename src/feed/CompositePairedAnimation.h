@@ -57,9 +57,14 @@ namespace CompositePairedAnimation {
     //   VFD_GoToEnd / VFD_VampireFeedTrigger -> Intro -> Loop
     //   VFD_GoBackEnd                        -> Exit  -> Drained
     //   VFD_DrainedEnd                       -> Drained -> Done
+    //   weaponSheathe                        -> releases the Settle hold below
     void OnIntroEnd();
     void OnExitEnd();
     void OnDrainedEnd();
+
+    // Settle holds until the sheathe event lands; no timeout.
+    void OnWeaponSheathed();
+    bool IsWaitingForSheathe();
 
     // Idempotent teardown. Called by FeedAnimState::MarkFeedEnded(); must NOT
     // call MarkFeedEnded() itself (would recurse).

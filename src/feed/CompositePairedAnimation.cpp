@@ -48,6 +48,9 @@ namespace CompositePairedAnimation {
         // otherwise stale IK visibly spins the actor on the first frame.
         int settleFramesRemaining_ = 0;
 
+        // Settle holds while set; cleared by the sheathe event, not GetWeaponState().
+        bool waitingForSheathe_ = false;
+
         // Selected clip set for this feed.
         Feed::CompositePack pack_{};
 
@@ -108,8 +111,10 @@ namespace CompositePairedAnimation {
         void RedrawPlayerWeapon(RE::Actor* player) {
             if (!player || !wasWeaponDrawn_) return;
             wasWeaponDrawn_ = false;
-            SKSE::log::info("[CompositePairedAnimation] Redrawing player weapon (was drawn at feed start)");
-            AnimUtil::redrawWeapon(player);
+            SKSE::log::info("[CompositePairedAnimation] Arming player weapon redraw (was drawn at feed start)");
+            // Armed, not issued: a one-shot draw here is dropped mid-transition, same as on
+            // the paired path's feed end.
+            AnimUtil::ArmWeaponRedraw();
         }
 
         // Debug tracer: log the target NPC's current world position with a label,
@@ -229,6 +234,7 @@ namespace CompositePairedAnimation {
             stage_ = Stage::Idle;
             stageTimer_ = 0.0f;
             settleFramesRemaining_ = 0;
+            waitingForSheathe_ = false;
 
             SKSE::log::info("[CompositePairedAnimation] Teardown");
             auto* player = RE::PlayerCharacter::GetSingleton();
@@ -491,6 +497,7 @@ namespace CompositePairedAnimation {
         SKSE::log::info("[CompositePairedAnimation] Player weapon drawn state at feed start: {}", wasWeaponDrawn_);
         if (wasWeaponDrawn_) {
             player->DrawWeaponMagicHands(false);
+            waitingForSheathe_ = true;
         }
 
         // Show the victim's health bar for the whole feed (drains live as HP
@@ -588,6 +595,15 @@ namespace CompositePairedAnimation {
         AdvanceToLoop();
     }
 
+    bool IsWaitingForSheathe() { return waitingForSheathe_; }
+
+    // Releases the Settle hold once the graph finishes the sheathe Play() requested.
+    void OnWeaponSheathed() {
+        if (!waitingForSheathe_) return;
+        waitingForSheathe_ = false;
+        SKSE::log::info("[CompositePairedAnimation] Sheathe event -> releasing Settle hold");
+    }
+
     // Event-driven end of the Exit (GoBack) clip (AnimEventSink -> VFD_GoBackEnd).
     // Advances Exit -> Drained the instant the step-back clip ends. No-op outside
     // Exit; CompositeExitDuration is the fallback.
@@ -632,6 +648,7 @@ namespace CompositePairedAnimation {
         stageTimer_ = 0.0f;
         gulpTimer_ = 0.0f;
         settleFramesRemaining_ = 0;
+        waitingForSheathe_ = false;
         posLogTimer_ = 0.0f;
         feedTargetHandle_ = {};
         feedTargetFormID_ = 0;
@@ -668,8 +685,10 @@ namespace CompositePairedAnimation {
             LogTargetPos("Tick");
         }
 
-        // Settle: frame countdown, then fire the Intro clips.
+        // Settle: hold for the sheathe, then the frame countdown, then fire the Intro clips.
         if (stage_ == Stage::Settle) {
+            if (waitingForSheathe_) return;
+
             if (settleFramesRemaining_ > 0) {
                 --settleFramesRemaining_;
                 if (settleFramesRemaining_ == 0) {

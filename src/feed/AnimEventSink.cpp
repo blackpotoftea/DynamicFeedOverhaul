@@ -26,6 +26,14 @@ RE::BSEventNotifyControl AnimEventSink::ProcessEvent(
 
     const auto& tag = event->tag;
 
+    // BeginWeaponSheathe fires at the start; WeaponSheathe is the one that means done.
+    if (CompositePairedAnimation::IsWaitingForSheathe()) {
+        SKSE::log::debug("[sheathe-wait] anim event: {}", tag.c_str());
+        if (tag == "WeaponSheathe") {
+            SKSE::GetTaskInterface()->AddTask([] { CompositePairedAnimation::OnWeaponSheathed(); });
+        }
+    }
+
     // Composite staged feed owns its own lifecycle (driven by Tick() timers),
     // and its intro/loop/exit clips may emit PairEnd/IdleStop mid-sequence, so
     // ignore those here while a composite feed is active to avoid an early teardown.
