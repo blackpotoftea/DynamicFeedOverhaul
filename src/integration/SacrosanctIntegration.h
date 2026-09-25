@@ -25,6 +25,11 @@ namespace SacrosanctIntegration {
     // Check if Sacrosanct is installed and available
     bool IsAvailable();
 
+    // Move the Blue Blood quest to stage 10 if it is below it, so its fragment fills the
+    // Strong Blood tracking list. Call at feed START: the SetStage is an async Papyrus
+    // dispatch and the list must be populated before ProcessFeed reads it. No-op otherwise.
+    void PrimeBlueBloodQuest();
+
     // Process a vampire feed using direct C++ implementation
     // This replicates what Sacrosanct's ProcessFeed does WITHOUT calling StartVampireFeed
     // Returns true if feed was processed successfully
@@ -61,6 +66,8 @@ namespace SacrosanctIntegration {
         int strongAbilityCap = 0;      // total abilities available (SCS_Spell array length, 7)
         int strongTotal = 0;           // uniques in the master list
         int strongRemaining = 0;       // uniques still un-fed (tracking list size)
+        int strongQuestStage = 0;      // SCS_FeedManager_Quest stage; the reward needs 10
+        bool strongQuestRunning = false;  // a stopped quest ignores SetStage, so the list never fills
     };
     ProgressInfo GetProgressInfo();
 

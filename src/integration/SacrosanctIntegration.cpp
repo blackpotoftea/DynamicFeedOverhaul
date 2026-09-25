@@ -133,6 +133,7 @@ namespace SacrosanctIntegration {
         // Messages
         RE::BGSMessage* g_msgHemomancyStageUp = nullptr;
         RE::BGSMessage* g_msgStrongBlood = nullptr;
+        RE::BGSMessage* g_helpStrongBlood = nullptr;  // SCS_Help_StrongBlood
         RE::BGSMessage* g_msgBloodBond = nullptr;
 
         // Sounds: the vanilla feed sound now lives in SoundUtil (shared, not
@@ -224,7 +225,8 @@ namespace SacrosanctIntegration {
         // Strong Blood spell rewards (indices 0-6)
         RE::SpellItem* g_strongBloodSpells[7] = { nullptr };
 
-        // NOTE: StrongBloodCounter is a script-local property on SCS_FeedManager_Quest, not a global
+        // NOTE: StrongBloodCounter is a script VARIABLE on SCS_FeedManager_Quest - not a property,
+        // not a global, and absent from the ESP (see FindScriptMember).
         // Access via GetScriptPropertyInt/SetScriptPropertyInt helper functions
 
         // Factions - Blood Bond
@@ -282,6 +284,7 @@ namespace SacrosanctIntegration {
         // Messages
         g_msgHemomancyStageUp = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_HemomancyStageUp");
         g_msgStrongBlood = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_StrongBlood");
+        g_helpStrongBlood = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Help_StrongBlood");
         g_msgBloodBond = RE::TESForm::LookupByEditorID<RE::BGSMessage>("SCS_Mechanics_Message_BloodBond");
 
         // Sounds: vanilla NPCHumanVampireFeed now resolved lazily by SoundUtil.
@@ -379,7 +382,7 @@ namespace SacrosanctIntegration {
         g_strongBloodSpells[5] = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_StrongBlood_Spell_05_Ab");
         g_strongBloodSpells[6] = RE::TESForm::LookupByEditorID<RE::SpellItem>("SCS_Abilities_StrongBlood_Spell_06_Ab");
 
-        // NOTE: StrongBloodCounter is accessed via script property, not cached here
+        // NOTE: StrongBloodCounter is read off the bound script object at runtime, not cached here
 
         // Factions - Blood Bond
         g_currentFollowerFaction = RE::TESForm::LookupByEditorID<RE::TESFaction>("CurrentFollowerFaction");
@@ -490,6 +493,7 @@ namespace SacrosanctIntegration {
         SKSE::log::debug("    HemomancyStageUp: {}", g_msgHemomancyStageUp ? "found" : "missing");
         SKSE::log::debug("    Hemomancy_HelpMessage: {}", g_hemomancyHelpMessage ? "found" : "missing");
         SKSE::log::debug("    StrongBlood: {}", g_msgStrongBlood ? "found" : "missing");
+        SKSE::log::debug("    StrongBlood_HelpMessage: {}", g_helpStrongBlood ? "found" : "missing");
         SKSE::log::debug("    BloodBond: {}", g_msgBloodBond ? "found" : "missing");
         SKSE::log::debug("    DLC1BloodPointsMsg: {}", g_dlc1BloodPointsMsg ? "found" : "missing");
         SKSE::log::debug("    DLC1PerkEarnedMsg: {}", g_dlc1PerkEarnedMsg ? "found" : "missing");
@@ -506,7 +510,7 @@ namespace SacrosanctIntegration {
 
         // === SPELLS - STRONG BLOOD ===
         SKSE::log::debug("  [Spells - Strong Blood]");
-        SKSE::log::debug("    StrongBloodCounter: (script property, accessed at runtime)");
+        SKSE::log::debug("    StrongBloodCounter: (script variable, read at runtime)");
         SKSE::log::debug("    StrongBlood_Spell_00: {}", g_strongBloodSpells[0] ? "found" : "missing");
         SKSE::log::debug("    StrongBlood_Spell_01: {}", g_strongBloodSpells[1] ? "found" : "missing");
         SKSE::log::debug("    StrongBlood_Spell_02: {}", g_strongBloodSpells[2] ? "found" : "missing");
@@ -558,9 +562,16 @@ namespace SacrosanctIntegration {
         if (g_strongBloodBase) info.strongTotal = static_cast<int>(g_strongBloodBase->forms.size());
         if (g_strongBloodTrack) {
             // Track is runtime-filled via Papyrus AddForm, so its live entries are script-added temp
-            // forms - GetSize() = static forms + scriptAddedFormCount (see ProcessStrongBlood/HasForm).
+            // forms. Count that array itself - scriptAddedFormCount is a separate counter and is not
+            // its length, so reading it can report an empty list that HasForm still matches against.
             info.strongRemaining = static_cast<int>(g_strongBloodTrack->forms.size()) +
-                                   static_cast<int>(g_strongBloodTrack->scriptAddedFormCount);
+                (g_strongBloodTrack->scriptAddedTempForms
+                     ? static_cast<int>(g_strongBloodTrack->scriptAddedTempForms->size())
+                     : 0);
+        }
+        if (g_sacrosanctQuest) {
+            info.strongQuestStage = g_sacrosanctQuest->GetCurrentStageID();
+            info.strongQuestRunning = g_sacrosanctQuest->IsRunning();
         }
         // Read StrongBloodCounter inline (no logging): GetProgressInfo runs every Debug-panel frame,
         // and the shared helper would spam a log line per frame.
@@ -569,8 +580,8 @@ namespace SacrosanctIntegration {
             RE::BSTSmartPointer<RE::BSScript::Object> object;
             if (handle != vm->GetObjectHandlePolicy()->EmptyHandle() &&
                 vm->FindBoundObject(handle, "SCS_FeedManager_Quest", object) && object) {
-                if (auto* prop = object->GetProperty("StrongBloodCounter")) {
-                    info.strongGranted = prop->GetSInt();
+                if (auto* var = VampireIntegrationUtils::FindScriptMember(object.get(), "StrongBloodCounter")) {
+                    info.strongGranted = var->GetSInt();
                 }
             }
         }
@@ -723,7 +734,8 @@ namespace SacrosanctIntegration {
             // (mirrors Papyrus Find() >= 0); a raw ->forms scan sees an empty list, granting nothing.
             if (!g_strongBloodTrack->HasForm(targetBase)) return;
 
-            // Get current counter value from script property
+            // StrongBloodCounter is a bare script variable on SCS_FeedManager_Quest, not an auto
+            // property - the helper falls back to GetVariable, a plain GetProperty finds nothing.
             int counter = 0;
             if (!GetScriptPropertyInt(sacrosanctQuest, "SCS_FeedManager_Quest", "StrongBloodCounter", counter)) {
                 SKSE::log::warn("Helpers: Strong Blood - failed to read StrongBloodCounter property");
@@ -743,7 +755,10 @@ namespace SacrosanctIntegration {
                 return;
             }
 
-            // Show message
+            // Papyrus shows the tutorial note first, then the reward notification.
+            if (g_helpStrongBlood) {
+                VampireIntegrationUtils::ShowAsHelpMessage(g_helpStrongBlood, "SCS_StrongBloodEvent", 5.0f, 0.0f, 1);
+            }
             ShowMessage(g_msgStrongBlood);
 
             // Add the reward spell
@@ -871,6 +886,39 @@ namespace SacrosanctIntegration {
 
     }  // namespace Helpers
 
+    void PrimeBlueBloodQuest() {
+        if (!g_sacrosanctAvailable || !g_sacrosanctQuest) return;
+
+        // Only when this feed would actually take the deep Sacrosanct path - otherwise a player
+        // running another overhaul with Sacrosanct still installed gets a stray Blue Blood entry in
+        // their journal. The combat sub-gate is not checkable yet at feed start, and does not matter:
+        // Sacrosanct's own Papyrus ProcessFeed sets the same stage moments later on that path.
+        const auto& cfg = Settings::GetSingleton()->Integration;
+        if (!cfg.EnableSacrosanct || !cfg.DeepSacrosanctIntegration) return;
+
+        // Blue Blood's tracking list is filled by the stage-10 quest fragment (InitFeedList), and
+        // SetStage is an async Papyrus dispatch - doing it in ProcessFeed leaves the list still
+        // empty when ProcessStrongBlood reads it a few instructions later. Priming at feed start
+        // gives the fragment the whole feed to run. Only below stage 10: re-running the stage would
+        // re-add all 13 uniques, and a duplicate survives the post-reward RemoveAddedForm.
+        uint16_t stage = g_sacrosanctQuest->GetCurrentStageID();
+        if (stage >= 10) return;
+
+        // The quest is Start Game Enabled and nothing in Sacrosanct starts it, so on a save that
+        // predates the mod it never ran - and SetStage on a stopped quest does nothing, which leaves
+        // the tracking list empty forever. Start it first; both dispatches run in queue order.
+        // If quest start-up (13 unique-actor aliases) outlasts this feed, ProcessFeed's step 1
+        // retries the SetStage at feed end and the next feed sees the filled list.
+        bool wasRunning = g_sacrosanctQuest->IsRunning();
+        if (!wasRunning) {
+            Helpers::CallPapyrusMethod(g_sacrosanctQuest, "Quest", "Start");
+        }
+
+        Helpers::SetQuestStage(g_sacrosanctQuest, 10);
+        SKSE::log::info("SacrosanctIntegration: Primed Blue Blood quest to stage 10 (was stage {}, running={})",
+            stage, wasRunning);
+    }
+
     bool ProcessFeed(const FeedContext& context) {
         if (!context.target) {
             SKSE::log::error("SacrosanctIntegration::ProcessFeed: target is null");
@@ -891,13 +939,9 @@ namespace SacrosanctIntegration {
         bool targetIsVampire = g_vampireKeyword && context.target->HasKeyword(g_vampireKeyword);
 
         // === STEP 1: Quest stage check (SetStage(10) if < 10) ===
-        if (g_sacrosanctQuest) {
-            uint16_t currentStage = g_sacrosanctQuest->GetCurrentStageID();
-            if (currentStage < 10) {
-                Helpers::SetQuestStage(g_sacrosanctQuest, 10);
-                SKSE::log::info("SacrosanctIntegration: Set quest stage to 10 (was {})", currentStage);
-            }
-        }
+        // Already done at feed start; this is the idempotent retry. If quest start-up outlasted
+        // that call the stage did not take, and landing it here means the next feed sees a filled list.
+        PrimeBlueBloodQuest();
 
         // === STEP 2: DLC1VampireTurn.PlayerBitesMe ===
         CallPreFeedPapyrus(context.target);

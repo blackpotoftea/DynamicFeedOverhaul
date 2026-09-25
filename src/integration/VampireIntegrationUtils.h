@@ -32,7 +32,9 @@ namespace VampireIntegrationUtils {
     // FormList
     bool FormListRemoveForm(RE::BGSListForm* formList, RE::TESForm* form);
 
-    // Script properties
+    // Script properties. The Get/Set helpers resolve a plain script variable too, since Papyrus
+    // stores auto-properties and bare script variables in separate tables.
+    RE::BSScript::Variable* FindScriptMember(RE::BSScript::Object* object, const char* memberName);
     bool GetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int& outValue);
     bool GetScriptPropertyString(RE::TESQuest* quest, const char* scriptName, const char* propertyName, std::string& outValue);
     bool SetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int value);

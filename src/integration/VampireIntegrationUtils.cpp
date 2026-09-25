@@ -193,6 +193,14 @@ namespace VampireIntegrationUtils {
         return enabled && hasStage;
     }
 
+    RE::BSScript::Variable* FindScriptMember(RE::BSScript::Object* object, const char* memberName) {
+        if (!object) return nullptr;
+        // A Papyrus `Int Foo = 0` with no `property` keyword is a plain script variable: it is absent
+        // from the property table and only GetVariable finds it (Sacrosanct's StrongBloodCounter).
+        if (auto* prop = object->GetProperty(memberName)) return prop;
+        return object->GetVariable(memberName);
+    }
+
     bool GetScriptPropertyInt(RE::TESQuest* quest, const char* scriptName, const char* propertyName, int& outValue) {
         if (!quest) return false;
 
@@ -214,7 +222,7 @@ namespace VampireIntegrationUtils {
             return false;
         }
 
-        auto* property = object->GetProperty(propertyName);
+        auto* property = FindScriptMember(object.get(), propertyName);
         if (!property) {
             SKSE::log::warn("VampireIntegrationUtils::GetScriptPropertyInt: Property '{}' not found", propertyName);
             return false;
@@ -246,7 +254,7 @@ namespace VampireIntegrationUtils {
             return false;
         }
 
-        auto* property = object->GetProperty(propertyName);
+        auto* property = FindScriptMember(object.get(), propertyName);
         if (!property || !property->IsString()) {
             SKSE::log::warn("VampireIntegrationUtils::GetScriptPropertyString: Property '{}' not found or not a string", propertyName);
             return false;
@@ -278,7 +286,7 @@ namespace VampireIntegrationUtils {
             return false;
         }
 
-        auto* property = object->GetProperty(propertyName);
+        auto* property = FindScriptMember(object.get(), propertyName);
         if (!property) {
             SKSE::log::warn("VampireIntegrationUtils::SetScriptPropertyInt: Property '{}' not found", propertyName);
             return false;
@@ -310,7 +318,7 @@ namespace VampireIntegrationUtils {
             return false;
         }
 
-        auto* property = object->GetProperty(propertyName);
+        auto* property = FindScriptMember(object.get(), propertyName);
         if (!property) {
             SKSE::log::warn("VampireIntegrationUtils::SetScriptPropertyFloat: Property '{}' not found", propertyName);
             return false;

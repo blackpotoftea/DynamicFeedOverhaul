@@ -280,6 +280,10 @@ void __stdcall UI::Debug::Render() {
             prog.strongGranted, prog.strongAbilityCap, prog.strongRemaining);
         ImGuiMCP::SetItemTooltip("Abilities earned by feeding on strong uniques (Ulfric, Elenwen, ...). "
             "'targets left' is the tracking list; it fills after your first feed once the Blue Blood quest starts.");
+        ImGuiMCP::Text("  Quest: stage %d, running=%s", prog.strongQuestStage,
+            prog.strongQuestRunning ? "yes" : "NO");
+        ImGuiMCP::SetItemTooltip("The reward only fires at stage 10, and the stage-10 fragment is what fills "
+            "the tracking list. A stopped quest ignores SetStage - typical on a save older than Sacrosanct.");
     }
 
     // Debug Transformations Section

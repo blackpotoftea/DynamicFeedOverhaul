@@ -4,6 +4,7 @@
 #include "feed/PairedAnimation.h"
 #include "feed/CompositePairedAnimation.h"
 #include "integration/FeedIntegration.h"
+#include "integration/SacrosanctIntegration.h"
 #include "feed/FeedHealthBarOverlay.h"
 #include "feed/WitnessDetection.h"
 #include "Settings.h"
@@ -57,6 +58,10 @@ namespace FeedAnimState {
         feedStartNotified.store(false, std::memory_order_release);
         SetSaveBlock(true);  // before any restrain can land
         SKSE::log::info("========== FEED STARTED ==========");
+
+        // Sacrosanct only fills its Blue Blood tracking list from a quest fragment, so the
+        // stage has to be set now for the reward check at feed end to see anything.
+        SacrosanctIntegration::PrimeBlueBloodQuest();
 
         // Apply time slowdown if enabled and player is in combat
         auto* settings = Settings::GetSingleton();
