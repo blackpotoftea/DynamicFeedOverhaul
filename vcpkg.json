@@ -3,7 +3,7 @@
     "name": "skyprompt-vampire-feed",
     "version-string": "0.0.1",
     "dependencies": [
-        "commonlibsse-ng-fork",
+        "commonlibvr-minll",
         "simpleini",
         "nlohmann-json",
         "skyprompt-api",

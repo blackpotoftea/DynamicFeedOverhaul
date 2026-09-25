@@ -358,13 +358,13 @@ namespace SacrilegeIntegration {
         auto* avOwner = player->AsActorValueOwner();
         if (g_fountainOfBloodPerk && player->HasPerk(g_fountainOfBloodPerk) && context.isLethal) {
             // Fountain of Blood: 3x restore to all stats on lethal
-            avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreAmount * 3.0f);
-            avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, restoreAmount * 3.0f);
-            avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restoreAmount * 3.0f);
+            avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreAmount * 3.0f);
+            avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, restoreAmount * 3.0f);
+            avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restoreAmount * 3.0f);
             SKSE::log::info("SacrilegeIntegration: Fountain of Blood - restored {:.0f} x3 to all stats", restoreAmount);
         } else {
             // Normal: only restore health
-            avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreAmount);
+            avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreAmount);
             SKSE::log::info("SacrilegeIntegration: Restored {:.0f} Health", restoreAmount);
         }
 

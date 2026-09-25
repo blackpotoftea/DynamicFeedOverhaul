@@ -1090,7 +1090,7 @@ namespace AnimUtil {
         pickData.ray.quad.m128_f32[2] = dir.z;
         pickData.ray.quad.m128_f32[3] = 1.0f;
 
-        pickData.rayHitCollectorA8 = reinterpret_cast<RE::hkpClosestRayHitCollector*>(&collector);
+        pickData.closestRayHitCollector = reinterpret_cast<RE::hkpClosestRayHitCollector*>(&collector);
 
         bhkWorld->PickObject(pickData);
 
@@ -1490,9 +1490,9 @@ namespace AnimUtil {
             if (damage <= 0.0f) return;
 
             // Negative restore = damage that bypasses armor (matches SacrosanctIntegration pattern)
-            avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage,
-                                       RE::ActorValue::kHealth,
-                                       -damage);
+            avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage,
+                                   RE::ActorValue::kHealth,
+                                   -damage);
 
             SKSE::log::debug("DrainHealthChunk: {} HP {:.1f} -> {:.1f} (-{:.1f}, {:.1f}%, floor={})",
                              actor->GetName(), currentHP, newHP, damage, percent, floorAtOne ? 1 : 0);

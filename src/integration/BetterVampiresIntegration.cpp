@@ -327,7 +327,7 @@ namespace BetterVampiresIntegration {
                 if (!text) return;
 
                 std::string msg = std::to_string(a_result.GetSInt()) + text;
-                RE::DebugNotification(msg.c_str());
+                RE::SendHUDMessage::ShowHUDMessage(msg.c_str());
             }
             bool CanSave() const override { return false; }
             void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
@@ -410,7 +410,7 @@ namespace BetterVampiresIntegration {
             if (!typeInfo || !TypeHasFunction(typeInfo, "NormalStagesSatiation")) {
                 SKSE::log::warn("BetterVampiresIntegration: {} is not Better Vampires' script - another mod "
                     "overrides it; satiation/rank progression will not apply", kScriptName);
-                RE::DebugNotification("Another mod overrides Better Vampires' script - check your load order");
+                RE::SendHUDMessage::ShowHUDMessage("Another mod overrides Better Vampires' script - check your load order");
             }
 
             // Dispatched Papyrus functions - a renamed/absent one fails silently at feed time
@@ -648,7 +648,7 @@ namespace BetterVampiresIntegration {
 
     void ShowPendingNotification() {
         if (const char* msg = g_pendingNotification.exchange(nullptr)) {
-            RE::DebugNotification(msg);
+            RE::SendHUDMessage::ShowHUDMessage(msg);
         }
     }
 
@@ -786,14 +786,14 @@ namespace BetterVampiresIntegration {
             // 22s window (a second feed drains the victim dry), 9 = spent
             const float var08 = targetAV->GetActorValue(RE::ActorValue::kVariable08);
             if (var08 == 10.0f) {
-                targetAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, 1000000.0f);
+                targetAV->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, 1000000.0f);
             } else if (var08 == 11.0f) {
                 targetAV->SetActorValue(RE::ActorValue::kVariable08, 9.0f);
-                targetAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -1000000.0f);
+                targetAV->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -1000000.0f);
                 if (context.target->IsEssential()) {
                     context.target->KillImpl(player, 1000.0f, true, true);
-                    RE::DebugNotification("I have overfed on this essential mortal ...");
-                    RE::DebugNotification("They are of no use to me now.");
+                    RE::SendHUDMessage::ShowHUDMessage("I have overfed on this essential mortal ...");
+                    RE::SendHUDMessage::ShowHUDMessage("They are of no use to me now.");
                 }
                 SKSE::log::info("BetterVampiresIntegration: Overfed victim within protection window - drained dry");
             }
@@ -806,8 +806,8 @@ namespace BetterVampiresIntegration {
                 SKSE::log::info("BetterVampiresIntegration: Killed target");
             }
             if (context.target->IsEssential()) {
-                RE::DebugNotification("I have overfed on this essential mortal ...");
-                RE::DebugNotification("They are of no use to me now.");
+                RE::SendHUDMessage::ShowHUDMessage("I have overfed on this essential mortal ...");
+                RE::SendHUDMessage::ShowHUDMessage("They are of no use to me now.");
             }
         }
 
@@ -848,7 +848,7 @@ namespace BetterVampiresIntegration {
             // === STEP 16: Victim drain (25% of current health) + victim-side spell ===
             const float victimHealth = targetAV->GetActorValue(RE::ActorValue::kHealth);
             if (victimHealth > 0.0f) {
-                targetAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -(victimHealth * 0.25f));
+                targetAV->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -(victimHealth * 0.25f));
                 if (g_victimDamageSpell) {
                     context.target->RemoveSpell(g_victimDamageSpell);
                     context.target->AddSpell(g_victimDamageSpell);
@@ -873,13 +873,13 @@ namespace BetterVampiresIntegration {
                 }
                 if (engorgeAllowed) {
                     if (g_engorgeAmount) g_engorgeAmount->value += engorgeGain;
-                    playerAV->ModActorValue(RE::ActorValue::kHealth, engorgeGain);
-                    playerAV->ModActorValue(RE::ActorValue::kStamina, engorgeGain);
-                    playerAV->ModActorValue(RE::ActorValue::kMagicka, engorgeGain);
+                    playerAV->ModBaseActorValue(RE::ActorValue::kHealth, engorgeGain);
+                    playerAV->ModBaseActorValue(RE::ActorValue::kStamina, engorgeGain);
+                    playerAV->ModBaseActorValue(RE::ActorValue::kMagicka, engorgeGain);
                 }
-                playerAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreHealth);
-                playerAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restoreOther);
-                playerAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, restoreOther);
+                playerAV->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreHealth);
+                playerAV->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restoreOther);
+                playerAV->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, restoreOther);
                 SKSE::log::info("BetterVampiresIntegration: Restored {:.0f}/{:.0f}/{:.0f} H/S/M{}",
                     restoreHealth, restoreOther, restoreOther, engorgeAllowed ? " (+Engorge)" : "");
             }
@@ -956,7 +956,7 @@ namespace BetterVampiresIntegration {
                 if (roll == 1 || roll == 99) {
                     g_skillPointsTotal->value += 1.0f;
                     g_skillPointsAvailable->value += 1.0f;
-                    RE::DebugNotification("1 Skill Point Earned.");
+                    RE::SendHUDMessage::ShowHUDMessage("1 Skill Point Earned.");
                     SKSE::log::info("BetterVampiresIntegration: Skill point earned");
                 }
             }

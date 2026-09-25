@@ -17,7 +17,7 @@ namespace VampireIntegrationUtils {
         handle.assumeSuccess = false;
         handle.state.reset();
 
-        audioManager->BuildSoundDataFromDescriptor(handle, sound);
+        audioManager->GetSoundHandle(handle, sound);
 
         if (handle.IsValid()) {
             handle.SetPosition(target->GetPosition());
@@ -39,7 +39,7 @@ namespace VampireIntegrationUtils {
         if (!message) return;
         RE::BSString result;
         message->GetDescription(result, nullptr);
-        RE::DebugNotification(result.c_str());
+        RE::SendHUDMessage::ShowHUDMessage(result.c_str());
         SKSE::log::debug("VampireIntegrationUtils::ShowMessage: {}", result.c_str());
     }
 

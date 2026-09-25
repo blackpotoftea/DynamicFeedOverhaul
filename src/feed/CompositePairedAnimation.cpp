@@ -723,7 +723,7 @@ namespace CompositePairedAnimation {
                     const float newHP = std::max(floorHP, cur - max * (pct / 100.0f));
                     const float dmg = cur - newHP;
                     if (dmg > 0.0f) {
-                        av->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -dmg);
+                        av->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -dmg);
                     }
                     // Schedule the next gulp at a randomized interval.
                     gulpTimer_ = RandRange(settings->HealthDrain.GulpIntervalMin,

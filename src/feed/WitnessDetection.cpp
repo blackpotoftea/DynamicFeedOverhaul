@@ -428,7 +428,7 @@ namespace WitnessDetection {
 
         // Notify the player only when the feed actually became a crime.
         auto message = fmt::format("You've been seen by {}!", witness->GetName());
-        RE::DebugNotification(message.c_str());
+        RE::SendHUDMessage::ShowHUDMessage(message.c_str());
     }
 
     void ResetFeedReport() {

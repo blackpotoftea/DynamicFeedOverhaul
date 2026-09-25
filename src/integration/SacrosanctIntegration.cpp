@@ -838,9 +838,9 @@ namespace SacrosanctIntegration {
                         || statName.empty()) {
                         continue;  // Papyrus skips empty stat slots (if SCS_StatN)
                     }
-                    RE::ActorValue av = avList ? avList->LookupActorValueByName(statName) : RE::ActorValue::kNone;
+                    RE::ActorValue av = avList ? avList->LookupActorValueByName(statName.c_str()) : RE::ActorValue::kNone;
                     if (av != RE::ActorValue::kNone) {
-                        avOwner->ModActorValue(av, restoreAmount);
+                        avOwner->ModBaseActorValue(av, restoreAmount);
                     }
                 }
                 SKSE::log::info("Helpers: Reset Wassail, restored {} to configured stats", restoreAmount);
@@ -970,15 +970,15 @@ namespace SacrosanctIntegration {
         // (an actual, non-cancelled drain, ideally behind a global setting) is a planned later feature.
         // if (context.isCombatFeed && g_bloodKnightCost) {
         //     float staminaCost = g_bloodKnightCost->value;
-        //     avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -staminaCost);
+        //     avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -staminaCost);
         //     SKSE::log::info("SacrosanctIntegration: Blood Knight stamina cost: {}", staminaCost);
         // }
 
         // === STEP 14: Restore Health/Magicka/Stamina ===
         float restoreAmount = 100.0f + static_cast<float>(targetLevel) * 20.0f;
-        avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreAmount);
-        avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, restoreAmount);
-        avOwner->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restoreAmount);
+        avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, restoreAmount);
+        avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, restoreAmount);
+        avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restoreAmount);
         SKSE::log::info("SacrosanctIntegration: Restored {:.0f} H/M/S (target level {})", restoreAmount, targetLevel);
 
         // === STEP 15: Kiss of Death (sleeping + lethal) ===
@@ -987,9 +987,9 @@ namespace SacrosanctIntegration {
         if (context.isSleeping && context.isLethal && g_kissOfDeathAbility && g_kissOfDeathAmount) {
             if (player->HasSpell(g_kissOfDeathAbility)) {
                 float bonus = g_kissOfDeathAmount->value;
-                avOwner->ModActorValue(RE::ActorValue::kHealth, bonus);
-                avOwner->ModActorValue(RE::ActorValue::kMagicka, bonus);
-                avOwner->ModActorValue(RE::ActorValue::kStamina, bonus);
+                avOwner->ModBaseActorValue(RE::ActorValue::kHealth, bonus);
+                avOwner->ModBaseActorValue(RE::ActorValue::kMagicka, bonus);
+                avOwner->ModBaseActorValue(RE::ActorValue::kStamina, bonus);
                 SKSE::log::info("SacrosanctIntegration: Kiss of Death bonus: {}", bonus);
             }
         }
