@@ -465,6 +465,7 @@ void __stdcall UI::Settings::Render() {
             changed |= ImGuiMCP::Checkbox("Stagger Require Lower Level", &settings->Combat.StaggerRequireLowerLevel);
             if (settings->Combat.StaggerRequireLowerLevel) {
                 changed |= ImGuiMCP::SliderInt("Stagger Max Level Diff", &settings->Combat.StaggerMaxLevelDifference, 0, 50);
+                ImGuiMCP::SetItemTooltip("Target may be at most this many levels above the player");
             }
         }
         ImGuiMCP::Separator();
