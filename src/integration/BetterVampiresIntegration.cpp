@@ -68,8 +68,10 @@
  *   (descriptor MAGVampireTransform01SD = 0x000FF9E8).
  * - StartVampireFeed and per-route DLC1VampireTurn.PlayerBitesMe are skipped (no-ops
  *   for an already-turned vampire).
- * - Requires BV 9.1+ script shape (TurnedNPCRefresh present); 8.9 or older disables
- *   the deep path and falls back to Papyrus.
+ * - Requires BV 9.1+ (Initialize probes GLOB VampireStageAbilitiesSatiation). 8.9 falls back
+ *   to Papyrus, which has no route for a standing awake victim and awards nothing there.
+ * - A third-party PlayerVampireQuestScript.pex overwrite only warns; the dispatched Papyrus
+ *   helpers (satiation, rank progression) then silently no-op.
  *
  * =============================================================================
  * FORM DEPENDENCIES (cached in Initialize())
@@ -143,6 +145,9 @@ namespace BetterVampiresIntegration {
         std::atomic<bool> g_available{false};
         std::atomic<bool> g_shapeVerified{false};
         std::atomic<const char*> g_versionInfo{"not detected"};
+
+        // Set at kDataLoaded; the main menu has no HUD for DebugNotification.
+        std::atomic<const char*> g_pendingNotification{nullptr};
 
         // Globals
         RE::TESGlobal* g_usingBVScripts = nullptr;
@@ -381,10 +386,8 @@ namespace BetterVampiresIntegration {
             return false;
         }
 
-        // One-time check at first feed (the script only binds in a running save):
-        // BV ships no version number anywhere, so classify by script shape -
-        // TurnedNPCRefresh() was added to PlayerVampireQuestScript in 9.1 and the
-        // deep integration is written against 9.1 feed logic.
+        // First feed only - the script binds in a running save. Warns and caches the feed
+        // sound; does not gate the deep path (the version gate is in Initialize()).
         bool VerifyScriptShape() {
             if (g_shapeVerified) return true;
 
@@ -401,16 +404,14 @@ namespace BetterVampiresIntegration {
             }
 
             auto* typeInfo = obj->GetTypeInfo();
-            if (!typeInfo || !TypeHasFunction(typeInfo, "TurnedNPCRefresh")) {
-                g_versionInfo = "8.9 or older (deep integration disabled)";
-                SKSE::log::warn("BetterVampiresIntegration: detected Better Vampires 8.9 or older "
-                    "(or another mod overrides PlayerVampireQuestScript.pex) - deep integration disabled, using Papyrus path");
-                RE::DebugNotification("Better Vampires 8.9 or older detected - deep feed integration disabled");
-                g_available = false;
-                return false;
+
+            // In every BV but not the vanilla script, so its absence means another mod's
+            // PlayerVampireQuestScript.pex won the overwrite.
+            if (!typeInfo || !TypeHasFunction(typeInfo, "NormalStagesSatiation")) {
+                SKSE::log::warn("BetterVampiresIntegration: {} is not Better Vampires' script - another mod "
+                    "overrides it; satiation/rank progression will not apply", kScriptName);
+                RE::DebugNotification("Another mod overrides Better Vampires' script - check your load order");
             }
-            g_versionInfo = "9.1+";
-            SKSE::log::info("BetterVampiresIntegration: detected Better Vampires 9.1+");
 
             // Dispatched Papyrus functions - a renamed/absent one fails silently at feed time
             constexpr const char* kDispatchedFuncs[] = {
@@ -421,7 +422,7 @@ namespace BetterVampiresIntegration {
                 "RegisterForUpdateGameTime",
             };
             for (const char* funcName : kDispatchedFuncs) {
-                SKSE::log::debug("  {}: {}", funcName, TypeHasFunction(typeInfo, funcName) ? "found" : "missing");
+                SKSE::log::debug("  {}: {}", funcName, typeInfo && TypeHasFunction(typeInfo, funcName) ? "found" : "missing");
             }
 
             // MAGVampireTransform01 is a SOUN record - editor-ID lookup misses it, so read
@@ -546,7 +547,19 @@ namespace BetterVampiresIntegration {
                 g_usingBVScripts ? "ok" : "MISSING");
             return false;
         }
-        g_versionInfo = "unknown (version check runs at first feed)";
+
+        // BV ships no version number; this GLOB was added in 9.1. Probe the ESP, not the
+        // script - a third-party PlayerVampireQuestScript.pex overwrite would fake it.
+        if (!RE::TESForm::LookupByEditorID<RE::TESGlobal>("VampireStageAbilitiesSatiation")) {
+            g_versionInfo = "8.9 or older (deep integration disabled)";
+            SKSE::log::warn("BetterVampiresIntegration: Better Vampires 8.9 or older detected "
+                "- deep integration requires 9.1+, using Papyrus path");
+            g_pendingNotification = "Better Vampires 8.9 or older detected - deep feed integration disabled";
+            g_available = false;
+            return false;
+        }
+        g_versionInfo = "9.1+";
+        SKSE::log::info("BetterVampiresIntegration: detected Better Vampires 9.1+");
         SKSE::log::debug("BetterVampiresIntegration: Initialized successfully");
 
         // Globals - Better Vampires specific
@@ -633,6 +646,12 @@ namespace BetterVampiresIntegration {
         return g_versionInfo.load();
     }
 
+    void ShowPendingNotification() {
+        if (const char* msg = g_pendingNotification.exchange(nullptr)) {
+            RE::DebugNotification(msg);
+        }
+    }
+
     int GetNecksBittenStat() {
         // Base-game stat, so query independent of BV availability. Throttle so the async
         // QueryStat isn't re-dispatched every frame the debug UI renders.
@@ -698,7 +717,7 @@ namespace BetterVampiresIntegration {
             return false;
         }
 
-        // 8.9-or-older script shape disables the deep path (checked once, needs a running save)
+        // Only bails while the script isn't bound yet; a shadowed script just warns.
         if (!VerifyScriptShape()) {
             return false;
         }

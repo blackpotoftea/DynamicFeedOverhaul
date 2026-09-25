@@ -2,6 +2,7 @@
 #include "utils/AnimUtil.h"
 #include "feed/AnimationRegistry.h"
 #include "feed/FeedAnimState.h"
+#include "feed/TargetState.h"
 #include "Settings.h"
 
 namespace PairedAnimation {
@@ -167,7 +168,9 @@ namespace PairedAnimation {
         // AnimUtil::playIdle handles thread-safety and ObjectRefHandle automatically
         // The callback will be invoked on game thread after PlayIdle succeeds or fails
         // Always pass target for callback (needed for integration) even for solo animations
-        AnimUtil::playIdle(player, feedIdle, target, callback, isPaired);
+        // VL feeds run solo but PlayIdle still needs the victim ref; bed/corpse idles don't.
+        const bool soloNeedsTarget = !isPaired && TargetState::IsVampireLord(player);
+        AnimUtil::playIdle(player, feedIdle, target, callback, isPaired, soloNeedsTarget);
 
         SKSE::log::info("[PairedAnimation] Animation playback initiated (callback pending)");
     }
@@ -225,12 +228,10 @@ namespace PairedAnimation {
         }
         wasTargetDeadAtStart_ = false;
 
-        // Restore weapon drawn state if we sheathed it for a solo animation
+        // Armed, not issued: a draw sent on the PairEnd/IdleStop that ends the idle is dropped.
         if (wasWeaponDrawn_) {
-            if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-                SKSE::log::info("[PairedAnimation] OnComplete: Redrawing weapon");
-                player->DrawWeaponMagicHands(true);
-            }
+            SKSE::log::info("[PairedAnimation] OnComplete: arming weapon redraw");
+            AnimUtil::ArmWeaponRedraw();
             wasWeaponDrawn_ = false;
         }
 
@@ -243,6 +244,9 @@ namespace PairedAnimation {
                 ctx.player ? "ok" : "null", ctx.target ? "ok" : "null");
             return;
         }
+
+        // 0. A redraw armed by the previous feed would fight this one's sheathe.
+        AnimUtil::CancelWeaponRedraw();
 
         // 1. Clear engine-level animation blockers BEFORE applying new state -
         //    otherwise residual stagger/attack/knockdown can fight positioning

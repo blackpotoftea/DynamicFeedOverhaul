@@ -281,7 +281,7 @@ namespace AnimUtil {
     // isPaired: if true, use callbackTarget for PlayIdle; if false, play solo animation but still pass target to callback
     // TODO refacotr condiotn and status that applie, at the moment it's all over the places
     void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* callbackTarget,
-                  PlayIdleCallback callback, bool isPaired) {
+                  PlayIdleCallback callback, bool isPaired, bool passTargetWhenSolo) {
         if (!actor || !idle) {
             SKSE::log::warn("[AnimUtil::playIdle] Invalid input: actor={}, idle={}",
                 actor ? "valid" : "null", idle ? "valid" : "null");
@@ -304,7 +304,7 @@ namespace AnimUtil {
         // For the feed flow, PairedAnimation::EnterFeedState owns this.
 
         // Play the actual idle animation
-        SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, callbackTargetHandle, actorName, callbackTargetName, callback, isPaired] {
+        SKSE::GetTaskInterface()->AddTask([actorHandle, idleFormID, callbackTargetHandle, actorName, callbackTargetName, callback, isPaired, passTargetWhenSolo] {
             auto fail = [&](std::string_view reason, RE::Actor* cbTarget = nullptr) {
                 SKSE::log::error("[AnimUtil::playIdle] FAILED: {} for {}", reason, actorName);
                 if (callback) callback(false, cbTarget);
@@ -325,7 +325,7 @@ namespace AnimUtil {
             if (callbackTargetHandle) {
                 if (auto cbRef = callbackTargetHandle.get()) {
                     callbackTargetActor = cbRef->As<RE::Actor>();
-                    if (isPaired) animTarget = cbRef.get();
+                    if (isPaired || passTargetWhenSolo) animTarget = cbRef.get();
                 } else {
                     SKSE::log::warn("[AnimUtil::playIdle] Callback target handle invalid for {}", actorName);
                 }
@@ -612,6 +612,47 @@ namespace AnimUtil {
                 SKSE::log::info("[AnimUtil::redrawWeapon] Called DrawWeaponMagicHands for {}", a->GetName());
             }
         });
+    }
+
+    namespace {
+        // Wall clock, not frame delta - delta is 0 with the console open.
+        constexpr auto kWeaponRedrawWindow = std::chrono::milliseconds(1500);
+        std::chrono::steady_clock::time_point g_weaponRedrawDeadline{};
+    }
+
+    void ArmWeaponRedraw() {
+        g_weaponRedrawDeadline = std::chrono::steady_clock::now() + kWeaponRedrawWindow;
+    }
+
+    void CancelWeaponRedraw() {
+        g_weaponRedrawDeadline = {};
+    }
+
+    void TickWeaponRedraw() {
+        if (g_weaponRedrawDeadline == std::chrono::steady_clock::time_point{}) return;
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        auto* state = player ? player->AsActorState() : nullptr;
+        if (!state) {
+            CancelWeaponRedraw();
+            return;
+        }
+
+        // kWantToDraw is what DrawWeaponMagicHands sets itself - only kDrawing/kDrawn prove the graph took it.
+        const auto weaponState = state->GetWeaponState();
+        if (weaponState == RE::WEAPON_STATE::kDrawing || weaponState == RE::WEAPON_STATE::kDrawn) {
+            SKSE::log::info("[AnimUtil::TickWeaponRedraw] Weapon redraw accepted");
+            CancelWeaponRedraw();
+            return;
+        }
+
+        if (std::chrono::steady_clock::now() >= g_weaponRedrawDeadline) {
+            SKSE::log::warn("[AnimUtil::TickWeaponRedraw] Weapon never redrew within {}ms - giving up",
+                kWeaponRedrawWindow.count());
+            CancelWeaponRedraw();
+            return;
+        }
+        player->DrawWeaponMagicHands(true);
     }
 
     // Set actor restrained state (calls Papyrus native function via VM)
@@ -1561,6 +1602,8 @@ namespace AnimUtil {
             g_TaskFrameCounters.clear();
         }
         g_Retry = {};
+        // Else a feed that ended just before the load draws on the new session's first tick.
+        CancelWeaponRedraw();
     }
 
     // Check if attacker's attack should kill victim (uses game's ShouldAttackKill condition)

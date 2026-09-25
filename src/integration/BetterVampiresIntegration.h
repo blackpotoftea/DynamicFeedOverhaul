@@ -24,6 +24,9 @@ namespace BetterVampiresIntegration {
     // Detected BV version classification for logs/debug UI ("9.1+", "8.9 or older", ...)
     const char* GetVersionInfo();
 
+    // Call at kPostLoadGame/kNewGame - Initialize runs at kDataLoaded, which has no HUD.
+    void ShowPendingNotification();
+
     // Live BV hunger state for the debug UI (reads globals + bound-script properties).
     // valid=false means forms/script aren't resolved yet (no feed this session).
     struct HungerDebug {

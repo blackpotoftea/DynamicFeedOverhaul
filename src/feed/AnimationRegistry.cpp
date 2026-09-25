@@ -328,7 +328,9 @@ namespace Feed {
                 return Idles::WEREWOLF_STANDING_FRONT;
             }
             if (TargetState::IsVampireLord(player)) {
-                SKSE::log::debug("Player is Vampire Lord - using VL feed");
+                // Solo: VL idles never emit KillMoveStart, and the paired retry strands the VL mid-killmove.
+                outIsPairedAnim = false;
+                SKSE::log::debug("Player is Vampire Lord - using VL feed (solo)");
                 return isBehind ? Idles::VAMPIRELORD_STANDING_BACK : Idles::VAMPIRELORD_STANDING_FRONT;
             }
         }

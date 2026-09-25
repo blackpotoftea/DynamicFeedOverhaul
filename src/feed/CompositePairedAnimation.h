@@ -76,6 +76,9 @@ namespace CompositePairedAnimation {
     // Active = a staged sequence is in progress.
     bool IsActive();
 
+    // Stages RequestStop() accepts. The "Stop Feed" prompt gates on this, not IsActive.
+    bool IsInterruptible();
+
     // True once the player was freed at Drained start (victim-only tail).
     bool IsPlayerReleased();
 

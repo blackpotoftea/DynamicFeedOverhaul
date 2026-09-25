@@ -72,6 +72,11 @@ namespace CompositePairedAnimation {
 
     bool IsActive() { return stage_ != Stage::Idle && stage_ != Stage::Done; }
 
+    // Must stay in sync with RequestStop's stage guard.
+    bool IsInterruptible() {
+        return stage_ == Stage::Settle || stage_ == Stage::Intro || stage_ == Stage::Loop;
+    }
+
     bool IsPlayerReleased() { return IsActive() && playerReleased_; }
 
     RE::NiPointer<RE::Actor> GetFeedTarget() {
@@ -559,7 +564,7 @@ namespace CompositePairedAnimation {
     }
 
     void RequestStop() {
-        if (stage_ == Stage::Settle || stage_ == Stage::Intro || stage_ == Stage::Loop) {
+        if (IsInterruptible()) {
             SKSE::log::info("[CompositePairedAnimation] RequestStop -> Exit stage");
             FireStageClips(pack_.exit, "Exit");
             stage_ = Stage::Exit;
@@ -731,6 +736,15 @@ namespace CompositePairedAnimation {
                 if (!protectedFromKill_ && max > 0.0f &&
                     av->GetActorValue(RE::ActorValue::kHealth) <= killFloorHP + 0.5f) {
                     drainedDry = true;
+                }
+                // A protected victim never drains dry, so the Loop would otherwise run forever until
+                // a manual Stop. Once it's taken its fill (drained to its survive floor), end the feed
+                // itself via the graceful Exit so MarkFeedEnded applies the non-lethal survivor effects
+                // (e.g. Sacrosanct Blood Bond) - no timed Stop needed.
+                else if (protectedFromKill_ && max > 0.0f &&
+                         av->GetActorValue(RE::ActorValue::kHealth) <= floorHP + 0.5f) {
+                    SKSE::log::info("[CompositePairedAnimation] Loop: protected victim drained to its floor - ending feed (survives)");
+                    RequestStop();
                 }
             }
 

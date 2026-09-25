@@ -101,13 +101,17 @@ void FeedPromptSink::RegisterCorePromptCallback() {
         if (CompositePairedAnimation::IsActive()) {
             auto activeFeed = FeedPromptSink::GetSingleton()->GetActiveFeedTarget();
             if (activeFeed && activeFeed.get() == target) {
-                prompts.push_back({
-                    .text = "Stop Feed",
-                    .type = SkyPromptAPI::PromptType::kSinglePress,
-                    .color = 0xFFCCCCFFu,
-                    .priority = 1000,
-                    .onAccept = nullptr
-                });
+                // Empty past the interruptible stages - never fall through, or the
+                // victim gets offered "Feed" mid-drain.
+                if (CompositePairedAnimation::IsInterruptible()) {
+                    prompts.push_back({
+                        .text = "Stop Feed",
+                        .type = SkyPromptAPI::PromptType::kSinglePress,
+                        .color = 0xFFCCCCFFu,
+                        .priority = 1000,
+                        .onAccept = nullptr
+                    });
+                }
                 return prompts;
             }
         }
@@ -282,6 +286,12 @@ void FeedPromptSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
 
     switch (event.type) {
     case SkyPromptAPI::PromptEventType::kDown:
+        // SkyPrompt can send kDown with no kAccepted; RequestStop is idempotent.
+        if (CompositePairedAnimation::IsActive()) {
+            SKSE::log::info("[Toggle] kDown during active composite feed - requesting exit");
+            CompositePairedAnimation::RequestStop();
+            return;
+        }
         SKSE::log::debug("kDown event - button pressed");
         break;
 

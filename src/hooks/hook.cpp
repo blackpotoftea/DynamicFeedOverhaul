@@ -21,6 +21,9 @@ namespace {
             // 0. Drive non-blocking PlayIdle retry (paired animation KillMoveStart wait)
             AnimUtil::TickPlayIdleRetry();
 
+            // 0a. Re-issue the post-feed weapon redraw until the graph accepts it.
+            AnimUtil::TickWeaponRedraw();
+
             // 0b. Composite paired-animation position lock — one bool check on
             //     the fast path; does positioning math only while a composite
             //     feed is active. Self-stops when target unloads/dies.

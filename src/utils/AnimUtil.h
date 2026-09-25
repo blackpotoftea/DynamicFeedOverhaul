@@ -55,8 +55,10 @@ namespace AnimUtil {
     // Core animation functions
     void playAnimation(RE::Actor* actor, const std::string& animation);
     void playAnimation(RE::Actor* actor, const std::string& animation, float playbackSpeed);
+    // passTargetWhenSolo: solo idles whose conditions still need the victim ref (VL feeds).
     void playIdle(RE::Actor* actor, RE::TESIdleForm* idle, RE::TESObjectREFR* callbackTarget = nullptr,
-                  PlayIdleCallback callback = nullptr, bool isPaired = true);
+                  PlayIdleCallback callback = nullptr, bool isPaired = true,
+                  bool passTargetWhenSolo = false);
 
     // Frame-driven retry for paired PlayIdle attempts. Must be called from the
     // game thread (PlayerUpdateHook). If the "KillMoveStart" animation-graph
@@ -85,6 +87,12 @@ namespace AnimUtil {
 
     // Redraw weapon/magic after animation (restores drawn state)
     void redrawWeapon(RE::Actor* actor);
+
+    // A draw issued at feed end is dropped mid-transition, so re-issue until the graph
+    // reports kDrawing/kDrawn. Cancel on new feed / reload or a stale arm fights the sheathe.
+    void ArmWeaponRedraw();
+    void CancelWeaponRedraw();
+    void TickWeaponRedraw();
 
     // Set actor restrained state (calls Papyrus native function). Restrained
     // state is serialized into saves; FeedAnimState blocks saving for the feed

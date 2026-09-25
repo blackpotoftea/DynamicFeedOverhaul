@@ -138,9 +138,13 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 		// The disable-saving flag may be serialized (console `save` bypasses
 		// the block): reset again AFTER deserialization.
 		FeedAnimState::ResetForLoad();
+		// Deferred from kDataLoaded, which has no HUD to draw a notification on.
+		BetterVampiresIntegration::ShowPendingNotification();
 		break;
 	case SKSE::MessagingInterface::kNewGame:
 		ResetFeedSessionState();
+		// A new game never reaches kPostLoadGame; the warning would latch and fire later.
+		BetterVampiresIntegration::ShowPendingNotification();
 		break;
 	}
 }

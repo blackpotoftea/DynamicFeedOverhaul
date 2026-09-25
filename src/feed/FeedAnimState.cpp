@@ -75,7 +75,14 @@ namespace FeedAnimState {
     void MarkFeedEnded() {
         // currentFeedLethal / vfdTriggerCount are reset in MarkFeedStarted for the next feed;
         // leaving them set here is harmless (gated by feedState) and matches killMoveStartSeen's pattern.
-        feedState.store(State::Ended, std::memory_order_release);
+
+        // Teardown runs once per feed - failure paths reach here both directly and via the PlayIdle callback.
+        State expected = State::Active;
+        if (!feedState.compare_exchange_strong(expected, State::Ended,
+                                               std::memory_order_acq_rel,
+                                               std::memory_order_acquire)) {
+            return;
+        }
         SetSaveBlock(false);
         SKSE::log::info("========== FEED ENDED ==========");
 
