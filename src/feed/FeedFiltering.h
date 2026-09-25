@@ -114,28 +114,33 @@ namespace FeedFiltering {
         if (settings->Combat.AllowStaggered && TargetState::IsStaggered(actor)) {
             // Check level requirements for stagger feeding (unless poise mod bypasses it)
             bool poiseBypassesLevel = settings->Integration.PoiseIgnoresLevelCheck && PoiseIntegration::IsAvailable();
+            bool levelAllowsStagger = true;
 
             if (!poiseBypassesLevel && settings->Combat.StaggerRequireLowerLevel) {
                 auto* player = RE::PlayerCharacter::GetSingleton();
                 if (player) {
                     int playerLevel = player->GetLevel();
                     int targetLevel = actor->GetLevel();
-                    int maxAllowedLevel = playerLevel - settings->Combat.StaggerMaxLevelDifference;
+                    // Same direction as NonCombat.MaxLevelDifference: target may be at most this many
+                    // levels ABOVE the player (diff 0 = target must not outlevel the player).
+                    int maxAllowedLevel = playerLevel + settings->Combat.StaggerMaxLevelDifference;
 
-                    // Target must be lower level than player by at least StaggerMaxLevelDifference
-                    // e.g., player level 20, StaggerMaxLevelDifference 10 -> target must be level 10 or lower
                     if (targetLevel > maxAllowedLevel) {
-                        SKSE::log::debug("Combat path: {} - excluded (staggered but level {} > max allowed {}, player {} - diff {})",
+                        levelAllowsStagger = false;
+                        SKSE::log::debug("Combat path: {} - stagger bypass denied (level {} > max allowed {}, player {} + diff {})",
                             actor->GetName(), targetLevel, maxAllowedLevel, playerLevel, settings->Combat.StaggerMaxLevelDifference);
-                        return true;
                     }
                 }
             } else if (poiseBypassesLevel) {
                 SKSE::log::debug("Combat path: {} - stagger level check bypassed (poise mod detected)", actor->GetName());
             }
 
-            SKSE::log::debug("Combat path: {} - allowed (target is staggered)", actor->GetName());
-            return false;
+            // Stagger is a bypass, never an extra gate: too-high-level targets fall through to the
+            // health check so a staggered target is never harder to feed on than an unstaggered one.
+            if (levelAllowsStagger) {
+                SKSE::log::debug("Combat path: {} - allowed (target is staggered)", actor->GetName());
+                return false;
+            }
         }
 
         // Vampire Lord only: feed on much-weaker enemies at any health (bypasses health check).
