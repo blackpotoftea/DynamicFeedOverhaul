@@ -6,6 +6,7 @@
 #include "feed/TargetState.h"
 #include "feed/FeedAnimState.h"
 #include "utils/AnimUtil.h"
+#include <algorithm>
 
 namespace {
     // C++ replication of PlayerVampireQuestScript.VampireFeed(), with the parts that
@@ -21,6 +22,47 @@ namespace {
     //                                                        script, so there is nothing to undo
     // What remains is the state that actually matters for the feed loop: reset hunger,
     // regress to vampire stage 1, reset the feed timer, and swap stage abilities back.
+        void ApplySunHelmVampireFeed(bool isLethal) {
+        auto* dataHandler = RE::TESDataHandler::GetSingleton();
+        if (!dataHandler || !dataHandler->LookupModByName("SunHelmSurvival.esp")) {
+            return;
+        }
+
+        auto* playerIsVampire = RE::TESForm::LookupByEditorID<RE::TESGlobal>("PlayerIsVampire");
+        auto* shIsVampire = RE::TESForm::LookupByEditorID<RE::TESGlobal>("_SHIsVampireGlobal");
+        auto* vampireNeeds = RE::TESForm::LookupByEditorID<RE::TESGlobal>("_SHVampireNeedsOption");
+        auto* thirstLevel = RE::TESForm::LookupByEditorID<RE::TESGlobal>("_SHCurrentThirstLevel");
+        auto* thirstTimestamp = RE::TESForm::LookupByEditorID<RE::TESGlobal>("_SHThirstTimeStamp");
+
+        bool isVamp = (playerIsVampire && playerIsVampire->value >= 1.0f) ||
+                      (shIsVampire && shIsVampire->value >= 1.0f);
+
+        if (!isVamp || !thirstLevel) {
+            SKSE::log::warn("SunHelm integration: skipped (isVamp={}, thirstLevel={})", isVamp, thirstLevel != nullptr);
+            return;
+        }
+
+        if (vampireNeeds && vampireNeeds->value < 1.0f) {
+            SKSE::log::info("SunHelm integration: vampire needs disabled in SunHelm MCM (_SHVampireNeedsOption={})", vampireNeeds->value);
+            return;
+        }
+
+        float oldThirst = thirstLevel->value;
+        if (isLethal) {
+            thirstLevel->value = 0.0f;
+        } else {
+            thirstLevel->value = (std::max)(0.0f, thirstLevel->value - 300.0f);
+        }
+
+        if (thirstTimestamp) {
+            if (auto* calendar = RE::Calendar::GetSingleton()) {
+                thirstTimestamp->value = calendar->GetCurrentGameTime();
+            }
+        }
+
+        SKSE::log::info("SunHelm integration: thirst updated {:.1f} -> {:.1f} (lethal={})", oldThirst, thirstLevel->value, isLethal);
+    }
+
     void ApplyVanillaVampireFeed(RE::Actor* player, RE::TESQuest* vampireQuest) {
         if (!player || !vampireQuest) return;
 
@@ -202,6 +244,7 @@ namespace {
                 PapyrusCall::SendOnVampireFeedEvent(callbackTarget);
                 break;
         }
+            ApplySunHelmVampireFeed(isLethal);
 
         // Universal net: a lethal feed must leave the victim dead. If the overhaul deferred the kill
         // to an animation that didn't land (killmove on an odd target state, or a missing OAR clip),
